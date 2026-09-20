@@ -35,6 +35,7 @@ _auth-rollback-backup/
 *.db.jar
 *.sqlite
 app-assets/
+data/
 backup/
 粉笔/
 

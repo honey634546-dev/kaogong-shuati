@@ -9,10 +9,11 @@
     },
     "scripts": {
         "start": "node server.mjs 3000",
+        "test:wp1": "node --test test-wp1-empty-start.mjs",
         "test": "node --test test-custom-parser.mjs test-local-api.mjs test-local-queries.mjs test-random-practice-count.mjs test-local-ai.mjs test-local-handler.mjs test-local-fixes.mjs test-native-engine.mjs test-custom-practice.mjs test-custom-practice-e2e.mjs test-custom-bank-group.mjs test-user-skills.mjs"
     },
     "dependencies": {
-        "sharp": "^0.35.3"
+        "sharp": "^0.35.4"
     },
     "devDependencies": {
         "playwright-core": "^1.62.1"

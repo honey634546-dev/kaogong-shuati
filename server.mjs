@@ -1,7 +1,7 @@
 ﻿/**
  * 考公刷题 Web 服务（零依赖）
  *  - 静态文件：public/
- *  - 题库 API：tiku.db（node:sqlite 只读）
+ *  - 题库 API：可选 tiku.db（node:sqlite 只读）+ 自定义题库
  *  - 刷题/判分逻辑：选择题 answerIndex 判分；多选数组判分；申论返回 AI 批改占位
  *  - AI 配置 API：ai-config.db（五个 AI 智能体的 prompt/skill/key/url 热更新）
  *
@@ -20,23 +20,76 @@ import { customQuestionHtml, parseImages } from './public/lib/custom-parser.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.argv[2] || process.env.PORT || 3000);
-const DB_FILE = path.join(__dirname, 'tiku.db');
+const HOST = process.env.HOST || '127.0.0.1';
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const outDir = path.join(__dirname, 'out');
 
-if (!fs.existsSync(DB_FILE)) {
-  console.error(`✗ 找不到题库文件: ${DB_FILE}\n  题库数据与采集工具不随本仓库分发，请先在本地生成 tiku.db`);
-  process.exit(1);
-}
+// 数据目录：新安装默认使用 data/；检测到旧版根目录数据库时继续沿用根目录，
+// 避免升级后悄悄新建一套空数据。也可以用 APP_DATA_DIR 显式指定目录。
+const legacyDataFiles = ['tiku.db', 'practice.db', 'ai-config.db', 'materials.db'];
+const hasLegacyData = legacyDataFiles.some((name) => fs.existsSync(path.join(__dirname, name)));
+const hasExplicitDataDir = Boolean(String(process.env.APP_DATA_DIR || '').trim());
+const DATA_DIR = path.resolve(
+  String(process.env.APP_DATA_DIR || '').trim() || (hasLegacyData ? __dirname : path.join(__dirname, 'data')),
+);
+fs.mkdirSync(DATA_DIR, { recursive: true });
+// ai-agents.mjs 在 initAiConfig() 时读取这个变量；显式 AI_CONFIG_DB 仍拥有最高优先级。
+process.env.APP_DATA_DIR = DATA_DIR;
 
-const db = new DatabaseSync(DB_FILE, { readOnly: true });
+const configuredQuestionDb = path.join(DATA_DIR, 'tiku.db');
+const legacyQuestionDb = path.join(__dirname, 'tiku.db');
+const DB_FILE = fs.existsSync(configuredQuestionDb)
+  ? configuredQuestionDb
+  : (!hasExplicitDataDir && fs.existsSync(legacyQuestionDb) ? legacyQuestionDb : null);
+
+// 上游 tiku.db 不随仓库分发。无题库时使用内存中的空兼容库，
+// 让首页、自定义题库、练习记录和统计仍可用；一旦提供 tiku.db，自动恢复只读查询。
+const QUESTION_SCHEMA = (namespace = '') => {
+  const prefix = namespace ? `${namespace}.` : '';
+  const index = namespace ? '' : 'CREATE INDEX IF NOT EXISTS idx_questions_qid ON questions(questionId);';
+  return `
+    CREATE TABLE IF NOT EXISTS ${prefix}papers (
+      id INTEGER PRIMARY KEY,
+      subjectName TEXT DEFAULT '',
+      category TEXT DEFAULT '',
+      name TEXT DEFAULT '',
+      questionCount INTEGER DEFAULT 0,
+      difficulty INTEGER,
+      chapters TEXT DEFAULT '[]'
+    );
+    CREATE TABLE IF NOT EXISTS ${prefix}questions (
+      id INTEGER PRIMARY KEY,
+      questionId TEXT NOT NULL,
+      paperId INTEGER,
+      chapter TEXT DEFAULT '',
+      type INTEGER DEFAULT 0,
+      content TEXT DEFAULT '',
+      contentHtml TEXT DEFAULT '',
+      options TEXT DEFAULT '[]',
+      answer TEXT DEFAULT '',
+      answerIndex INTEGER DEFAULT -1,
+      difficulty INTEGER,
+      analysis TEXT DEFAULT ''
+    );
+    ${index}
+  `;
+};
+
+let db;
+if (DB_FILE) {
+  db = new DatabaseSync(DB_FILE, { readOnly: true });
+} else {
+  db = new DatabaseSync(':memory:');
+  db.exec(QUESTION_SCHEMA());
+}
 initAiConfig(); // 初始化 ai-config.db（首次自动写入五个 AI 默认配置）
 
-// ---------- 做题记录库（可写 practice.db，独立于只读 tiku.db） ----------
-const PRACTICE_DB = path.join(__dirname, 'practice.db');
+// ---------- 做题记录库（可写，独立于只读 tiku.db） ----------
+const PRACTICE_DB = path.join(DATA_DIR, 'practice.db');
 const pdb = new DatabaseSync(PRACTICE_DB, { timeout: 10000 });
-// 附加只读题库,供 practice.db 侧的统计 SQL 引用真实题目(排除已删题的索引残留)
-pdb.exec(`ATTACH DATABASE ${JSON.stringify(DB_FILE)} AS tiku`);
+// 附加只读题库，供 practice.db 侧的统计 SQL 引用真实题目；无题库时附加空内存 schema。
+pdb.exec(`ATTACH DATABASE ${JSON.stringify(DB_FILE || ':memory:')} AS tiku`);
+if (!DB_FILE) pdb.exec(QUESTION_SCHEMA('tiku'));
 pdb.exec(`
   CREATE TABLE IF NOT EXISTS practice_records (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -56,6 +109,27 @@ pdb.exec(`
   CREATE INDEX IF NOT EXISTS idx_records_subject ON practice_records(subject, chapter);
   CREATE INDEX IF NOT EXISTS idx_records_correct ON practice_records(is_correct);
   CREATE INDEX IF NOT EXISTS idx_records_time ON practice_records(created_at);
+  CREATE TABLE IF NOT EXISTS question_categories (
+    question_id TEXT NOT NULL,
+    subject TEXT NOT NULL DEFAULT '',
+    category TEXT NOT NULL DEFAULT '',
+    sub TEXT NOT NULL DEFAULT ''
+  );
+  CREATE INDEX IF NOT EXISTS idx_qc_subject ON question_categories(subject, category, sub);
+  CREATE INDEX IF NOT EXISTS idx_qc_qid ON question_categories(question_id);
+  CREATE TABLE IF NOT EXISTS q_materials (
+    material_id TEXT NOT NULL,
+    subject TEXT NOT NULL DEFAULT '',
+    content TEXT NOT NULL DEFAULT ''
+  );
+  CREATE INDEX IF NOT EXISTS idx_qm ON q_materials(subject, material_id);
+  CREATE TABLE IF NOT EXISTS q_material_map (
+    question_id TEXT NOT NULL,
+    subject TEXT NOT NULL DEFAULT '',
+    material_id TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_qmm_qid ON q_material_map(subject, question_id);
+  CREATE INDEX IF NOT EXISTS idx_qmm_mid ON q_material_map(subject, material_id);
 `);
 // 兼容已存在的库：补充 archived 列
 try { pdb.exec('ALTER TABLE practice_records ADD COLUMN archived INTEGER DEFAULT 0'); } catch {}
@@ -103,7 +177,7 @@ pdb.exec(`
   );
 `);
 // 材料库（materials.db：PDF 提取的"材料1..N"分块，独立可写库）
-const MATERIALS_DB = path.join(__dirname, 'materials.db');
+const MATERIALS_DB = path.join(DATA_DIR, 'materials.db');
 let mdb = null;
 try { if (fs.existsSync(MATERIALS_DB)) mdb = new DatabaseSync(MATERIALS_DB, { readOnly: true }); } catch {}
 // 收藏表（跨设备同步）
@@ -2782,7 +2856,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`✅ 考公刷题服务已启动: http://localhost:${PORT}`);
-  console.log(`   题库: ${DB_FILE}`);
+  console.log(`✅ 考公刷题服务已启动: http://${HOST}:${PORT}`);
+  console.log(`   数据目录: ${DATA_DIR}`);
+  console.log(`   题库: ${DB_FILE || '未提供（可先使用自定义题库）'}`);
 });
-
