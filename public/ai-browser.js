@@ -409,12 +409,14 @@
   }
 
   function clear(id) { keys.delete(idOf(id)); }
+  function clearAll() { keys.clear(); agents.clear(); }
   function has(id) { return !!keyFor(id); }
 
   window.__AI_BROWSER_KEYS__ = {
     handle,
     listModels,
     clear,
+    clearAll,
     has,
     keyFor, // 仅供运行时调用，不会写入持久化存储；不应打印或暴露到界面。
     maskKey,

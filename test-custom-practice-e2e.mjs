@@ -1,4 +1,4 @@
-// test-custom-practice-e2e.mjs — 自定义刷题筛选 · 背题模式前端交互 e2e（Playwright + 系统 Edge）
+// test-custom-practice-e2e.mjs — 自定义刷题筛选 · 背题模式前端交互 e2e（Playwright + Edge/Chrome）
 // 运行：node test-custom-practice-e2e.mjs（自动起 server 于随机端口，测完关闭；需 npm i -D playwright-core）
 // 覆盖：入口按钮（行测有/申论无）→ 面板设置（模式/年份/难度）→ 确定 → 专项练习模块刷题按筛选出题（URL 参数）
 //      → 背题模式点选判分/不跳题/锁定/最后不自动交卷 → 做题模式自动跳题
@@ -23,7 +23,16 @@ before(async () => {
     try { const r = await fetch(`http://localhost:${PORT}/`); if (r.ok) break; } catch {}
     await new Promise((r) => setTimeout(r, 200));
   }
-  browser = await chromium.launch({ channel: 'msedge', headless: true });
+  // Prefer the historical Edge path, but keep the test runnable on a clean
+  // macOS/CI checkout where Edge is not installed.
+  try {
+    browser = await chromium.launch({ channel: 'msedge', headless: true });
+  } catch {
+    browser = await chromium.launch({
+      executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+      headless: true,
+    });
+  }
   const ctx = await browser.newContext({ viewport: { width: 420, height: 900 } }); // 手机尺寸
   page = await ctx.newPage();
 });

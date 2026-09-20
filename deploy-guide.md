@@ -1,7 +1,7 @@
 # 公网部署指南（50 人测试版）
 
 > 目标：让 50 个测试者在手机/电脑上通过 https://域名 访问你的刷题 App
-> 前提：登录+用户隔离（auth-user-isolation-design.md）、AI 密钥防护（ai-key-security.md）已按方案落地
+> 当前实现：Better Auth 登录/注册 + 按账号隔离刷题数据与 AI 配置；AI Key 默认浏览器内存，可按账号切换为服务端密文保存
 > 本机：Windows（PowerShell）；服务器：Ubuntu 22.04（本文所有命令以它为准）
 
 ---
@@ -23,6 +23,21 @@
 
 ## 1. 路线 A 完整步骤（照着做即可）
 
+### 1.0 认证与数据目录配置（上线前必须做）
+
+应用会在 `APP_DATA_DIR` 下创建 `auth.db`、`practice.db`、`ai-config.db`、题库文件以及密钥文件。生产环境建议把数据目录固定到 `/srv/kaogong/data`，并设置稳定的环境变量，避免重启或换目录后会话失效、服务端 Key 无法解密：
+
+```bash
+export APP_DATA_DIR=/srv/kaogong/data
+export BETTER_AUTH_URL=https://你的域名
+export BETTER_AUTH_SECRET="$(openssl rand -hex 32)"
+export AI_KEY_ENCRYPTION_SECRET="$(openssl rand -hex 32)"
+```
+
+`BETTER_AUTH_SECRET` 和 `AI_KEY_ENCRYPTION_SECRET` 必须长期保持不变并限制权限；若没有设置，应用会在数据目录生成 600 权限的随机文件。设置 `AUTH_DISABLE_SIGNUP=1` 可在创建测试账号后关闭公开注册。不要把这些值写入 Git，也不要把 `data/` 目录提交到仓库。
+
+首次启动后请用两个不同账号验证：A 的自定义题库、错题、笔记和服务端 AI Key 不应出现在 B 账号中。升级旧版数据时，第一个登录账号会接管旧个人数据，之后的新账号不会继承。
+
 ### 1.1 买服务器
 - 商家：搬瓦工 / DigitalOcean / Vultr / RackNerd（选**香港或新加坡**节点，延迟低）
 - 配置：**2 核 2G 起**，Ubuntu 22.04，20GB 磁盘（数据 ~140MB，足够）
@@ -42,7 +57,7 @@
 | server.mjs、public/、lib/（去掉缓存文件） | cookie.txt（粉笔 cookie，敏感，服务器不需要） |
 | tiku.db（91.6MB 题库，核心） | .chrome-*/、out/、tmp-*.mjs、*.png 截图 |
 | materials.db（26.6MB 申论材料） | practice.db（**可选**：传 = 带你的历史数据；不传 = 服务器新建干净的，测试者从零开始。建议：不传，内测数据与个人数据分开） |
-| ai-config.db（含 AI key，**务必用 SCP 加密传输**） | .git / node_modules |
+| data/（含 auth.db、practice.db、ai-config.db、密钥文件；**务必用 SCP 加密传输**） | .git / node_modules、旧个人数据（除非明确要迁移）、cookie.txt |
 
 ### 1.3 服务器装 Node.js（⚠️ 版本坑：必须 ≥ 22.13，否则 node:sqlite 直接崩）
 
@@ -51,6 +66,8 @@ ssh root@你的IP
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 sudo apt-get install -y nodejs
 node -v        # 必须显示 v22.13.0 或更高（本机是 v24 也能跑）
+cd /opt/kaogong
+npm ci --omit=dev
 ```
 
 ### 1.4 首次启动验证（先手动跑一次）
@@ -65,13 +82,18 @@ node server.mjs 3000
 
 ```bash
 sudo npm i -g pm2
-# 建生态文件（把 ADMIN_KEY 换成随机口令，生成命令：openssl rand -hex 16）
+# 建生态文件（把下面两条密钥换成长期保存的随机值，生成命令：openssl rand -hex 32）
 cat > /opt/kaogong/ecosystem.config.cjs <<'EOF'
 module.exports = {
   apps: [{
     name: 'kaogong',
     script: 'server.mjs',
-    env: { ADMIN_KEY: '替换成你的随机口令' },
+    env: {
+      APP_DATA_DIR: '/srv/kaogong/data',
+      BETTER_AUTH_URL: 'https://你的域名',
+      BETTER_AUTH_SECRET: '替换成长期保存的随机口令',
+      AI_KEY_ENCRYPTION_SECRET: '替换成另一条长期保存的随机口令'
+    },
     max_memory_restart: '300M'
   }]
 };
@@ -130,7 +152,7 @@ crontab -e   # 添加下面一行（每天凌晨 3 点备份，保留 14 天）
 - [ ] 电脑浏览器打开 `https://kaogong.你的域名.top` 正常加载
 - [ ] 地址栏有锁 🔒（HTTPS 生效）
 - [ ] **手机切到 4G/5G**（不用 WiFi）再打开——排除局域网假象
-- [ ] 注册/登录可用，A、B 两账号错题本互不可见（隔离验证）
+- [ ] 注册/登录可用，A、B 两账号题库、错题本、笔记和 AI 配置互不可见（隔离验证）
 - [ ] 刷题、判分、错题本、收藏、AI 解析全流程
 - [ ] 试一个错误密码 5 次 → 提示锁定
 - [ ] `curl -I https://kaogong.你的域名.top` 返回 200
@@ -153,13 +175,14 @@ crontab -e   # 添加下面一行（每天凌晨 3 点备份，保留 14 天）
 
 ---
 
-## 4. 部署时的安全核对（配合 ai-key-security.md）
+## 4. 部署时的安全核对
 
-- [ ] `ADMIN_KEY` 已设置（1.5 步），AI 管理接口有口令保护
+- [ ] `BETTER_AUTH_URL`、`BETTER_AUTH_SECRET`、`AI_KEY_ENCRYPTION_SECRET` 已设置且未提交到 Git
+- [ ] 如不希望持续开放注册，已设置 `AUTH_DISABLE_SIGNUP=1`
 - [ ] 只开放 22/80/443，3000 不外露
 - [ ] cookie.txt 没传上服务器
 - [ ] 域名 A 记录解析正确，Caddy 日志无证书报错
-- [ ] 测试者账号用 adduser.mjs 批量建，不开放自助注册
+- [ ] 已用两个普通账号实际验证用户数据隔离；不要共用账号
 
 ## 5. 常见坑速查
 
@@ -168,12 +191,12 @@ crontab -e   # 添加下面一行（每天凌晨 3 点备份，保留 14 天）
 | 启动报 `Cannot find module 'node:sqlite'` | 服务器 Node < 22.13 | 重装 Node 22 LTS（1.3 步） |
 | 手机打不开，电脑能开 | 防火墙/安全组没放 80/443 | 见 1.7 |
 | 证书报错/跳 http | 域名 A 记录没生效 / Caddyfile 域名写错 | DNS 生效后再 reload caddy |
-| AI 解析全部失败 | ai-config.db 的 key 没传或已过期 | 服务器上重传 ai-config.db 或在 AI 设置页重填 |
+| AI 解析全部失败 | 端点/Key 配置错误，或服务端密钥文件不匹配 | 登录对应账号，在 AI 设置页重填；服务端模式下检查 `AI_KEY_ENCRYPTION_SECRET` 与数据目录密钥是否保持不变 |
 | 图片显示裂图 | 粉笔 CDN 防盗链（no-referrer 已加，大部分可过） | 后续加服务端图片代理（roadmap P0 项） |
 | 重启后服务没了 | 没跑 `pm2 startup` | 执行它输出的命令 |
 
 ## 6. 与现有文档的关系
 
-- 登录/用户隔离 → `auth-user-isolation-design.md`
+- 登录/用户隔离 → Better Auth（实现见 `lib/auth.mjs`，边界见 `CONTEXT.md`）；`auth-user-isolation-design.md` 仅为历史方案
 - AI 密钥防护 → `ai-key-security.md`
 - 手机 App 化（PWA/套壳） → `app-roadmap.md`

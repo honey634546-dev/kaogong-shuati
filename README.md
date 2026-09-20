@@ -4,7 +4,7 @@
 >
 > ⭐ 如果它帮到了你，欢迎点 **Star** / **Watch** —— 这会让更多备考的人在 GitHub 上搜到它。
 
-零依赖 Node.js 后端 + 本地 SQLite 题库的考公刷题全栈应用：模块树刷题、错题本、学习统计，内置可插拔的 AI 智能体（行测方法论解析、申论要点批改、图形推理识图转写、学习建议、题目导入解析）。同一套代码同时服务浏览器端与 Android App（Capacitor）。
+Node.js 后端 + 本地 SQLite 题库的考公刷题全栈应用：模块树刷题、错题本、学习统计，内置可插拔的 AI 智能体（行测方法论解析、申论要点批改、图形推理识图转写、学习建议、题目导入解析）。同一套代码同时服务浏览器端与 Android App（Capacitor）。登录、注册和会话由开源 [Better Auth](https://better-auth.com/) 管理，刷题记录、题库、笔记和 AI 配置按账号隔离。
 
 > 📄 **许可**：本仓库代码以 [MIT](LICENSE) 许可开源；`public/vendor/**`、`skills/**`、`ref-skills/**` 内的第三方组件与技能包副本保留各自上游许可，不在 MIT 授权范围内。
 >
@@ -18,6 +18,7 @@
 - 题型覆盖：单选/多选/判断/不定项 + 申论/综应主观题；答题卡质感 UI（Ocean Depths 主题、深浅双模式、移动端优先 + 桌面适配）
 - 做题记录服务端落库（`practice.db`，手机/电脑跨设备同步）：错题本、收藏、单题重做、统计概览、近 7 天趋势
 - 自定义题库：导入自有题目（文本粘贴/PDF/Excel/图片 OCR），AI 辅助拆分为结构化题目，支持按科目管理
+- 账号与隔离：注册/登录、30 天会话、退出登录；每个账号独立拥有刷题记录、错题、收藏、笔记、自定义题库、对话和 AI 配置
 
 **AI 能力**（五个智能体，OpenAI 兼容协议，各自独立 base_url / api_key / model，改完即生效，提示词带版本历史可回滚）
 
@@ -37,8 +38,9 @@
   node server.mjs 3000
   ```
 
-- 首次运行自动建表；AI 功能只需在「AI 设置」页（`http://localhost:3000/?view=ai`）配置一个 OpenAI-compatible 模型端点、模型名和 API Key，保存后四类 AI 统一使用；角色提示词、技能和单独模型仍可在“高级配置”中调整。Key 保存位置默认是“仅浏览器保存”：只在当前页面内存中保留，刷新或关闭页面后清除，浏览器会直接请求模型网关（网关需允许 CORS）；如需由本机服务端代为请求，可手动切换“存服务端”，此时才写入本机 `ai-config.db`。端点测试遇到 200 非 JSON 时会提示检查 Base URL 是否填到 `/v1` 或 API 根路径。
-- 数据文件：`tiku.db`（只读题库）、`practice.db`（做题记录）、`ai-config.db`（AI 配置）均为本地生成，已加入 .gitignore
+- 首次运行自动建表；浏览器模式下先注册/登录，再在「AI 设置」页（`http://localhost:3000/?view=ai`）配置一个 OpenAI-compatible 模型端点、模型名和 API Key，保存后默认只保存在当前页面内存中，刷新或关闭页面即清除；网关需允许 CORS。若网关不支持 CORS，可切换为“存服务端”，Key 会以 AES-256-GCM 密文按账号保存，服务端代为请求。用户平时只需关注端点、模型和 Key，角色提示词、技能和单独模型仍放在高级配置中。端点测试遇到 200 非 JSON 时会提示检查 Base URL 是否填到 `/v1` 或 API 根路径。
+- 生产部署建议设置稳定的 `BETTER_AUTH_SECRET`、`AI_KEY_ENCRYPTION_SECRET`、`BETTER_AUTH_URL=https://你的域名`；不设置时应用会在数据目录生成 600 权限的随机密钥文件，但迁移/备份时必须连同这些文件一起保留。可设置 `AUTH_DISABLE_SIGNUP=1` 关闭公开注册。
+- 数据文件：`data/auth.db`（账号与会话）、`data/practice.db`（做题记录与用户数据）、`data/ai-config.db`（AI 配置）、`data/tiku.db`（题库）及两个密钥文件均为本地生成，已加入 .gitignore。首次登录账号会接管旧版本未分配的个人数据，后续账号不会继承。
 - Android 打包：`app/` 为 Capacitor 工程，完整构建步骤见 [`BUILD_MANUAL.md`](BUILD_MANUAL.md)（含第三方构建者的 Debug 包路线）
 
 ## 目录结构

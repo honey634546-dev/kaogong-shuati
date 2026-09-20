@@ -85,7 +85,7 @@ const el = (tag, cls, html) => {
 
 const rawApi = async (path, opts = {}) => {
   const headers = new Headers(opts.headers || {});
-  const requestOpts = { ...opts, headers, cache: 'no-store' };
+  const requestOpts = { ...opts, headers, credentials: 'same-origin', cache: 'no-store' };
   const res = await fetch(path, requestOpts);
   if (!res.ok) {
     let msg = `请求失败 (${res.status})`;
@@ -94,6 +94,10 @@ const rawApi = async (path, opts = {}) => {
     const error = new Error(msg);
     error.status = res.status;
     Object.assign(error, detail);
+    if (res.status === 401 && !authBooting && !window.__LOCAL_API_PROMISE__) {
+      authState = null;
+      renderAuthView('signin', '登录已过期，请重新登录');
+    }
     throw error;
   }
   return res.json();
@@ -114,6 +118,141 @@ const api = async (path, opts = {}) => {
   }
   return rawApi(path, opts);
 };
+
+// Web 服务模式使用 Better Auth 会话；本地 App/离线 IndexedDB 模式不需要账号。
+let authState = null;
+let authBooting = true;
+let authMode = 'signin';
+
+function clearAuthAccount() {
+  // Browser-only provider keys belong to the signed-in browser session. Never
+  // let a later account reuse the previous account's in-memory key.
+  window.__AI_BROWSER_KEYS__?.clearAll?.();
+  const topRight = $('#topbar-right');
+  if (!topRight) return;
+  topRight.querySelectorAll('.auth-account').forEach((node) => node.remove());
+}
+
+function renderAuthAccount(user) {
+  const topRight = $('#topbar-right');
+  if (!topRight || !user) return;
+  clearAuthAccount();
+  const account = el('div', 'auth-account', `<span class="auth-user-name" title="${esc(user.email || '')}">${esc(user.name || user.email || '已登录')}</span><button id="btn-auth-logout" class="auth-logout" type="button">退出</button>`);
+  topRight.prepend(account);
+  $('#btn-auth-logout').onclick = async () => {
+    try {
+      await fetch('/api/auth/sign-out', { method: 'POST', credentials: 'same-origin', cache: 'no-store' });
+    } finally {
+      authState = null;
+      clearAuthAccount();
+      renderAuthView('signin', '已退出当前账号');
+    }
+  };
+}
+
+function renderAuthView(mode = authMode, notice = '') {
+  authMode = mode === 'signup' ? 'signup' : 'signin';
+  const view = $('#view');
+  if (!view) return;
+  $('#bottom-nav').style.display = 'none';
+  view.classList.add('no-bottom');
+  $('#app-title').textContent = '刷题';
+  clearAuthAccount();
+  const signup = authMode === 'signup';
+  view.innerHTML = `
+    <section class="auth-card card">
+      <div class="auth-mark">刷</div>
+      <h2>${signup ? '创建账号' : '登录刷题'}</h2>
+      <p class="auth-subtitle">登录后，题库、错题、笔记和 AI 配置只属于你。</p>
+      <div class="auth-notice" ${notice ? '' : 'hidden'}>${esc(notice)}</div>
+      <form id="auth-form" novalidate>
+        ${signup ? '<label>昵称<input name="name" type="text" maxlength="80" autocomplete="name" placeholder="怎么称呼你" required></label>' : ''}
+        <label>邮箱<input name="email" type="email" autocomplete="email" placeholder="you@example.com" required></label>
+        <label>密码<input name="password" type="password" minlength="8" maxlength="128" autocomplete="${signup ? 'new-password' : 'current-password'}" placeholder="至少 8 位" required></label>
+        <button class="btn primary auth-submit" type="submit">${signup ? '注册并开始' : '登录'}</button>
+      </form>
+      <button id="btn-auth-switch" class="auth-switch" type="button">${signup ? '已有账号？去登录' : '还没有账号？免费注册'}</button>
+    </section>`;
+  $('#btn-auth-switch').onclick = () => renderAuthView(signup ? 'signin' : 'signup');
+  $('#auth-form').onsubmit = async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const button = form.querySelector('button[type="submit"]');
+    const data = Object.fromEntries(new FormData(form).entries());
+    if (signup && !String(data.name || '').trim()) return renderAuthView('signup', '请填写昵称');
+    button.disabled = true;
+    try {
+      const endpoint = signup ? '/api/auth/sign-up/email' : '/api/auth/sign-in/email';
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        cache: 'no-store',
+        body: JSON.stringify(signup ? data : { email: data.email, password: data.password }),
+      });
+      let payload = {};
+      try { payload = await response.json(); } catch {}
+      if (!response.ok) throw new Error(payload.message || payload.error || '账号操作失败，请重试');
+      await bootstrapAuth();
+    } catch (error) {
+      renderAuthView(authMode, error.message || '账号操作失败，请重试');
+    } finally {
+      if (button) button.disabled = false;
+    }
+  };
+}
+
+async function bootstrapAuth() {
+  // 本地/离线模式仍由 IndexedDB 驱动，不拦截到登录页。
+  if (window.__LOCAL_API_PROMISE__) {
+    authBooting = false;
+    renderAppAfterAuth();
+    return true;
+  }
+  authBooting = true;
+  try {
+    const response = await fetch('/api/auth/get-session', { credentials: 'same-origin', cache: 'no-store' });
+    const session = response.ok ? await response.json() : null;
+    if (!session?.user?.id) {
+      authState = null;
+      authBooting = false;
+      renderAuthView('signin');
+      return false;
+    }
+    authState = session;
+    authBooting = false;
+    renderAuthAccount(session.user);
+    renderAppAfterAuth();
+    return true;
+  } catch {
+    authBooting = false;
+    renderAuthView('signin', '无法连接登录服务，请检查服务是否启动');
+    return false;
+  }
+}
+
+function renderAppAfterAuth() {
+  $('#view').classList.remove('no-bottom');
+  $('#bottom-nav').style.display = 'flex';
+  const initialView = new URLSearchParams(location.search).get('view');
+  api('/api/favorites').then((data) => {
+    const list = Array.isArray(data) ? data : (data.list || []);
+    store.fav = new Set(list.map((f) => f.questionId));
+    const btn = $('#q-fav');
+    if (btn && store.state.questions.length) {
+      const q = store.state.questions[store.state.idx];
+      if (q) btn.innerHTML = store.fav.has(q.id) ? `<svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${ICO.star}</svg>` : ico('star', 15);
+    }
+  }).catch(() => {});
+  api('/api/notes?limit=200&offset=0').then((data) => {
+    const list = Array.isArray(data) ? data : (data.list || []);
+    store.notes = new Set(list.map((f) => String(f.questionId)));
+    store.noteMap = new Map(list.map((f) => [String(f.questionId), f.note || '']));
+    refreshNoteButtons();
+  }).catch(() => {});
+  if (initialView === 'ai') renderAiSettings();
+  else renderHome();
+}
 
 const SUBJECT_ICONS = {
   '公务员·行测': '<svg viewBox="0 0 24 24" width="30" height="30" fill="currentColor"><path fill-rule="evenodd" d="M2.8 18.4 12 4.8l9.2 13.6H2.8ZM9 15.4h6L12 10.6l-3 4.8Z"/></svg>',
@@ -6024,27 +6163,7 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
 syncThemeBtn();
 
 // 启动（支持 ?view=ai 直接打开 AI 设置页，便于访问与测试）
-const initialView = new URLSearchParams(location.search).get('view');
-// 预加载收藏集合（不阻塞首屏；兼容旧纯数组结构）
-api('/api/favorites').then((data) => {
-  const list = Array.isArray(data) ? data : (data.list || []);
-  store.fav = new Set(list.map((f) => f.questionId));
-  // 若在刷题页则刷新星标状态
-  const btn = $('#q-fav');
-  if (btn && store.state.questions.length) {
-    const q = store.state.questions[store.state.idx];
-    if (q) btn.innerHTML = store.fav.has(q.id) ? `<svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${ICO.star}</svg>` : ico('star', 15);
-  }
-}).catch(() => {});
-// 预加载笔记集合（不阻塞首屏；含内容缓存，供弹层预填；limit 拉满 200 覆盖常见量级）
-api('/api/notes?limit=200&offset=0').then((data) => {
-  const list = Array.isArray(data) ? data : (data.list || []);
-  store.notes = new Set(list.map((f) => String(f.questionId)));
-  store.noteMap = new Map(list.map((f) => [String(f.questionId), f.note || '']));
-  refreshNoteButtons(); // 若在刷题页则刷新「添加笔记/查看笔记」按钮状态
-}).catch(() => {});
-if (initialView === 'ai') renderAiSettings();
-else renderHome();
+bootstrapAuth();
 
 // ============ App 端自测钩子（调试用，正常使用不会触发）============
 // MainActivity 在页面加载后可调用 window.runSelfTest()，结果经 console.log 输出

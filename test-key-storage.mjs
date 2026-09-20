@@ -189,4 +189,11 @@ test('browser client keeps the key out of server requests and persistent storage
 
   browser.clear(1);
   assert.equal(browser.has(1), false);
+  await browser.handle('/api/ai/agents/1', {
+    method: 'PUT',
+    body: JSON.stringify({ key_storage_mode: 'browser', api_key: 'account-a-memory-secret' }),
+  }, rawFetch);
+  assert.equal(browser.has(1), true);
+  browser.clearAll();
+  assert.equal(browser.has(1), false);
 });

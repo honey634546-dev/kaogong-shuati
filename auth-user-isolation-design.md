@@ -1,4 +1,6 @@
-# 登录 + 用户隔离：详细设计方案（v2 可审阅版）
+# 登录 + 用户隔离：历史设计方案（已由 Better Auth 实现替代）
+
+> 本文保留原始方案，便于追溯；当前代码已经采用开源 [Better Auth](https://better-auth.com/) 管理账号、密码和会话，不再使用本文下方的自研 `users/sessions` 表、游客模式或 `adduser.mjs` 方案。当前实现边界与数据归属见 [`CONTEXT.md`](CONTEXT.md)，生产配置见 [`README.md`](README.md) 和 [`deploy-guide.md`](deploy-guide.md)。
 
 > 目标：50 人内测，各自拥有独立的错题本/收藏/刷题记录/统计；你本人不登录也能用（游客模式）
 > 约束：零依赖（不引第三方库）、零成本（不接短信/第三方登录）、向后兼容（不登录行为与现在完全一致）

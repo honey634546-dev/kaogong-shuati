@@ -13,12 +13,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
-import { listAgents, getAgent, updateAgent, getHistory, callAgent, callAgentMessages, buildAgentMessages, resolveSkill, normalizeKeyStorageMode, initAiConfig, listUserSkills, addUserSkill, deleteUserSkill } from './lib/ai-agents.mjs';
+import { listAgents, getAgent, updateAgent, getHistory, callAgent, callAgentMessages, buildAgentMessages, resolveSkill, normalizeKeyStorageMode, initAiConfig, listUserSkills, listUserSkillsFor, addUserSkill, deleteUserSkill, getUserAgent, listUserAgents, updateUserAgent } from './lib/ai-agents.mjs';
 import { extractMaterialFromPdf } from './lib/pdf-ocr.mjs';
 import { FENBI_TREE, ESSAY_TREE, SHENLUN_TREE, ZONGYING_TREE } from './lib/fenbi-tree.mjs';
 import { mapChapterToNode } from './lib/xingce-chapter-map.mjs';
 import { customQuestionHtml, parseImages } from './public/lib/custom-parser.js';
 import { ANSWER_STATUSES, normalizeCustomQuestion, normalizeCustomQuestions } from './public/lib/custom-bank.js';
+import { authRequestHandler, getAuthSession, initAuth } from './lib/auth.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.argv[2] || process.env.PORT || 3000);
@@ -37,6 +38,15 @@ const DATA_DIR = path.resolve(
 fs.mkdirSync(DATA_DIR, { recursive: true });
 // ai-agents.mjs 在 initAiConfig() 时读取这个变量；显式 AI_CONFIG_DB 仍拥有最高优先级。
 process.env.APP_DATA_DIR = DATA_DIR;
+
+// Better Auth owns identity/session tables in auth.db. Business tables remain
+// in practice.db and are scoped by the authenticated user in the API layer.
+await initAuth({
+  dataDir: DATA_DIR,
+  port: PORT,
+  baseURL: process.env.BETTER_AUTH_URL || undefined,
+});
+const betterAuthHandler = authRequestHandler();
 
 const configuredQuestionDb = path.join(DATA_DIR, 'tiku.db');
 const legacyQuestionDb = path.join(__dirname, 'tiku.db');
@@ -95,6 +105,7 @@ if (!DB_FILE) pdb.exec(QUESTION_SCHEMA('tiku'));
 pdb.exec(`
   CREATE TABLE IF NOT EXISTS practice_records (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL DEFAULT 'legacy-user',
     question_id INTEGER NOT NULL,
     paper_id INTEGER DEFAULT NULL,
     subject TEXT NOT NULL,
@@ -118,13 +129,15 @@ pdb.exec(`
   CREATE INDEX IF NOT EXISTS idx_records_correct ON practice_records(is_correct);
   CREATE INDEX IF NOT EXISTS idx_records_time ON practice_records(created_at);
   CREATE TABLE IF NOT EXISTS practice_attempts (
-    attempt_id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL DEFAULT 'legacy-user',
+    attempt_id TEXT NOT NULL,
     subject TEXT DEFAULT '',
     mode TEXT DEFAULT '',
     question_count INTEGER DEFAULT 0,
     started_at TEXT DEFAULT (datetime('now','localtime')),
     completed_at TEXT DEFAULT NULL,
-    completed INTEGER DEFAULT 0
+    completed INTEGER DEFAULT 0,
+    PRIMARY KEY (user_id, attempt_id)
   );
   CREATE TABLE IF NOT EXISTS question_categories (
     question_id TEXT NOT NULL,
@@ -170,6 +183,7 @@ try { pdb.exec('ALTER TABLE custom_batches ADD COLUMN subject TEXT DEFAULT \'自
 pdb.exec(`
   CREATE TABLE IF NOT EXISTS custom_batches (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL DEFAULT 'legacy-user',
     name TEXT NOT NULL,
     subject TEXT DEFAULT '自定义',
     created_at TEXT DEFAULT (datetime('now','localtime')),
@@ -177,6 +191,7 @@ pdb.exec(`
   );
   CREATE TABLE IF NOT EXISTS custom_questions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL DEFAULT 'legacy-user',
     batch_id INTEGER NOT NULL,
     prompt TEXT NOT NULL,
     material TEXT DEFAULT '',
@@ -275,12 +290,14 @@ try { if (fs.existsSync(MATERIALS_DB)) mdb = new DatabaseSync(MATERIALS_DB, { re
 pdb.exec(`
   CREATE TABLE IF NOT EXISTS favorites (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    question_id INTEGER NOT NULL UNIQUE,
+    user_id TEXT NOT NULL DEFAULT 'legacy-user',
+    question_id TEXT NOT NULL,
     subject TEXT DEFAULT '',
     chapter TEXT DEFAULT '',
     group_key TEXT DEFAULT '',      -- 来源归档：大模块（科目名 / 'custom' / ''=未分类）
     sub_key TEXT DEFAULT '',        -- 子模块（章节树大模块；自定义题不分子模块）
-    created_at TEXT DEFAULT (datetime('now','localtime'))
+    created_at TEXT DEFAULT (datetime('now','localtime')),
+    UNIQUE (user_id, question_id)
   );
 `);
 // 兼容已存在的库：收藏补充来源归档列
@@ -290,14 +307,16 @@ try { pdb.exec("ALTER TABLE favorites ADD COLUMN sub_key TEXT DEFAULT ''"); } ca
 pdb.exec(`
   CREATE TABLE IF NOT EXISTS notes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    question_id TEXT NOT NULL UNIQUE,
+    user_id TEXT NOT NULL DEFAULT 'legacy-user',
+    question_id TEXT NOT NULL,
     subject TEXT DEFAULT '',
     chapter TEXT DEFAULT '',
     note TEXT DEFAULT '',
     group_key TEXT DEFAULT '',      -- 来源归档：大模块（科目名 / 'custom' / ''=未分类）
     sub_key TEXT DEFAULT '',        -- 子模块（章节树大模块；自定义题不分子模块）
     created_at TEXT DEFAULT (datetime('now','localtime')),
-    updated_at TEXT DEFAULT (datetime('now','localtime'))
+    updated_at TEXT DEFAULT (datetime('now','localtime')),
+    UNIQUE (user_id, question_id)
   );
 `);
 // 兼容已存在的库：笔记补充来源归档列
@@ -306,6 +325,7 @@ try { pdb.exec("ALTER TABLE notes ADD COLUMN sub_key TEXT DEFAULT ''"); } catch 
 // AI 解析缓存表（同一题同一作答只调一次 LLM，之后秒回；跨设备同步）
 pdb.exec(`
   CREATE TABLE IF NOT EXISTS ai_explains (
+    user_id TEXT NOT NULL DEFAULT 'legacy-user',
     question_id INTEGER NOT NULL,
     selected TEXT NOT NULL DEFAULT 'none',
     correct TEXT NOT NULL DEFAULT 'none',
@@ -313,12 +333,13 @@ pdb.exec(`
     image_note TEXT,
     model TEXT DEFAULT '',
     created_at TEXT DEFAULT (datetime('now','localtime')),
-    PRIMARY KEY (question_id, selected, correct)
+    PRIMARY KEY (user_id, question_id, selected, correct)
   );
 `);
 // 随题 AI 辅导会话（按题目逻辑身份/版本隔离，跨设备同步；题面快照避免后续改题污染历史对话）
 pdb.exec(`
   CREATE TABLE IF NOT EXISTS ai_conversations (
+    user_id TEXT NOT NULL DEFAULT 'legacy-user',
     conversation_id TEXT PRIMARY KEY,
     question_id TEXT NOT NULL,
     question_uid TEXT NOT NULL DEFAULT '',
@@ -343,6 +364,151 @@ pdb.exec(`
   CREATE INDEX IF NOT EXISTS idx_ai_messages_conversation
     ON ai_messages(conversation_id, id);
 `);
+
+// ---- 多用户数据迁移 ----
+// 旧版本的个人表没有 user_id，且 favorites/notes/attempts 使用全局唯一键。
+// 新库直接使用复合唯一键；旧库在启动时重建这三个小表并保留原数据。
+const LEGACY_OWNER_ID = 'legacy-user';
+function tableColumns(table) {
+  return pdb.prepare(`PRAGMA table_info(${table})`).all();
+}
+function hasColumn(table, name) {
+  return tableColumns(table).some((column) => column.name === name);
+}
+
+function migrateUniquePersonalTable(table, createSql, copySql) {
+  if (hasColumn(table, 'user_id')) return;
+  pdb.exec(`
+    ${createSql}
+    ${copySql}
+    DROP TABLE ${table};
+    ALTER TABLE ${table}_v2 RENAME TO ${table};
+  `);
+}
+
+migrateUniquePersonalTable(
+  'favorites',
+  `CREATE TABLE favorites_v2 (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL DEFAULT '${LEGACY_OWNER_ID}',
+    question_id TEXT NOT NULL,
+    subject TEXT DEFAULT '', chapter TEXT DEFAULT '', group_key TEXT DEFAULT '', sub_key TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now','localtime')),
+    UNIQUE (user_id, question_id)
+  );`,
+  `INSERT INTO favorites_v2 (id, question_id, subject, chapter, group_key, sub_key, created_at)
+     SELECT id, CAST(question_id AS TEXT), subject, chapter, group_key, sub_key, created_at FROM favorites;`,
+);
+migrateUniquePersonalTable(
+  'notes',
+  `CREATE TABLE notes_v2 (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL DEFAULT '${LEGACY_OWNER_ID}',
+    question_id TEXT NOT NULL,
+    subject TEXT DEFAULT '', chapter TEXT DEFAULT '', note TEXT DEFAULT '', group_key TEXT DEFAULT '', sub_key TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now','localtime')),
+    updated_at TEXT DEFAULT (datetime('now','localtime')),
+    UNIQUE (user_id, question_id)
+  );`,
+  `INSERT INTO notes_v2 (id, question_id, subject, chapter, note, group_key, sub_key, created_at, updated_at)
+     SELECT id, question_id, subject, chapter, note, group_key, sub_key, created_at, updated_at FROM notes;`,
+);
+migrateUniquePersonalTable(
+  'practice_attempts',
+  `CREATE TABLE practice_attempts_v2 (
+    user_id TEXT NOT NULL DEFAULT '${LEGACY_OWNER_ID}',
+    attempt_id TEXT NOT NULL,
+    subject TEXT DEFAULT '', mode TEXT DEFAULT '', question_count INTEGER DEFAULT 0,
+    started_at TEXT DEFAULT (datetime('now','localtime')), completed_at TEXT DEFAULT NULL, completed INTEGER DEFAULT 0,
+    PRIMARY KEY (user_id, attempt_id)
+  );`,
+  `INSERT INTO practice_attempts_v2 (attempt_id, subject, mode, question_count, started_at, completed_at, completed)
+     SELECT attempt_id, subject, mode, question_count, started_at, completed_at, completed FROM practice_attempts;`,
+);
+
+for (const table of ['practice_records', 'custom_batches', 'custom_questions', 'ai_explains', 'ai_conversations']) {
+  if (!hasColumn(table, 'user_id')) {
+    try { pdb.exec(`ALTER TABLE ${table} ADD COLUMN user_id TEXT NOT NULL DEFAULT '${LEGACY_OWNER_ID}'`); } catch {}
+  }
+}
+// ai_explains 的旧主键没有 user_id；重建后同一题的缓存不会在账号之间覆盖。
+try {
+  const tableSql = pdb.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'ai_explains'").get()?.sql || '';
+  if (!/PRIMARY KEY\s*\(\s*user_id\s*,/i.test(tableSql)) {
+    pdb.exec(`
+      CREATE TABLE ai_explains_v2 (
+        user_id TEXT NOT NULL DEFAULT '${LEGACY_OWNER_ID}',
+        question_id INTEGER NOT NULL,
+        selected TEXT NOT NULL DEFAULT 'none',
+        correct TEXT NOT NULL DEFAULT 'none',
+        content TEXT NOT NULL,
+        image_note TEXT,
+        model TEXT DEFAULT '',
+        created_at TEXT DEFAULT (datetime('now','localtime')),
+        PRIMARY KEY (user_id, question_id, selected, correct)
+      );
+      INSERT OR IGNORE INTO ai_explains_v2 (user_id, question_id, selected, correct, content, image_note, model, created_at)
+        SELECT user_id, question_id, selected, correct, content, image_note, model, created_at FROM ai_explains;
+      DROP TABLE ai_explains;
+      ALTER TABLE ai_explains_v2 RENAME TO ai_explains;
+    `);
+  }
+} catch {}
+// 旧的全局 submission_key 唯一索引会把不同账号的同名幂等键混在一起。
+try {
+  pdb.exec('DROP INDEX IF EXISTS idx_records_submission_key');
+  pdb.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_records_submission_key ON practice_records(user_id, submission_key) WHERE submission_key IS NOT NULL AND submission_key <> ''");
+} catch {}
+try {
+  pdb.exec('DROP INDEX IF EXISTS idx_ai_conversation_identity');
+  pdb.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_conversation_identity ON ai_conversations(user_id, question_id, question_uid, question_revision)');
+} catch {}
+try {
+  pdb.exec('CREATE INDEX IF NOT EXISTS idx_records_user ON practice_records(user_id, created_at)');
+  pdb.exec('CREATE INDEX IF NOT EXISTS idx_favorites_user ON favorites(user_id, id)');
+  pdb.exec('CREATE INDEX IF NOT EXISTS idx_notes_user ON notes(user_id, updated_at)');
+  pdb.exec('CREATE INDEX IF NOT EXISTS idx_custom_batches_user ON custom_batches(user_id, id)');
+  pdb.exec('CREATE INDEX IF NOT EXISTS idx_custom_questions_user ON custom_questions(user_id, batch_id, id)');
+  pdb.exec('CREATE INDEX IF NOT EXISTS idx_ai_conversations_user ON ai_conversations(user_id, updated_at)');
+  pdb.exec('CREATE INDEX IF NOT EXISTS idx_ai_explains_user ON ai_explains(user_id, question_id)');
+} catch {}
+
+// 第一个登录账号接管升级前的旧个人数据；迁移标记写入同一数据库，后续账号不会再看到旧数据。
+pdb.exec(`CREATE TABLE IF NOT EXISTS data_migrations (name TEXT PRIMARY KEY, completed_at TEXT DEFAULT (datetime('now','localtime')), owner_id TEXT NOT NULL)`);
+function ensureLegacyDataAssigned(ownerId) {
+  const uid = String(ownerId || '').trim();
+  if (!uid) return;
+  const marker = pdb.prepare('SELECT owner_id FROM data_migrations WHERE name = ?').get('legacy-personal-data-v1');
+  if (marker) return;
+  pdb.exec('BEGIN');
+  try {
+    for (const table of ['practice_records', 'practice_attempts', 'custom_batches', 'custom_questions', 'favorites', 'notes', 'ai_explains', 'ai_conversations']) {
+      pdb.prepare(`UPDATE ${table} SET user_id = ? WHERE user_id = ?`).run(uid, LEGACY_OWNER_ID);
+    }
+    pdb.prepare("INSERT OR REPLACE INTO data_migrations (name, owner_id) VALUES ('legacy-personal-data-v1', ?)").run(uid);
+    pdb.exec('COMMIT');
+  } catch (error) {
+    try { pdb.exec('ROLLBACK'); } catch {}
+    throw error;
+  }
+}
+
+function requestAgent(req, idOrRole) {
+  const ref = typeof idOrRole === 'number' || /^\d+$/.test(String(idOrRole))
+    ? Number(idOrRole)
+    : String(idOrRole || '');
+  return process.env.AUTH_DISABLED === '1'
+    ? getAgent(ref)
+    : getUserAgent(req.user.id, ref);
+}
+
+function requestAgentList(req) {
+  return process.env.AUTH_DISABLED === '1' ? listAgents(true) : listUserAgents(req.user.id);
+}
+
+function requestSkills(req) {
+  return process.env.AUTH_DISABLED === '1' ? listUserSkills() : listUserSkillsFor(req.user.id);
+}
 
 // ---------- 工具 ----------
 const json = (res, code, data) => {
@@ -422,20 +588,20 @@ function conversationMessageView(row) {
   };
 }
 
-function conversationMessages(conversationId, includeFailed = true) {
+function conversationMessages(conversationId, includeFailed = true, ownerId = LEGACY_OWNER_ID) {
   const rows = pdb.prepare(`
     SELECT id, role, content, model, status, created_at
-    FROM ai_messages WHERE conversation_id = ?
+    FROM ai_messages WHERE conversation_id = ? AND conversation_id IN (SELECT conversation_id FROM ai_conversations WHERE user_id = ?)
     ${includeFailed ? '' : "AND status = 'complete'"}
     ORDER BY id
-  `).all(conversationId);
+  `).all(conversationId, ownerId);
   return rows.map(conversationMessageView);
 }
 
-function getConversation(conversationId) {
+function getConversation(conversationId, ownerId = LEGACY_OWNER_ID) {
   const id = String(conversationId || '').trim();
   if (!id || id.length > 128) return null;
-  return pdb.prepare('SELECT * FROM ai_conversations WHERE conversation_id = ?').get(id) || null;
+  return pdb.prepare('SELECT * FROM ai_conversations WHERE user_id = ? AND conversation_id = ?').get(ownerId, id) || null;
 }
 
 function normalizeConversationIdentity(body = {}) {
@@ -460,12 +626,12 @@ function normalizeConversationIdentity(body = {}) {
   };
 }
 
-function findConversationByIdentity(identity) {
+function findConversationByIdentity(identity, ownerId = LEGACY_OWNER_ID) {
   return pdb.prepare(`
     SELECT * FROM ai_conversations
-    WHERE question_id = ? AND question_uid = ? AND question_revision = ?
+    WHERE user_id = ? AND question_id = ? AND question_uid = ? AND question_revision = ?
     LIMIT 1
-  `).get(identity.questionId, identity.questionUid, identity.revision) || null;
+  `).get(ownerId, identity.questionId, identity.questionUid, identity.revision) || null;
 }
 
 function conversationModelMessages(row, currentContent) {
@@ -633,22 +799,22 @@ function customQuestionApiRow(row) {
   };
 }
 
-function customImportExisting(q) {
+function customImportExisting(q, ownerId) {
   if (q._external_id_explicit && q.external_id) {
     return pdb.prepare(`
       SELECT * FROM custom_questions
-      WHERE external_id = ?
+      WHERE user_id = ? AND external_id = ?
       ORDER BY is_current DESC, revision DESC, id DESC
       LIMIT 1
-    `).get(q.external_id);
+    `).get(ownerId, q.external_id);
   }
   if (q._question_uid_explicit && q.question_uid) {
     return pdb.prepare(`
       SELECT * FROM custom_questions
-      WHERE question_uid = ?
+      WHERE user_id = ? AND question_uid = ?
       ORDER BY is_current DESC, revision DESC, id DESC
       LIMIT 1
-    `).get(q.question_uid);
+    `).get(ownerId, q.question_uid);
   }
   return null;
 }
@@ -657,14 +823,14 @@ function customImportExisting(q) {
  * 只读计算一次导入计划：校验已在 normalizeCustomQuestions 完成，
  * 此处只处理跨请求幂等、同批指纹去重和显式版本冲突。
  */
-function planCustomImport(questions, { batchId = 0, conflictMode = 'reject' } = {}) {
+function planCustomImport(questions, { batchId = 0, conflictMode = 'reject', ownerId = LEGACY_OWNER_ID } = {}) {
   const items = [];
   const unchanged = [];
   const conflicts = [];
   const seen = new Map();
   const target = Number(batchId || 0);
   if (target) {
-    const exists = pdb.prepare('SELECT id FROM custom_batches WHERE id = ?').get(target);
+    const exists = pdb.prepare('SELECT id FROM custom_batches WHERE user_id = ? AND id = ?').get(ownerId, target);
     if (!exists) return { items, unchanged, conflicts: [{ code: 'batch_not_found', message: '目标批次不存在', batch_id: target }], targetBatch: null };
   }
   for (let index = 0; index < questions.length; index++) {
@@ -689,13 +855,13 @@ function planCustomImport(questions, { batchId = 0, conflictMode = 'reject' } = 
     }
     if (identity) seen.set(identity, { index, fingerprint: q.fingerprint });
 
-    let existing = customImportExisting(q);
+    let existing = customImportExisting(q, ownerId);
     if (!existing && target && !identity) {
       existing = pdb.prepare(`
         SELECT * FROM custom_questions
-        WHERE batch_id = ? AND fingerprint = ? AND is_current = 1
+        WHERE user_id = ? AND batch_id = ? AND fingerprint = ? AND is_current = 1
         ORDER BY id DESC LIMIT 1
-      `).get(target, q.fingerprint);
+      `).get(ownerId, target, q.fingerprint);
     }
     if (!existing) {
       items.push({ kind: 'create', index, question: q, existing: null });
@@ -743,11 +909,11 @@ function jsonArray(value) {
 }
 
 /** 解析作答时锁定的题目版本；后续改题/换版本不影响历史记录。 */
-function resolveRecordQuestion(questionId) {
+function resolveRecordQuestion(questionId, ownerId = LEGACY_OWNER_ID) {
   const id = String(questionId ?? '');
   if (id.startsWith('custom-')) {
     const cid = Number(id.replace(/^custom-/, ''));
-    const row = pdb.prepare('SELECT * FROM custom_questions WHERE id = ?').get(cid);
+    const row = pdb.prepare('SELECT * FROM custom_questions WHERE user_id = ? AND id = ?').get(ownerId, cid);
     if (!row) return null;
     const question = {
       content: row.prompt || '',
@@ -807,23 +973,23 @@ function normalizeSubmissionKey(value) {
   return key.length > 0 && key.length <= 256 ? key : '';
 }
 
-function ensureAttempt(attemptId, subject, mode, questionCount) {
+function ensureAttempt(ownerId, attemptId, subject, mode, questionCount) {
   const id = String(attemptId || '').trim();
   if (!id || id.length > 128) return;
   pdb.prepare(`
-    INSERT INTO practice_attempts (attempt_id, subject, mode, question_count)
-    VALUES (?, ?, ?, ?)
-    ON CONFLICT(attempt_id) DO UPDATE SET
+    INSERT INTO practice_attempts (user_id, attempt_id, subject, mode, question_count)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(user_id, attempt_id) DO UPDATE SET
       subject = CASE WHEN excluded.subject <> '' THEN excluded.subject ELSE practice_attempts.subject END,
       mode = CASE WHEN excluded.mode <> '' THEN excluded.mode ELSE practice_attempts.mode END,
       question_count = CASE WHEN excluded.question_count > 0 THEN excluded.question_count ELSE practice_attempts.question_count END
-  `).run(id, String(subject || ''), String(mode || ''), Number(questionCount || 0));
+  `).run(String(ownerId || LEGACY_OWNER_ID), id, String(subject || ''), String(mode || ''), Number(questionCount || 0));
 }
 
-function finishAttempt(attemptId) {
+function finishAttempt(ownerId, attemptId) {
   const id = String(attemptId || '').trim();
   if (!id) return;
-  pdb.prepare("UPDATE practice_attempts SET completed = 1, completed_at = datetime('now','localtime') WHERE attempt_id = ?").run(id);
+  pdb.prepare("UPDATE practice_attempts SET completed = 1, completed_at = datetime('now','localtime') WHERE user_id = ? AND attempt_id = ?").run(String(ownerId || LEGACY_OWNER_ID), id);
 }
 
 function checkAnswer(q, selected) {
@@ -1382,13 +1548,13 @@ function srcMatch(pcat, srcId) {
 }
 
 /** 已做题 question_id 集合（动态数据：每次组卷实时查 practice_records，绝不缓存） */
-function practiceDoneQids() {
-  return new Set(pdb.prepare('SELECT question_id FROM practice_records').all().map((r) => r.question_id));
+function practiceDoneQids(ownerId = LEGACY_OWNER_ID) {
+  return new Set(pdb.prepare('SELECT question_id FROM practice_records WHERE user_id = ?').all(ownerId).map((r) => r.question_id));
 }
 
 /** 单题抽题：分类索引 × 源 × 难度 × 题型（避开材料组题；weak 时未做题优先）
  *  内存版：题库静态索引已在 getPaperPool 载入，过滤 + Fisher-Yates 洗牌，O(候选数) 无 SQL */
-function pickSingle(subject, category, sub, src, difficulty, types, quota, weak, skipDup) {
+function pickSingle(subject, category, sub, src, difficulty, types, quota, weak, skipDup, ownerId = LEGACY_OWNER_ID) {
   if (quota <= 0) return [];
   const pool = getPaperPool();
   const rows = pool.byKey.get(`${subject}|${category}|${sub}`);
@@ -1422,7 +1588,7 @@ function pickSingle(subject, category, sub, src, difficulty, types, quota, weak,
   };
   if (weak) {
     // 未做优先；不足回退到全量（已做题也纳入）——等价原 SQL 的 weak 回退
-    const done = practiceDoneQids();
+    const done = practiceDoneQids(ownerId);
     take(cand.filter((qid) => !done.has(qid)));
     if (out.length < quota) take(cand);
   } else {
@@ -1475,6 +1641,7 @@ function groupQuestionIds(subject, gid) {
 
 /** 生成智能组卷（行测）：官方模块配额 × 四源并发 → 聚合去重 → 材料整组 → 官方模块序连排 */
 async function buildXingcePaper(opts) {
+  const ownerId = String(opts.ownerId || LEGACY_OWNER_ID);
   const subject = '公务员·行测';
   const count = Math.max(1, Math.min(130, Number(opts.count) || 20));
   const difficulty = (typeof opts.difficulty === 'string' && XINGCE_DIFFICULTY[opts.difficulty])
@@ -1568,12 +1735,12 @@ async function buildXingcePaper(opts) {
             }
             const rest = q - members.length;
             if (rest > 0) {
-              for (const qid of pickSingle(subject, m.name, subName, src, difficulty, types, rest, weakSet.has(m.name), skipQ)) picks.push({ questionId: qid, groupId: null, subIdx: si2 });
+              for (const qid of pickSingle(subject, m.name, subName, src, difficulty, types, rest, weakSet.has(m.name), skipQ, ownerId)) picks.push({ questionId: qid, groupId: null, subIdx: si2 });
             }
             return;
           }
         }
-        for (const qid of pickSingle(subject, m.name, subName, src, difficulty, types, q, weakSet.has(m.name), skipQ)) picks.push({ questionId: qid, groupId: null, subIdx: si2 });
+        for (const qid of pickSingle(subject, m.name, subName, src, difficulty, types, q, weakSet.has(m.name), skipQ, ownerId)) picks.push({ questionId: qid, groupId: null, subIdx: si2 });
       });
       if (picks.length) sourcePicks.get(src.id).push(...picks.map((p) => ({ ...p, module: m.name })));
     });
@@ -1586,7 +1753,7 @@ async function buildXingcePaper(opts) {
       const subQuota = allocateQuota(subWeights, need);
       m.subs.forEach(([subName], si2) => {
         if (subQuota[si2] <= 0) return;
-        for (const qid of pickSingle(subject, m.name, subName, { cond: '1=1' }, { min: 1, max: 9 }, types, subQuota[si2], false, skipQ)) {
+        for (const qid of pickSingle(subject, m.name, subName, { cond: '1=1' }, { min: 1, max: 9 }, types, subQuota[si2], false, skipQ, ownerId)) {
           sourcePicks.get(activeSources[0].id).push({ questionId: qid, groupId: null, module: m.name, subIdx: si2, fallback: true });
         }
       });
@@ -1711,6 +1878,7 @@ function applyWeakQuota(modules, weakSet, total) {
 
 /** 生成职测智能组卷：按所选卷型（类别）模板 → 主源抽题 + 其他类别兜底 → 官方模块序连排 */
 async function buildZhiCePaper(opts) {
+  const ownerId = String(opts.ownerId || LEGACY_OWNER_ID);
   const subject = '事业编·职测';
   const category = ZHI_CE_TEMPLATES[opts.category] ? opts.category : '联考A类';
   const template = ZHI_CE_TEMPLATES[category];
@@ -1736,7 +1904,7 @@ async function buildZhiCePaper(opts) {
   const pickSubWithFallback = (cat, sub, quota) => {
     const out = [];
     const trySrc = (src, q, w) => {
-      for (const qid of pickSingle(subject, cat, sub, src, difficulty, types, q, w, skipQ)) out.push({ questionId: qid, srcId: src.id });
+      for (const qid of pickSingle(subject, cat, sub, src, difficulty, types, q, w, skipQ, ownerId)) out.push({ questionId: qid, srcId: src.id });
     };
     trySrc(mainSrc, quota, weakSet.has(cat));
     let need = quota - out.length;
@@ -1860,6 +2028,48 @@ const server = http.createServer(async (req, res) => {
   // ---- API ----
   if (pathname.startsWith('/api/')) {
     try {
+      // Better Auth consumes the request body itself. It must run before the
+      // application routes read any body bytes.
+      if (pathname.startsWith('/api/auth/')) {
+        // Existing browser E2E suites intentionally run with AUTH_DISABLED=1
+        // so they can exercise the study UI without creating accounts. Give
+        // that explicit test mode a stable pseudo-session; production never
+        // enables this branch.
+        if (process.env.AUTH_DISABLED === '1' && pathname === '/api/auth/get-session' && req.method === 'GET') {
+          return json(res, 200, {
+            session: {
+              id: 'legacy-test-session',
+              userId: 'legacy-test-user',
+              expiresAt: new Date(Date.now() + 86400000).toISOString(),
+            },
+            user: {
+              id: 'legacy-test-user',
+              name: 'Legacy Test User',
+              email: 'test@example.invalid',
+              emailVerified: true,
+            },
+          });
+        }
+        await betterAuthHandler(req, res);
+        return;
+      }
+      if (pathname === '/api/health' && req.method === 'GET') {
+        return json(res, 200, { ok: true, service: '刷题' });
+      }
+
+      // Legacy unit/e2e tests can explicitly opt out. Production and normal
+      // development always require a Better Auth session for app APIs.
+      if (process.env.AUTH_DISABLED !== '1') {
+        const session = await getAuthSession(req);
+        if (!session?.user?.id) return json(res, 401, { error: '请先登录', code: 'auth_required' });
+        req.user = session.user;
+        req.authSession = session.session || null;
+      } else {
+        req.user = { id: 'legacy-test-user', name: 'Legacy Test User', email: 'test@example.invalid', role: 'admin' };
+      }
+      const ownerId = String(req.user.id);
+      ensureLegacyDataAssigned(ownerId);
+
       // 科目列表（questions = 唯一题目数，跨卷重复题去重；done = 该科目答对且去重的已做题目数）
       if (pathname === '/api/subjects' && req.method === 'GET') {
         if (!chapterCache.has('subjects|static')) {
@@ -1884,10 +2094,10 @@ const server = http.createServer(async (req, res) => {
           SELECT tp.subjectName, COUNT(DISTINCT r.question_id) AS done
           FROM tiku.papers tp
           JOIN tiku.questions tq ON tq.paperId = tp.id
-          JOIN practice_records r ON r.question_id = tq.questionId AND r.is_correct = 1
+          JOIN practice_records r ON r.user_id = ? AND r.question_id = tq.questionId AND r.is_correct = 1
           WHERE substr(tp.name, 1, 4) BETWEEN '${YEAR_FROM}' AND '${YEAR_TO}'
           GROUP BY tp.subjectName
-        `).all();
+        `).all(ownerId);
         const doneMap = new Map(doneRows.map((r) => [r.subjectName, Number(r.done || 0)]));
         return json(res, 200, staticRows.map((r) => {
           const questions = r.subjectName === '事业编·综应' ? Number(zongyingN) : Number(r.questions);
@@ -2006,9 +2216,9 @@ const server = http.createServer(async (req, res) => {
         // 自定义题：custom- 前缀 → 从 custom_questions 取（错题/收藏重做入口）
         if (String(raw).startsWith('custom-')) {
           const cid = Number(String(raw).replace(/^custom-/, ''));
-          const cr = pdb.prepare('SELECT * FROM custom_questions WHERE id = ?').get(cid);
+          const cr = pdb.prepare('SELECT * FROM custom_questions WHERE user_id = ? AND id = ?').get(ownerId, cid);
           if (!cr) return err(res, 404, '题目不存在');
-          const b = pdb.prepare('SELECT name, subject FROM custom_batches WHERE id = ?').get(cr.batch_id) || {};
+          const b = pdb.prepare('SELECT name, subject FROM custom_batches WHERE user_id = ? AND id = ?').get(ownerId, cr.batch_id) || {};
           const { contentHtml, materialHtml } = customQuestionHtml({ ...cr, images: parseImages(cr.images) });
           return json(res, 200, {
             questionId: String(raw), id: String(raw), type: 'custom',
@@ -2045,8 +2255,8 @@ const server = http.createServer(async (req, res) => {
         const totals = chapterCache.get(totalsKey);
         const done = pdb.prepare(`
           SELECT chapter, COUNT(*) c, SUM(is_correct) ok FROM practice_records
-          WHERE subject = ? AND is_correct IS NOT NULL GROUP BY chapter
-        `).all(subject);
+          WHERE user_id = ? AND subject = ? AND is_correct IS NOT NULL GROUP BY chapter
+        `).all(ownerId, subject);
         const doneMap = new Map(done.map((d) => [d.chapter, d]));
         const list = totals.map((t) => {
           const d = doneMap.get(t.chapter);
@@ -2120,8 +2330,9 @@ const server = http.createServer(async (req, res) => {
           for (const r of pdb.prepare(`
             SELECT qc.category, qc.sub, COUNT(*) c, COALESCE(SUM(r.is_correct), 0) ok
             FROM practice_records r JOIN question_categories qc ON qc.question_id = r.question_id AND qc.subject = ?
+            WHERE r.user_id = ?
             GROUP BY qc.category, qc.sub
-          `).all(subject)) {
+          `).all(subject, ownerId)) {
             doneMap.set(`${r.category}|${r.sub}`, { c: r.c, ok: r.ok });
           }
           groups = FENBI_TREE.map((g) => {
@@ -2147,10 +2358,10 @@ const server = http.createServer(async (req, res) => {
               FROM question_categories qc
               JOIN tiku.questions q ON q.questionId = qc.question_id
               JOIN tiku.papers p ON p.id = q.paperId AND substr(p.name, 1, 4) BETWEEN '${YEAR_FROM}' AND '${YEAR_TO}'
-              LEFT JOIN practice_records r ON r.question_id = qc.question_id
+              LEFT JOIN practice_records r ON r.question_id = qc.question_id AND r.user_id = ?
               WHERE qc.subject = ?
               GROUP BY qc.category, qc.sub
-            `).all(subject)) {
+            `).all(ownerId, subject)) {
               nodeStatsMap.set(`${r.category}|${r.sub}`, { total: Number(r.c) || 0, done: r.ok ?? null, rate: null });
             }
           }
@@ -2193,8 +2404,9 @@ const server = http.createServer(async (req, res) => {
         try { body = JSON.parse(raw || '{}'); } catch { /* 保持 {} */ }
         try {
           let paper;
-          if (body.subject === '公务员·行测') paper = await buildXingcePaper(body);
-          else if (body.subject === '事业编·职测') paper = await buildZhiCePaper(body);
+          const scopedBody = { ...body, ownerId };
+          if (body.subject === '公务员·行测') paper = await buildXingcePaper(scopedBody);
+          else if (body.subject === '事业编·职测') paper = await buildZhiCePaper(scopedBody);
           else return json(res, 200, { ok: false, error: `「${body.subject || '未知科目'}」智能组卷暂未开放，当前支持：公务员·行测、事业编·职测` });
           return json(res, 200, paper);
         } catch (e) {
@@ -2203,7 +2415,7 @@ const server = http.createServer(async (req, res) => {
       }
       // 收藏分组总览（5 大模块 + 未分类）
       if (pathname === '/api/favorites/groups' && req.method === 'GET') {
-        const rows = pdb.prepare(`SELECT group_key g, sub_key s, COUNT(*) c FROM favorites GROUP BY group_key, sub_key`).all();
+        const rows = pdb.prepare(`SELECT group_key g, sub_key s, COUNT(*) c FROM favorites WHERE user_id = ? GROUP BY group_key, sub_key`).all(ownerId);
         return json(res, 200, buildSourceGroups(rows));
       }
       // 收藏：列表（join tiku.questions 取题目摘要；支持分页与来源归档过滤，兼容旧纯数组结构）
@@ -2213,23 +2425,23 @@ const server = http.createServer(async (req, res) => {
         const hasGroup = url.searchParams.has('group');
         const group = url.searchParams.get('group') ?? '';
         const sub = url.searchParams.get('sub') ?? '';
-        const groupCond = hasGroup ? 'AND group_key = ?' : '';
-        const subCond = sub !== '' ? 'AND sub_key = ?' : '';
-        const params = hasGroup ? [group, ...(sub !== '' ? [sub] : []), limit, offset] : [limit, offset];
+        const groupCond = hasGroup ? 'AND f.group_key = ?' : '';
+        const subCond = sub !== '' ? 'AND f.sub_key = ?' : '';
+        const params = hasGroup ? [ownerId, group, ...(sub !== '' ? [sub] : []), limit, offset] : [ownerId, limit, offset];
         const rows = pdb.prepare(`
           SELECT f.question_id, f.subject, f.chapter, f.created_at, f.group_key, f.sub_key, q.content, q.type
           FROM favorites f
           LEFT JOIN tiku.questions q ON q.questionId = f.question_id
-          WHERE 1=1 ${groupCond} ${subCond}
+          WHERE f.user_id = ? ${groupCond} ${subCond}
           ORDER BY f.id DESC LIMIT ? OFFSET ?
         `).all(...params);
-        const total = pdb.prepare(`SELECT COUNT(*) n FROM favorites WHERE 1=1 ${groupCond} ${subCond}`).get(...(hasGroup ? [group, ...(sub !== '' ? [sub] : [])] : [])).n;
+        const total = pdb.prepare(`SELECT COUNT(*) n FROM favorites f WHERE f.user_id = ? ${groupCond.replaceAll('f.', '')} ${subCond.replaceAll('f.', '')}`).get(...(hasGroup ? [ownerId, group, ...(sub !== '' ? [sub] : [])] : [ownerId])).n;
         const list = rows.map((r) => {
           let content = null;
           let type = null;
           if (String(r.question_id).startsWith('custom-')) {
             const cid = Number(String(r.question_id).replace(/^custom-/, ''));
-            const cr = pdb.prepare('SELECT prompt, images FROM custom_questions WHERE id = ?').get(cid);
+            const cr = pdb.prepare('SELECT prompt, images FROM custom_questions WHERE user_id = ? AND id = ?').get(ownerId, cid);
             if (cr) { content = cr.prompt + (parseImages(cr.images).length ? ' [图]' : ''); type = 'custom'; }
           } else {
             const q = qQuestionById.get(r.question_id);
@@ -2254,15 +2466,15 @@ const server = http.createServer(async (req, res) => {
         if (questionId == null) return err(res, 400, '缺少 questionId');
         if (req.method === 'POST') {
           const cls = classifySource(questionId); // 收藏时即归档来源（旧收藏靠一键整理回填）
-          pdb.prepare('INSERT OR IGNORE INTO favorites (question_id, subject, chapter, group_key, sub_key) VALUES (?, ?, ?, ?, ?)').run(questionId, subject || '', chapter || '', cls.groupKey, cls.subKey);
+          pdb.prepare('INSERT OR IGNORE INTO favorites (user_id, question_id, subject, chapter, group_key, sub_key) VALUES (?, ?, ?, ?, ?, ?)').run(ownerId, String(questionId), subject || '', chapter || '', cls.groupKey, cls.subKey);
         } else {
-          pdb.prepare('DELETE FROM favorites WHERE question_id = ?').run(questionId);
+          pdb.prepare('DELETE FROM favorites WHERE user_id = ? AND question_id = ?').run(ownerId, String(questionId));
         }
         return json(res, 200, { ok: true });
       }
       // 笔记分组总览（5 大模块 + 未分类）
       if (pathname === '/api/notes/groups' && req.method === 'GET') {
-        const rows = pdb.prepare(`SELECT group_key g, sub_key s, COUNT(*) c FROM notes GROUP BY group_key, sub_key`).all();
+        const rows = pdb.prepare(`SELECT group_key g, sub_key s, COUNT(*) c FROM notes WHERE user_id = ? GROUP BY group_key, sub_key`).all(ownerId);
         return json(res, 200, buildSourceGroups(rows));
       }
       // 笔记：列表（联表题面；custom- 前缀取 custom_questions，与收藏同构；支持来源归档过滤）
@@ -2270,7 +2482,7 @@ const server = http.createServer(async (req, res) => {
         // qid：单条笔记查询（弹层内容兜底：笔记超过预载 200 条时按需取，避免误判「添加笔记」覆盖旧笔记）
         const qid = url.searchParams.get('qid');
         if (qid) {
-          const r = pdb.prepare('SELECT question_id, subject, chapter, note, created_at, updated_at FROM notes WHERE question_id = ?').get(String(qid));
+          const r = pdb.prepare('SELECT question_id, subject, chapter, note, created_at, updated_at FROM notes WHERE user_id = ? AND question_id = ?').get(ownerId, String(qid));
           return json(res, 200, {
             list: r ? [{ questionId: r.question_id, subject: r.subject || '', chapter: r.chapter || '', note: r.note || '', time: r.updated_at || r.created_at, content: null, type: null }] : [],
             total: r ? 1 : 0, offset: 0, limit: 1, hasMore: false,
@@ -2283,19 +2495,19 @@ const server = http.createServer(async (req, res) => {
         const sub = url.searchParams.get('sub') ?? '';
         const groupCond = hasGroup ? 'AND group_key = ?' : '';
         const subCond = sub !== '' ? 'AND sub_key = ?' : '';
-        const params = hasGroup ? [group, ...(sub !== '' ? [sub] : []), limit, offset] : [limit, offset];
+        const params = hasGroup ? [ownerId, group, ...(sub !== '' ? [sub] : []), limit, offset] : [ownerId, limit, offset];
         const rows = pdb.prepare(`
           SELECT question_id, subject, chapter, note, created_at, updated_at
-          FROM notes WHERE 1=1 ${groupCond} ${subCond}
+          FROM notes WHERE user_id = ? ${groupCond} ${subCond}
           ORDER BY COALESCE(updated_at, created_at) DESC, id DESC LIMIT ? OFFSET ?
         `).all(...params);
-        const total = pdb.prepare(`SELECT COUNT(*) n FROM notes WHERE 1=1 ${groupCond} ${subCond}`).get(...(hasGroup ? [group, ...(sub !== '' ? [sub] : [])] : [])).n;
+        const total = pdb.prepare(`SELECT COUNT(*) n FROM notes WHERE user_id = ? ${groupCond} ${subCond}`).get(...(hasGroup ? [ownerId, group, ...(sub !== '' ? [sub] : [])] : [ownerId])).n;
         const list = rows.map((r) => {
           let content = null;
           let type = null;
           if (String(r.question_id).startsWith('custom-')) {
             const cid = Number(String(r.question_id).replace(/^custom-/, ''));
-            const cr = pdb.prepare('SELECT prompt, images FROM custom_questions WHERE id = ?').get(cid);
+            const cr = pdb.prepare('SELECT prompt, images FROM custom_questions WHERE user_id = ? AND id = ?').get(ownerId, cid);
             if (cr) { content = cr.prompt + (parseImages(cr.images).length ? ' [图]' : ''); type = 'custom'; }
           } else {
             const q = qQuestionById.get(r.question_id);
@@ -2325,11 +2537,11 @@ const server = http.createServer(async (req, res) => {
           const cls = classifySource(questionId); // 记笔记时即归档来源（旧笔记靠一键整理回填）
           // String() 绑定：node:sqlite 对 number 绑定 TEXT 列会序列化成 "2137304.0"，统一字符串避免浮点化
           pdb.prepare(`
-            INSERT INTO notes (question_id, subject, chapter, note, group_key, sub_key) VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(question_id) DO UPDATE SET note = excluded.note, subject = excluded.subject, chapter = excluded.chapter, updated_at = datetime('now','localtime')
-          `).run(String(questionId), subject || '', chapter || '', text, cls.groupKey, cls.subKey);
+            INSERT INTO notes (user_id, question_id, subject, chapter, note, group_key, sub_key) VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(user_id, question_id) DO UPDATE SET note = excluded.note, subject = excluded.subject, chapter = excluded.chapter, updated_at = datetime('now','localtime')
+          `).run(ownerId, String(questionId), subject || '', chapter || '', text, cls.groupKey, cls.subKey);
         } else {
-          pdb.prepare('DELETE FROM notes WHERE question_id = ?').run(String(questionId));
+          pdb.prepare('DELETE FROM notes WHERE user_id = ? AND question_id = ?').run(ownerId, String(questionId));
         }
         return json(res, 200, { ok: true });
       }
@@ -2339,7 +2551,7 @@ const server = http.createServer(async (req, res) => {
         for await (const chunk of req) body += chunk;
         const { questionId, selected } = JSON.parse(body || '{}');
         if (questionId == null) return err(res, 400, '缺少 questionId');
-        const resolved = resolveRecordQuestion(questionId);
+        const resolved = resolveRecordQuestion(questionId, ownerId);
         if (!resolved) return err(res, 404, '题目不存在');
         const result = checkAnswer(resolved.question, selected);
         return json(res, 200, { ...result, questionUid: resolved.questionUid, revision: resolved.revision });
@@ -2355,6 +2567,7 @@ const server = http.createServer(async (req, res) => {
         const plan = planCustomImport(normalized.questions, {
           batchId: parsed.batch_id,
           conflictMode: String(parsed.conflict_mode || 'reject'),
+          ownerId,
         });
         return json(res, plan.conflicts.length ? 409 : 200, {
           valid: plan.conflicts.length === 0,
@@ -2377,7 +2590,7 @@ const server = http.createServer(async (req, res) => {
         if (normalized.errors.length) return json(res, 400, { error: '题目校验失败', code: 'custom_import_validation', errors: normalized.errors });
         const conflictMode = String(parsed.conflict_mode || 'reject');
         if (!['reject', 'new_revision'].includes(conflictMode)) return json(res, 400, { error: '不支持的 conflict_mode', code: 'invalid_conflict_mode' });
-        const plan = planCustomImport(normalized.questions, { batchId: parsed.batch_id, conflictMode });
+        const plan = planCustomImport(normalized.questions, { batchId: parsed.batch_id, conflictMode, ownerId });
         if (plan.conflicts.length) {
           return json(res, 409, {
             error: '导入存在冲突',
@@ -2388,7 +2601,7 @@ const server = http.createServer(async (req, res) => {
         }
         if (!plan.items.length) {
           const ids = [...new Set(plan.unchanged.map((item) => Number(item.existing?.batch_id)).filter(Boolean))];
-          const existingBatch = ids.length === 1 ? pdb.prepare('SELECT id, name, subject FROM custom_batches WHERE id = ?').get(ids[0]) : null;
+          const existingBatch = ids.length === 1 ? pdb.prepare('SELECT id, name, subject FROM custom_batches WHERE user_id = ? AND id = ?').get(ownerId, ids[0]) : null;
           return json(res, 200, {
             id: existingBatch ? Number(existingBatch.id) : (Number(parsed.batch_id) || null),
             name: existingBatch?.name || name,
@@ -2404,9 +2617,9 @@ const server = http.createServer(async (req, res) => {
         const requestedBatchId = Number(parsed.batch_id || 0);
         const insert = pdb.prepare(`
           INSERT INTO custom_questions
-            (batch_id, prompt, material, options, answer, answer_index, analysis, category, images, material_id,
+            (user_id, batch_id, prompt, material, options, answer, answer_index, analysis, category, images, material_id,
              question_uid, external_id, revision, is_current, answer_status, fingerprint)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
         let createdBatchId = requestedBatchId || null;
         let created = 0;
@@ -2414,7 +2627,7 @@ const server = http.createServer(async (req, res) => {
         const itemBatchIds = [];
         withTx(() => {
           if (!createdBatchId && plan.items.some((item) => item.kind === 'create')) {
-            const tb = pdb.prepare('INSERT INTO custom_batches (name, subject) VALUES (?, ?)').run(name, subject);
+            const tb = pdb.prepare('INSERT INTO custom_batches (user_id, name, subject) VALUES (?, ?, ?)').run(ownerId, name, subject);
             createdBatchId = Number(tb.lastInsertRowid);
           }
           for (const item of plan.items) {
@@ -2422,12 +2635,13 @@ const server = http.createServer(async (req, res) => {
             const batchId = item.kind === 'revision' ? Number(item.existing.batch_id) : (createdBatchId || requestedBatchId);
             if (!batchId) throw new Error('无法确定题目所属批次');
             if (item.kind === 'revision') {
-              pdb.prepare('UPDATE custom_questions SET is_current = 0 WHERE question_uid = ? AND is_current = 1').run(q.question_uid);
+              pdb.prepare('UPDATE custom_questions SET is_current = 0 WHERE user_id = ? AND question_uid = ? AND is_current = 1').run(ownerId, q.question_uid);
               revisions++;
             } else {
               created++;
             }
             insert.run(
+              ownerId,
               batchId,
               q.prompt,
               q.material,
@@ -2448,10 +2662,10 @@ const server = http.createServer(async (req, res) => {
             itemBatchIds.push(batchId);
           }
           const touched = [...new Set(itemBatchIds)];
-          for (const bid of touched) pdb.prepare("UPDATE custom_batches SET updated_at = datetime('now','localtime') WHERE id = ?").run(bid);
+          for (const bid of touched) pdb.prepare("UPDATE custom_batches SET updated_at = datetime('now','localtime') WHERE user_id = ? AND id = ?").run(ownerId, bid);
         });
         const primaryBatchId = createdBatchId || itemBatchIds[0] || requestedBatchId || null;
-        const batch = primaryBatchId ? pdb.prepare('SELECT id, name, subject FROM custom_batches WHERE id = ?').get(primaryBatchId) : null;
+        const batch = primaryBatchId ? pdb.prepare('SELECT id, name, subject FROM custom_batches WHERE user_id = ? AND id = ?').get(ownerId, primaryBatchId) : null;
         return json(res, 200, {
           id: primaryBatchId,
           name: batch?.name || name,
@@ -2467,9 +2681,9 @@ const server = http.createServer(async (req, res) => {
       if (pathname === '/api/custom/batches' && req.method === 'GET') {
         const rows = pdb.prepare(`
           SELECT b.id, b.name, b.subject, b.created_at,
-                 (SELECT COUNT(*) FROM custom_questions c WHERE c.batch_id = b.id AND c.is_current = 1) AS count
-          FROM custom_batches b ORDER BY b.id DESC
-        `).all();
+                 (SELECT COUNT(*) FROM custom_questions c WHERE c.user_id = b.user_id AND c.batch_id = b.id AND c.is_current = 1) AS count
+          FROM custom_batches b WHERE b.user_id = ? ORDER BY b.id DESC
+        `).all(ownerId);
         return json(res, 200, { batches: rows.map((r) => ({ ...r, count: Number(r.count) })) });
       }
       // 批次内题目列表
@@ -2479,9 +2693,9 @@ const server = http.createServer(async (req, res) => {
         const includeHistory = url.searchParams.get('include_history') === '1';
         const rows = pdb.prepare(`
           SELECT * FROM custom_questions
-          WHERE batch_id = ? ${includeHistory ? '' : 'AND is_current = 1'}
+          WHERE user_id = ? AND batch_id = ? ${includeHistory ? '' : 'AND is_current = 1'}
           ORDER BY id ASC
-        `).all(batchId);
+        `).all(ownerId, batchId);
         return json(res, 200, { questions: rows.map(customQuestionApiRow), history: includeHistory });
       }
       // 批改名（可同时改科目）
@@ -2493,9 +2707,9 @@ const server = http.createServer(async (req, res) => {
         if (!nid || !String(name || '').trim()) return err(res, 400, '缺少 id 或批次名');
         const s = String(subject ?? '').trim();
         if (s) {
-          pdb.prepare("UPDATE custom_batches SET name = ?, subject = ?, updated_at = datetime('now','localtime') WHERE id = ?").run(String(name).trim(), s, nid);
+          pdb.prepare("UPDATE custom_batches SET name = ?, subject = ?, updated_at = datetime('now','localtime') WHERE user_id = ? AND id = ?").run(String(name).trim(), s, ownerId, nid);
         } else {
-          pdb.prepare("UPDATE custom_batches SET name = ?, updated_at = datetime('now','localtime') WHERE id = ?").run(String(name).trim(), nid);
+          pdb.prepare("UPDATE custom_batches SET name = ?, updated_at = datetime('now','localtime') WHERE user_id = ? AND id = ?").run(String(name).trim(), ownerId, nid);
         }
         return json(res, 200, { ok: true });
       }
@@ -2506,20 +2720,22 @@ const server = http.createServer(async (req, res) => {
         const { ids, name } = JSON.parse(body || '{}');
         const idList = (Array.isArray(ids) ? ids : []).map(Number).filter(Boolean);
         if (idList.length < 2) return err(res, 400, '至少选择两个批次');
+        const ownedBatches = pdb.prepare(`SELECT id FROM custom_batches WHERE user_id = ? AND id IN (${idList.map(() => '?').join(',')})`).all(ownerId, ...idList);
+        if (ownedBatches.length !== idList.length) return err(res, 404, '部分批次不存在');
         const target = Math.min(...idList);
         const others = idList.filter((x) => x !== target);
         withTx(() => {
           for (const o of others) {
-            pdb.prepare('UPDATE custom_questions SET batch_id = ? WHERE batch_id = ?').run(target, o);
+            pdb.prepare('UPDATE custom_questions SET batch_id = ? WHERE user_id = ? AND batch_id = ?').run(target, ownerId, o);
           }
           for (const o of others) {
-            pdb.prepare('DELETE FROM custom_batches WHERE id = ?').run(o);
+            pdb.prepare('DELETE FROM custom_batches WHERE user_id = ? AND id = ?').run(ownerId, o);
           }
         });
         if (name && String(name).trim()) {
-          pdb.prepare("UPDATE custom_batches SET name = ? WHERE id = ?").run(String(name).trim(), target);
+          pdb.prepare("UPDATE custom_batches SET name = ? WHERE user_id = ? AND id = ?").run(String(name).trim(), ownerId, target);
         }
-        const cnt = pdb.prepare('SELECT COUNT(*) n FROM custom_questions WHERE batch_id = ?').get(target).n;
+        const cnt = pdb.prepare('SELECT COUNT(*) n FROM custom_questions WHERE user_id = ? AND batch_id = ?').get(ownerId, target).n;
         return json(res, 200, { id: target, count: Number(cnt) });
       }
       // 拆分批次：勾选题目移入新批次
@@ -2530,18 +2746,18 @@ const server = http.createServer(async (req, res) => {
         const bid = Number(batch_id);
         const qids = (Array.isArray(question_ids) ? question_ids : []).map(Number).filter(Boolean);
         if (!bid || qids.length === 0) return err(res, 400, '缺少批次或题目');
-        const src = pdb.prepare('SELECT name, subject FROM custom_batches WHERE id = ?').get(bid);
+        const src = pdb.prepare('SELECT name, subject FROM custom_batches WHERE user_id = ? AND id = ?').get(ownerId, bid);
         if (!src) return err(res, 404, '批次不存在');
-        const splitN = pdb.prepare("SELECT COUNT(*) n FROM custom_batches WHERE name LIKE ?").get(src.name + '-拆分%').n;
+        const splitN = pdb.prepare("SELECT COUNT(*) n FROM custom_batches WHERE user_id = ? AND name LIKE ?").get(ownerId, src.name + '-拆分%').n;
         const newName = String(name || '').trim() || `${src.name}-拆分${splitN + 1}`;
-        const tb = pdb.prepare('INSERT INTO custom_batches (name, subject) VALUES (?, ?)').run(newName, (src.subject || '自定义').trim() || '自定义');
+        const tb = pdb.prepare('INSERT INTO custom_batches (user_id, name, subject) VALUES (?, ?, ?)').run(ownerId, newName, (src.subject || '自定义').trim() || '自定义');
         const nb = tb.lastInsertRowid;
         withTx(() => {
           for (const qid of qids) {
-            pdb.prepare('UPDATE custom_questions SET batch_id = ? WHERE id = ? AND batch_id = ?').run(nb, qid, bid);
+            pdb.prepare('UPDATE custom_questions SET batch_id = ? WHERE user_id = ? AND id = ? AND batch_id = ?').run(nb, ownerId, qid, bid);
           }
         });
-        const cnt = pdb.prepare('SELECT COUNT(*) n FROM custom_questions WHERE batch_id = ?').get(nb).n;
+        const cnt = pdb.prepare('SELECT COUNT(*) n FROM custom_questions WHERE user_id = ? AND batch_id = ?').get(ownerId, nb).n;
         return json(res, 200, { id: Number(nb), name: newName, count: Number(cnt) });
       }
       // 删批次（级联删题）
@@ -2549,8 +2765,8 @@ const server = http.createServer(async (req, res) => {
         const bid = Number(url.searchParams.get('id') || 0);
         if (!bid) return err(res, 400, '缺少 id');
         withTx(() => {
-          pdb.prepare('DELETE FROM custom_questions WHERE batch_id = ?').run(bid);
-          pdb.prepare('DELETE FROM custom_batches WHERE id = ?').run(bid);
+          pdb.prepare('DELETE FROM custom_questions WHERE user_id = ? AND batch_id = ?').run(ownerId, bid);
+          pdb.prepare('DELETE FROM custom_batches WHERE user_id = ? AND id = ?').run(ownerId, bid);
         });
         return json(res, 200, { ok: true });
       }
@@ -2561,7 +2777,7 @@ const server = http.createServer(async (req, res) => {
         const parsed = JSON.parse(raw || '{}');
         const qid = Number(parsed.id);
         if (!qid) return err(res, 400, '缺少 id');
-        const old = pdb.prepare('SELECT * FROM custom_questions WHERE id = ?').get(qid);
+        const old = pdb.prepare('SELECT * FROM custom_questions WHERE user_id = ? AND id = ?').get(ownerId, qid);
         if (!old) return err(res, 404, '题目不存在');
         const normalized = normalizeCustomQuestion({
           prompt: parsed.prompt ?? old.prompt,
@@ -2583,7 +2799,7 @@ const server = http.createServer(async (req, res) => {
           // 材料分组接口显式传 material_id：更新之（含清空 = ''）
           pdb.prepare(`
             UPDATE custom_questions SET prompt = ?, material = ?, options = ?, answer = ?, answer_index = ?, answer_status = ?, analysis = ?, category = ?, images = ?, material_id = ?, fingerprint = ?
-            WHERE id = ?
+            WHERE user_id = ? AND id = ?
           `).run(
             q.prompt,
             q.material,
@@ -2596,13 +2812,14 @@ const server = http.createServer(async (req, res) => {
             JSON.stringify(q.images),
             q.material_id,
             q.fingerprint,
+            ownerId,
             qid,
           );
         } else {
           // 普通编辑弹窗未传 material_id：保留原分组
           pdb.prepare(`
             UPDATE custom_questions SET prompt = ?, material = ?, options = ?, answer = ?, answer_index = ?, answer_status = ?, analysis = ?, category = ?, images = ?, fingerprint = ?
-            WHERE id = ?
+            WHERE user_id = ? AND id = ?
           `).run(
             q.prompt,
             q.material,
@@ -2614,6 +2831,7 @@ const server = http.createServer(async (req, res) => {
             q.category,
             JSON.stringify(q.images),
             q.fingerprint,
+            ownerId,
             qid,
           );
         }
@@ -2623,7 +2841,7 @@ const server = http.createServer(async (req, res) => {
       if (pathname === '/api/custom/question' && req.method === 'DELETE') {
         const qid = Number(url.searchParams.get('id') || 0);
         if (!qid) return err(res, 400, '缺少 id');
-        pdb.prepare('DELETE FROM custom_questions WHERE id = ?').run(qid);
+        pdb.prepare('DELETE FROM custom_questions WHERE user_id = ? AND id = ?').run(ownerId, qid);
         return json(res, 200, { ok: true });
       }
       // 材料分组/取消分组：同一 material_id 的题刷题时共用一份材料（显示 第 n/m 小问）
@@ -2633,26 +2851,26 @@ const server = http.createServer(async (req, res) => {
         const { ids, action, groupId } = JSON.parse(body || '{}');
         const idList = (Array.isArray(ids) ? ids : []).map(Number).filter(Boolean);
         if (!idList.length) return err(res, 400, '请先勾选题目');
-        const exists = pdb.prepare(`SELECT id FROM custom_questions WHERE id IN (${idList.map(() => '?').join(',')})`).all(...idList);
+        const exists = pdb.prepare(`SELECT id FROM custom_questions WHERE user_id = ? AND id IN (${idList.map(() => '?').join(',')})`).all(ownerId, ...idList);
         if (exists.length !== idList.length) return err(res, 404, '部分题目不存在');
         if (action === 'ungroup') {
-          pdb.prepare(`UPDATE custom_questions SET material_id = '' WHERE id IN (${idList.map(() => '?').join(',')})`).run(...idList);
+          pdb.prepare(`UPDATE custom_questions SET material_id = '' WHERE user_id = ? AND id IN (${idList.map(() => '?').join(',')})`).run(ownerId, ...idList);
           return json(res, 200, { ok: true, action: 'ungroup', count: exists.length });
         }
         const gid = String(groupId || '').trim() || ('g' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7));
-        pdb.prepare(`UPDATE custom_questions SET material_id = ? WHERE id IN (${idList.map(() => '?').join(',')})`).run(gid, ...idList);
+        pdb.prepare(`UPDATE custom_questions SET material_id = ? WHERE user_id = ? AND id IN (${idList.map(() => '?').join(',')})`).run(gid, ownerId, ...idList);
         return json(res, 200, { ok: true, action: 'group', groupId: gid, count: exists.length });
       }
       // 出题（刷题）：字段映射成粉笔 questions 结构，直接喂 enterQuiz
       if (pathname === '/api/custom/practice' && req.method === 'GET') {
         const bid = Number(url.searchParams.get('batch_id') || 0);
         if (!bid) return err(res, 400, '缺少 batch_id');
-        const b = pdb.prepare('SELECT id, name, subject FROM custom_batches WHERE id = ?').get(bid);
+        const b = pdb.prepare('SELECT id, name, subject FROM custom_batches WHERE user_id = ? AND id = ?').get(ownerId, bid);
         if (!b) return err(res, 404, '批次不存在');
         const bSubj = (b.subject || '自定义').trim() || '自定义';
         // 题量截断（0=全部，max 100）；保护材料组完整：若截断位置处于组中间，向后延伸到组末
         const count = Math.max(0, Math.min(Number(url.searchParams.get('count') || 0), 100));
-        const rows = pdb.prepare('SELECT * FROM custom_questions WHERE batch_id = ? AND is_current = 1 ORDER BY id ASC').all(bid);
+        const rows = pdb.prepare('SELECT * FROM custom_questions WHERE user_id = ? AND batch_id = ? AND is_current = 1 ORDER BY id ASC').all(ownerId, bid);
         const questions = groupCustomPracticeRows(rows, (r) => {
           const { contentHtml, materialHtml } = customQuestionHtml({ ...r, images: parseImages(r.images) });
           return {
@@ -2697,7 +2915,7 @@ const server = http.createServer(async (req, res) => {
         const { batch_id } = JSON.parse(body || '{}');
         const bid = Number(batch_id);
         if (!bid) return err(res, 400, '缺少 batch_id');
-        const rows = pdb.prepare('SELECT id, material FROM custom_questions WHERE batch_id = ? ORDER BY id ASC').all(bid);
+        const rows = pdb.prepare('SELECT id, material FROM custom_questions WHERE user_id = ? AND batch_id = ? ORDER BY id ASC').all(ownerId, bid);
         // 归一化：去 HTML 标签、去空白（避免字距空格/换行干扰指纹）
         const norm = (s) => String(s || '').trim().replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
         const groups = new Map(); // norm -> [ids]
@@ -2717,7 +2935,7 @@ const server = http.createServer(async (req, res) => {
         }
         withTx(() => {
           for (const { ids, gid } of updates) {
-            pdb.prepare(`UPDATE custom_questions SET material_id = ? WHERE id IN (${ids.map(() => '?').join(',')})`).run(gid, ...ids);
+            pdb.prepare(`UPDATE custom_questions SET material_id = ? WHERE user_id = ? AND id IN (${ids.map(() => '?').join(',')})`).run(gid, ownerId, ...ids);
             grouped += ids.length;
             groupCount++;
           }
@@ -2732,15 +2950,15 @@ const server = http.createServer(async (req, res) => {
         const { questionId, selected, batchId, chapter, attemptId } = parsed;
         const cid = Number(String(questionId || '').replace(/^custom-/, ''));
         if (!cid) return err(res, 400, '缺少 questionId');
-        const resolved = resolveRecordQuestion(`custom-${cid}`);
+        const resolved = resolveRecordQuestion(`custom-${cid}`, ownerId);
         if (!resolved) return err(res, 404, '题目不存在');
         const result = checkAnswer(resolved.question, selected);
-        const bm = pdb.prepare('SELECT name, subject FROM custom_batches WHERE id = ?').get(Number(batchId || 0));
+        const bm = pdb.prepare('SELECT name, subject FROM custom_batches WHERE user_id = ? AND id = ?').get(ownerId, Number(batchId || 0));
         const ch = chapter || (bm && bm.name) || '';
         const subj = (bm && (bm.subject || '').trim()) || '自定义';
         const submissionKey = normalizeSubmissionKey(parsed.submissionKey ?? parsed.submission_key);
         if (submissionKey) {
-          const previous = pdb.prepare('SELECT id, question_id, selected, is_correct FROM practice_records WHERE submission_key = ?').get(submissionKey);
+          const previous = pdb.prepare('SELECT id, question_id, selected, is_correct FROM practice_records WHERE user_id = ? AND submission_key = ?').get(ownerId, submissionKey);
           if (previous) {
             if (String(previous.question_id) !== String(questionId) || String(previous.selected) !== JSON.stringify(selected ?? null)) {
               return json(res, 409, { error: 'submission_key 已用于其他作答', code: 'submission_key_conflict' });
@@ -2748,15 +2966,16 @@ const server = http.createServer(async (req, res) => {
             return json(res, 200, { ...result, id: Number(previous.id), idempotent: true });
           }
         }
-        ensureAttempt(attemptId, subj, 'custom', 0);
+        ensureAttempt(ownerId, attemptId, subj, 'custom', 0);
         // 自定义题归档固定归「自定义题库」（不分子模块）
         // 注意：is_correct 用 result.ok（result.correct 是正确答案索引数组，恒 truthy，直接复用会把答错记成答对）
         pdb.prepare(`
           INSERT INTO practice_records
-            (question_id, paper_id, subject, chapter, question_type, selected, is_correct, cost_ms, group_key, sub_key,
+            (user_id, question_id, paper_id, subject, chapter, question_type, selected, is_correct, cost_ms, group_key, sub_key,
              submission_key, attempt_id, question_uid, question_revision, question_snapshot, answer_snapshot)
-          VALUES (?, NULL, ?, ?, 0, ?, ?, 0, 'custom', ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, NULL, ?, ?, 0, ?, ?, 0, 'custom', ?, ?, ?, ?, ?, ?, ?)
         `).run(
+          ownerId,
           questionId,
           subj,
           ch,
@@ -2783,7 +3002,7 @@ const server = http.createServer(async (req, res) => {
         const selectedJson = JSON.stringify(selected ?? null);
         const submissionKey = normalizeSubmissionKey(parsed.submissionKey ?? parsed.submission_key);
         if (submissionKey) {
-          const previous = pdb.prepare('SELECT id, question_id, selected, is_correct, question_uid, question_revision FROM practice_records WHERE submission_key = ?').get(submissionKey);
+          const previous = pdb.prepare('SELECT id, question_id, selected, is_correct, question_uid, question_revision FROM practice_records WHERE user_id = ? AND submission_key = ?').get(ownerId, submissionKey);
           if (previous) {
             if (String(previous.question_id) !== String(questionId) || String(previous.selected) !== selectedJson) {
               return json(res, 409, { error: 'submission_key 已用于其他作答', code: 'submission_key_conflict' });
@@ -2798,7 +3017,7 @@ const server = http.createServer(async (req, res) => {
             });
           }
         }
-        const resolved = resolveRecordQuestion(questionId);
+        const resolved = resolveRecordQuestion(questionId, ownerId);
         const judged = resolved ? checkAnswer(resolved.question, selected) : null;
         const finalCorrect = judged ? judged.ok : (correct == null ? null : Boolean(correct));
         const snapshot = resolved?.snapshot ? JSON.stringify(resolved.snapshot) : String(parsed.questionSnapshot || '');
@@ -2808,15 +3027,16 @@ const server = http.createServer(async (req, res) => {
           correctText: judged.correctText,
           ok: judged.ok,
         }) : '';
-        ensureAttempt(attemptId, subject, attemptMode, attemptQuestionCount);
+        ensureAttempt(ownerId, attemptId, subject, attemptMode, attemptQuestionCount);
         // 来源归档：按题目真实来源算大模块/子模块（与错题本/收藏/笔记分组同口径），旧记录靠一键整理回填
         const cls = classifySource(questionId);
         const r = pdb.prepare(`
           INSERT INTO practice_records
-            (question_id, paper_id, subject, chapter, question_type, selected, is_correct, cost_ms, group_key, sub_key,
+            (user_id, question_id, paper_id, subject, chapter, question_type, selected, is_correct, cost_ms, group_key, sub_key,
              submission_key, attempt_id, question_uid, question_revision, question_snapshot, answer_snapshot)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
+          ownerId,
           questionId,
           paperId ?? cls.paperId ?? null,
           subject || '',
@@ -2837,9 +3057,9 @@ const server = http.createServer(async (req, res) => {
         // 错题自动移除：客观题累计做对 3 次（按不同日期计，避免同日多次去重口径不一致）→ 错题记录软删除（archived=1，统计历史保留）
         // 只针对行测/职测客观题（错题本收录范围），主观题（correct=null）不参与
         if (finalCorrect === true) {
-          const okDays = pdb.prepare('SELECT COUNT(DISTINCT date(created_at)) n FROM practice_records WHERE question_id = ? AND is_correct = 1').get(questionId).n;
+          const okDays = pdb.prepare('SELECT COUNT(DISTINCT date(created_at)) n FROM practice_records WHERE user_id = ? AND question_id = ? AND is_correct = 1').get(ownerId, questionId).n;
           if (okDays >= 3) {
-            pdb.prepare('UPDATE practice_records SET archived = 1 WHERE question_id = ? AND is_correct = 0 AND archived = 0').run(questionId);
+            pdb.prepare('UPDATE practice_records SET archived = 1 WHERE user_id = ? AND question_id = ? AND is_correct = 0 AND archived = 0').run(ownerId, questionId);
           }
         }
         return json(res, 200, {
@@ -2859,7 +3079,7 @@ const server = http.createServer(async (req, res) => {
         for await (const chunk of req) body += chunk;
         const parsed = JSON.parse(body || '{}');
         if (!String(parsed.attemptId || '').trim()) return err(res, 400, '缺少 attemptId');
-        finishAttempt(parsed.attemptId);
+        finishAttempt(ownerId, parsed.attemptId);
         return json(res, 200, { ok: true });
       }
       // 统计（学习进度 AI 的数据源）：总数/正确率/按章节/近7天
@@ -2879,29 +3099,29 @@ const server = http.createServer(async (req, res) => {
         const timeParams2 = to ? [to] : [];
         const total = pdb.prepare(`
           SELECT COUNT(*) c, SUM(is_correct) ok, SUM(is_correct IS NOT NULL) graded FROM practice_records
-          WHERE 1=1 ${tikuCond} ${timeCond} ${timeCond2}
-        `).get(...tikuParams, ...timeParams, ...timeParams2);
+          WHERE user_id = ? ${tikuCond} ${timeCond} ${timeCond2}
+        `).get(ownerId, ...tikuParams, ...timeParams, ...timeParams2);
         // 错题 = 严格答错（is_correct=0），与错题本口径一致（主观题 is_correct=NULL 不计入；archived 已从错题本移除的不计）
         const wrong = pdb.prepare(`
           SELECT COUNT(*) c FROM practice_records WHERE is_correct = 0 AND archived = 0
-          ${tikuCond} ${timeCond} ${timeCond2}
-        `).get(...tikuParams, ...timeParams, ...timeParams2).c;
+          AND user_id = ? ${tikuCond} ${timeCond} ${timeCond2}
+        `).get(ownerId, ...tikuParams, ...timeParams, ...timeParams2).c;
         const byChapter = pdb.prepare(`
           SELECT chapter, COUNT(*) c, SUM(is_correct) ok
           FROM practice_records
-          WHERE 1=1 ${tikuCond} ${timeCond} ${timeCond2}
+          WHERE user_id = ? ${tikuCond} ${timeCond} ${timeCond2}
           GROUP BY chapter ORDER BY c DESC LIMIT 20
-        `).all(...tikuParams, ...timeParams, ...timeParams2);
+        `).all(ownerId, ...tikuParams, ...timeParams, ...timeParams2);
         const last7 = pdb.prepare(`
           SELECT date(created_at) d, COUNT(*) c, SUM(is_correct) ok
-          FROM practice_records WHERE created_at >= datetime('now','localtime','-7 days')
+          FROM practice_records WHERE user_id = ? AND created_at >= datetime('now','localtime','-7 days')
           ${tikuCond} GROUP BY date(created_at) ORDER BY d
-        `).all(...tikuParams);
+        `).all(ownerId, ...tikuParams);
         const daily = pdb.prepare(`
           SELECT date(created_at) d, COUNT(*) c FROM practice_records
-          WHERE 1=1 ${tikuCond} ${timeCond} ${timeCond2}
+          WHERE user_id = ? ${tikuCond} ${timeCond} ${timeCond2}
           GROUP BY date(created_at) ORDER BY d DESC LIMIT 30
-        `).all(...tikuParams, ...timeParams, ...timeParams2);
+        `).all(ownerId, ...tikuParams, ...timeParams, ...timeParams2);
         return json(res, 200, {
           total: total.c || 0,
           correct: total.ok || 0,
@@ -2916,8 +3136,8 @@ const server = http.createServer(async (req, res) => {
       if (pathname === '/api/records/wrong/groups' && req.method === 'GET') {
         const rows = pdb.prepare(`
           SELECT group_key g, sub_key s, COUNT(*) c FROM practice_records
-          WHERE is_correct = 0 AND archived = 0 GROUP BY group_key, sub_key
-        `).all();
+          WHERE user_id = ? AND is_correct = 0 AND archived = 0 GROUP BY group_key, sub_key
+        `).all(ownerId);
         return json(res, 200, buildSourceGroups(rows));
       }
       // 服务端错题本（跨设备同步；联表 tiku.db 取题目内容；archived 标记移除但保留历史）
@@ -2930,10 +3150,10 @@ const server = http.createServer(async (req, res) => {
         const sub = url.searchParams.get('sub') ?? '';
         const groupCond = hasGroup ? 'AND group_key = ?' : '';
         const subCond = sub !== '' ? 'AND sub_key = ?' : '';
-        const params = hasGroup ? [group, ...(sub !== '' ? [sub] : []), limit, offset] : [limit, offset];
+        const params = hasGroup ? [ownerId, group, ...(sub !== '' ? [sub] : []), limit, offset] : [ownerId, limit, offset];
         const rows = pdb.prepare(`
           SELECT id, question_id, subject, chapter, selected, created_at
-          FROM practice_records WHERE is_correct = 0 AND archived = 0 ${groupCond} ${subCond}
+          FROM practice_records WHERE user_id = ? AND is_correct = 0 AND archived = 0 ${groupCond} ${subCond}
           ORDER BY id DESC LIMIT ? OFFSET ?
         `).all(...params);
         const list = rows.map((r) => {
@@ -2941,7 +3161,7 @@ const server = http.createServer(async (req, res) => {
           if (String(r.question_id).startsWith('custom-')) {
             // 自定义题：题面从 custom_questions 取
             const cid = Number(String(r.question_id).replace(/^custom-/, ''));
-            const cr = pdb.prepare('SELECT prompt, images FROM custom_questions WHERE id = ?').get(cid);
+            const cr = pdb.prepare('SELECT prompt, images FROM custom_questions WHERE user_id = ? AND id = ?').get(ownerId, cid);
             if (cr) q = { content: cr.prompt + (parseImages(cr.images).length ? ' [图]' : ''), type: 'custom' };
           } else {
             q = qQuestionById.get(r.question_id);
@@ -2961,7 +3181,7 @@ const server = http.createServer(async (req, res) => {
           };
         });
         // 返回总数（标题显示真实错题数）+ 分页游标，前端可"加载更多"
-        const total = pdb.prepare(`SELECT COUNT(*) n FROM practice_records WHERE is_correct = 0 AND archived = 0 ${groupCond} ${subCond}`).get(...(hasGroup ? [group, ...(sub !== '' ? [sub] : [])] : [])).n;
+        const total = pdb.prepare(`SELECT COUNT(*) n FROM practice_records WHERE user_id = ? AND is_correct = 0 AND archived = 0 ${groupCond} ${subCond}`).get(...(hasGroup ? [ownerId, group, ...(sub !== '' ? [sub] : [])] : [ownerId])).n;
         return json(res, 200, { list, total, offset, limit, hasMore: offset + list.length < total });
       }
       // 清空错题（软删除：archived=1，统计历史保留；按 id 单条移除；questionId 按题移除；subject 指定时只清该模块）
@@ -2969,11 +3189,11 @@ const server = http.createServer(async (req, res) => {
         let body = '';
         for await (const chunk of req) body += chunk;
         const { id, questionId, subject, group } = JSON.parse(body || '{}');
-        if (id) pdb.prepare('UPDATE practice_records SET archived = 1 WHERE id = ?').run(id);
-        else if (questionId) pdb.prepare('UPDATE practice_records SET archived = 1 WHERE question_id = ? AND is_correct = 0 AND archived = 0').run(questionId);
-        else if (group != null) pdb.prepare('UPDATE practice_records SET archived = 1 WHERE group_key = ? AND is_correct = 0 AND archived = 0').run(group);
-        else if (subject) pdb.prepare('UPDATE practice_records SET archived = 1 WHERE is_correct = 0 AND subject = ?').run(subject);
-        else pdb.prepare('UPDATE practice_records SET archived = 1 WHERE is_correct = 0').run();
+        if (id) pdb.prepare('UPDATE practice_records SET archived = 1 WHERE user_id = ? AND id = ?').run(ownerId, id);
+        else if (questionId) pdb.prepare('UPDATE practice_records SET archived = 1 WHERE user_id = ? AND question_id = ? AND is_correct = 0 AND archived = 0').run(ownerId, questionId);
+        else if (group != null) pdb.prepare('UPDATE practice_records SET archived = 1 WHERE user_id = ? AND group_key = ? AND is_correct = 0 AND archived = 0').run(ownerId, group);
+        else if (subject) pdb.prepare('UPDATE practice_records SET archived = 1 WHERE user_id = ? AND is_correct = 0 AND subject = ?').run(ownerId, subject);
+        else pdb.prepare('UPDATE practice_records SET archived = 1 WHERE user_id = ? AND is_correct = 0').run(ownerId);
         return json(res, 200, { ok: true });
       }
       // 一键整理：错题本/收藏/笔记 全部按题目真实来源重新归档（幂等可重复；老用户历史数据回填 group_key/sub_key）
@@ -2982,13 +3202,13 @@ const server = http.createServer(async (req, res) => {
         for await (const chunk of req) body += chunk;
         const { target } = JSON.parse(body || '{}');
         const tables = {
-          wrong: { table: 'practice_records', where: ' WHERE is_correct = 0 AND archived = 0' },
-          favorites: { table: 'favorites', where: '' },
-          notes: { table: 'notes', where: '' },
+          wrong: { table: 'practice_records', where: ' WHERE user_id = ? AND is_correct = 0 AND archived = 0', params: [ownerId] },
+          favorites: { table: 'favorites', where: ' WHERE user_id = ?', params: [ownerId] },
+          notes: { table: 'notes', where: ' WHERE user_id = ?', params: [ownerId] },
         };
         const t = tables[target];
         if (!t) return err(res, 400, 'target 应为 wrong / favorites / notes');
-        const rows = pdb.prepare(`SELECT id, question_id, group_key, sub_key FROM ${t.table}${t.where} ORDER BY id`).all();
+        const rows = pdb.prepare(`SELECT id, question_id, group_key, sub_key FROM ${t.table}${t.where} ORDER BY id`).all(...t.params);
         const groupCount = new Map();
         let fixed = 0;
         const updates = [];
@@ -3002,8 +3222,8 @@ const server = http.createServer(async (req, res) => {
             fixed++;
           }
         }
-        const upd = pdb.prepare(`UPDATE ${t.table} SET group_key = ?, sub_key = ? WHERE id = ?`);
-        withTx(() => { for (const [gk, sk, id] of updates) upd.run(gk, sk, id); });
+        const upd = pdb.prepare(`UPDATE ${t.table} SET group_key = ?, sub_key = ? WHERE user_id = ? AND id = ?`);
+        withTx(() => { for (const [gk, sk, id] of updates) upd.run(gk, sk, ownerId, id); });
         const groups = [...groupCount.entries()]
           .map(([key, count]) => ({ key, name: sourceGroupName(key), count }))
           .sort((a, b) => SOURCE_GROUPS.findIndex((g) => g.key === a.key) - SOURCE_GROUPS.findIndex((g) => g.key === b.key));
@@ -3013,8 +3233,8 @@ const server = http.createServer(async (req, res) => {
       if (pathname === '/api/records/recent' && req.method === 'GET') {
         const rows = pdb.prepare(`
           SELECT id, question_id, subject, chapter, is_correct, cost_ms, created_at
-          FROM practice_records ORDER BY id DESC LIMIT 50
-        `).all();
+          FROM practice_records WHERE user_id = ? ORDER BY id DESC LIMIT 50
+        `).all(ownerId);
         return json(res, 200, rows);
       }
       // ---- AI 智能体配置 ----
@@ -3027,10 +3247,10 @@ const server = http.createServer(async (req, res) => {
           questionRevision: url.searchParams.get('questionRevision') || url.searchParams.get('revision') || 1,
         });
         if (identity.error) return err(res, 400, identity.error);
-        const row = findConversationByIdentity(identity);
+        const row = findConversationByIdentity(identity, ownerId);
         return json(res, 200, {
           conversation: row ? conversationView(row) : null,
-          messages: row ? conversationMessages(row.conversation_id) : [],
+          messages: row ? conversationMessages(row.conversation_id, true, ownerId) : [],
         });
       }
       if (pathname === '/api/ai/conversations' && req.method === 'POST') {
@@ -3040,40 +3260,40 @@ const server = http.createServer(async (req, res) => {
         try { parsed = JSON.parse(body || '{}'); } catch { return err(res, 400, '请求体不是有效 JSON'); }
         const identity = normalizeConversationIdentity(parsed);
         if (identity.error) return err(res, 400, identity.error);
-        let row = findConversationByIdentity(identity);
+        let row = findConversationByIdentity(identity, ownerId);
         let created = false;
         if (!row) {
           const id = randomUUID();
           pdb.prepare(`
             INSERT INTO ai_conversations
-              (conversation_id, question_id, question_uid, question_revision, subject, title, question_snapshot)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-          `).run(id, identity.questionId, identity.questionUid, identity.revision, identity.subject, identity.title, identity.snapshotText);
-          row = getConversation(id);
+              (user_id, conversation_id, question_id, question_uid, question_revision, subject, title, question_snapshot)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `).run(ownerId, id, identity.questionId, identity.questionUid, identity.revision, identity.subject, identity.title, identity.snapshotText);
+          row = getConversation(id, ownerId);
           created = true;
         }
         return json(res, 200, {
           ok: true,
           created,
           conversation: conversationView(row),
-          messages: conversationMessages(row.conversation_id),
+          messages: conversationMessages(row.conversation_id, true, ownerId),
         });
       }
       // 浏览器直连模式读取单个会话：只返回题面快照和历史消息，不触发模型调用。
       const conversationGetMatch = pathname.match(/^\/api\/ai\/conversations\/([^/]+)$/);
       if (conversationGetMatch && req.method === 'GET') {
-        const conversation = getConversation(conversationGetMatch[1]);
+        const conversation = getConversation(conversationGetMatch[1], ownerId);
         if (!conversation) return err(res, 404, '会话不存在');
         return json(res, 200, {
           conversation: conversationView(conversation),
-          messages: conversationMessages(conversation.conversation_id),
+          messages: conversationMessages(conversation.conversation_id, true, ownerId),
         });
       }
       // 浏览器直连模式只让服务端持久化结果；服务端不接收 API Key，也不调用模型。
       const clientCompleteMatch = pathname.match(/^\/api\/ai\/conversations\/([^/]+)\/client-complete$/);
       if (clientCompleteMatch && req.method === 'POST') {
         const conversationId = clientCompleteMatch[1];
-        const conversation = getConversation(conversationId);
+        const conversation = getConversation(conversationId, ownerId);
         if (!conversation) return err(res, 404, '会话不存在');
         let body = '';
         for await (const chunk of req) body += chunk;
@@ -3094,10 +3314,10 @@ const server = http.createServer(async (req, res) => {
             status: 'complete',
           });
         }
-        const messages = conversationMessages(conversationId);
+        const messages = conversationMessages(conversationId, true, ownerId);
         return json(res, 200, {
           ok: status === 'complete',
-          conversation: conversationView(getConversation(conversationId)),
+          conversation: conversationView(getConversation(conversationId, ownerId)),
           message: messages.find((m) => m.id === assistantMessageId) || messages.find((m) => m.id === userMessageId),
           messages,
           model: String(parsed.model || '').slice(0, 160),
@@ -3107,7 +3327,7 @@ const server = http.createServer(async (req, res) => {
       if (conversationMessageMatch && req.method === 'POST') {
         const conversationId = conversationMessageMatch[1];
         const streamConversation = conversationMessageMatch[2] === 'stream';
-        const conversation = getConversation(conversationId);
+        const conversation = getConversation(conversationId, ownerId);
         if (!conversation) return err(res, 404, '会话不存在');
         let body = '';
         for await (const chunk of req) body += chunk;
@@ -3117,7 +3337,7 @@ const server = http.createServer(async (req, res) => {
         if (!content) return err(res, 400, '消息内容不能为空');
         if (content.length > AI_CONVERSATION_MAX_CONTENT) return err(res, 400, `消息过长（≤${AI_CONVERSATION_MAX_CONTENT} 字符）`);
         const ref = parsed.agentId ?? parsed.agent_id ?? parsed.role ?? parsed.agentRole ?? 'xingce-explainer';
-        const agent = getAgent(typeof ref === 'number' || /^\d+$/.test(String(ref)) ? Number(ref) : String(ref));
+        const agent = requestAgent(req, ref);
         if (!agent) return err(res, 404, 'AI 不存在');
 
         if (normalizeKeyStorageMode(agent.key_storage_mode, String(agent.api_key || '').trim() ? 'server' : 'browser') === 'browser') {
@@ -3161,8 +3381,8 @@ const server = http.createServer(async (req, res) => {
               error: result.error,
               cancelled: !!result.cancelled,
               timedOut: !!result.timedOut,
-              conversation: conversationView(getConversation(conversationId)),
-              messages: conversationMessages(conversationId),
+              conversation: conversationView(getConversation(conversationId, ownerId)),
+              messages: conversationMessages(conversationId, true, ownerId),
             };
             if (streamConversation) {
               sseEvent(res, 'error', { error: failure.error, cancelled: failure.cancelled, timedOut: failure.timedOut });
@@ -3176,8 +3396,8 @@ const server = http.createServer(async (req, res) => {
             model: result.model || agent.model || '',
             status: 'complete',
           });
-          const freshConversation = getConversation(conversationId);
-          const messages = conversationMessages(conversationId);
+          const freshConversation = getConversation(conversationId, ownerId);
+          const messages = conversationMessages(conversationId, true, ownerId);
           const assistantMessage = messages.find((m) => m.id === assistantMessageId) || messages.at(-1);
           if (streamConversation) {
             sseEvent(res, 'done', {
@@ -3212,7 +3432,7 @@ const server = http.createServer(async (req, res) => {
         let parsed;
         try { parsed = JSON.parse(body || '{}'); } catch { return err(res, 400, '请求体不是有效 JSON'); }
         const ref = parsed.agentId ?? parsed.agent_id ?? parsed.role ?? parsed.agentRole ?? 'xingce-explainer';
-        const agent = getAgent(typeof ref === 'number' || /^\d+$/.test(String(ref)) ? Number(ref) : String(ref));
+        const agent = requestAgent(req, ref);
         const wantsStream = pathname.endsWith('/stream') || parsed.stream === true;
         if (!agent) return err(res, 404, 'AI 不存在');
         const messages = Array.isArray(parsed.messages)
@@ -3254,12 +3474,12 @@ const server = http.createServer(async (req, res) => {
       }
       // 列表（key 脱敏）
       if (pathname === '/api/ai/agents' && req.method === 'GET') {
-        return json(res, 200, listAgents(true));
+        return json(res, 200, requestAgentList(req));
       }
       // 单个配置（脱敏：与列表一致，改 key 走 PUT；完整 key 仅服务端内部使用）
       if (pathname.match(/^\/api\/ai\/agents\/\d+$/) && req.method === 'GET') {
         const id = Number(pathname.split('/')[4]);
-        const a = getAgent(id);
+        const a = requestAgent(req, id);
         if (!a) return err(res, 404, 'AI 不存在');
         a.key_storage_mode = normalizeKeyStorageMode(a.key_storage_mode, String(a.api_key || '').trim() ? 'server' : 'browser');
         const k = String(a.api_key || '');
@@ -3271,13 +3491,14 @@ const server = http.createServer(async (req, res) => {
         if (a.key_storage_mode !== 'server') a.api_key_masked = '';
         if (url.searchParams.get('includeSkill') === '1') {
           try {
-            const resolved = resolveSkill(a.skill);
+            const resolved = resolveSkill(a.skill, a.user_id);
             a.skill_text = resolved.text || '';
             a.skill_loaded = resolved.loaded || null;
           } catch {
             a.skill_text = '';
           }
         }
+        delete a.user_id;
         return json(res, 200, a);
       }
       // 更新配置（热更新：只更新传入字段，prompt/skill 变更自动存历史；
@@ -3287,17 +3508,23 @@ const server = http.createServer(async (req, res) => {
         let body = '';
         for await (const chunk of req) body += chunk;
         const fields = JSON.parse(body || '{}');
-        const r = updateAgent(id, fields);
+        const r = process.env.AUTH_DISABLED === '1'
+          ? updateAgent(id, fields)
+          : updateUserAgent(ownerId, id, fields);
         if (r.error) return err(res, 400, r.error);
         if (r.promptChanged) {
-          const n = pdb.prepare('DELETE FROM ai_explains').run().changes;
+          const n = process.env.AUTH_DISABLED === '1'
+            ? pdb.prepare('DELETE FROM ai_explains').run().changes
+            : pdb.prepare('DELETE FROM ai_explains WHERE user_id = ?').run(ownerId).changes;
           if (n > 0) console.log(`[ai] prompt/skill 变更，已清空 ${n} 条题目解析缓存`);
         }
-        return json(res, 200, { ok: true, promptChanged: !!r.promptChanged, agent: listAgents(true).find((a) => a.id === id) });
+        return json(res, 200, { ok: true, promptChanged: !!r.promptChanged, agent: requestAgentList(req).find((a) => a.id === id) });
       }
       // 手动清空题目解析缓存
       if (pathname === '/api/ai/explain-cache' && req.method === 'DELETE') {
-        const n = pdb.prepare('DELETE FROM ai_explains').run().changes;
+        const n = process.env.AUTH_DISABLED === '1'
+          ? pdb.prepare('DELETE FROM ai_explains').run().changes
+          : pdb.prepare('DELETE FROM ai_explains WHERE user_id = ?').run(ownerId).changes;
         return json(res, 200, { ok: true, cleared: n });
       }
       // 模型列表代理（Web 浏览器直连第三方网关被 CORS 拦截时的兜底；
@@ -3340,7 +3567,7 @@ const server = http.createServer(async (req, res) => {
       // 版本历史
       if (pathname.match(/^\/api\/ai\/agents\/\d+\/history$/) && req.method === 'GET') {
         const id = Number(pathname.split('/')[4]);
-        return json(res, 200, getHistory(id));
+        return json(res, 200, getHistory(id, 20, process.env.AUTH_DISABLED === '1' ? '' : ownerId));
       }
       // 测试调用（用当前配置真实调用一次 LLM）
       if (pathname.match(/^\/api\/ai\/agents\/\d+\/test$/) && req.method === 'POST') {
@@ -3348,7 +3575,7 @@ const server = http.createServer(async (req, res) => {
         let body = '';
         for await (const chunk of req) body += chunk;
         const { content } = JSON.parse(body || '{}');
-        const agent = getAgent(id);
+        const agent = requestAgent(req, id);
         if (!agent) return err(res, 404, 'AI 不存在');
         const userContent = content || '（测试）请用一句话介绍你的职责，并说明你准备好了。';
         if (normalizeKeyStorageMode(agent.key_storage_mode, String(agent.api_key || '').trim() ? 'server' : 'browser') === 'browser') {
@@ -3365,16 +3592,18 @@ const server = http.createServer(async (req, res) => {
       // ---- 技能库（用户导入技能包；App 端同构路由见 public/local-handler.js） ----
       // 列表（不含 text 全文；附 inUse 引用标记）
       if (pathname === '/api/skills' && req.method === 'GET') {
-        return json(res, 200, listUserSkills());
+        return json(res, 200, requestSkills(req));
       }
       // 新增/覆盖技能（同名 = 覆盖）；被智能体引用时清空解析缓存（覆盖前的旧技能内容仍在缓存里）
       if (pathname === '/api/skills' && req.method === 'POST') {
         let body = '';
         for await (const chunk of req) body += chunk;
-        const r = addUserSkill(JSON.parse(body || '{}'));
+        const r = addUserSkill({ ...JSON.parse(body || '{}'), userId: process.env.AUTH_DISABLED === '1' ? '' : ownerId });
         if (r.error) return err(res, 400, r.error);
         if (r.referenced) {
-          const n = pdb.prepare('DELETE FROM ai_explains').run().changes;
+          const n = process.env.AUTH_DISABLED === '1'
+            ? pdb.prepare('DELETE FROM ai_explains').run().changes
+            : pdb.prepare('DELETE FROM ai_explains WHERE user_id = ?').run(ownerId).changes;
           if (n > 0) console.log(`[skills] 技能「${r.name}」被智能体引用，已清空 ${n} 条题目解析缓存`);
         }
         return json(res, 200, { ok: true, name: r.name, replaced: r.replaced, referenced: r.referenced });
@@ -3382,9 +3611,11 @@ const server = http.createServer(async (req, res) => {
       // 删除技能（被引用智能体的 skill 字段保留原值，解析回落纯文本 → 清缓存避免旧解析残留）
       if (pathname.match(/^\/api\/skills\/[^/]+$/) && req.method === 'DELETE') {
         const name = decodeURIComponent(pathname.split('/')[3]);
-        const r = deleteUserSkill(name);
+        const r = deleteUserSkill(name, process.env.AUTH_DISABLED === '1' ? '' : ownerId);
         if (r.error) return err(res, 400, r.error);
-        const n = pdb.prepare('DELETE FROM ai_explains').run().changes;
+        const n = process.env.AUTH_DISABLED === '1'
+          ? pdb.prepare('DELETE FROM ai_explains').run().changes
+          : pdb.prepare('DELETE FROM ai_explains WHERE user_id = ?').run(ownerId).changes;
         if (n > 0) console.log(`[skills] 删除技能「${name}」，已清空 ${n} 条题目解析缓存`);
         return json(res, 200, r);
       }
@@ -3424,7 +3655,7 @@ const server = http.createServer(async (req, res) => {
         for await (const chunk of req) body += chunk;
         const { questionId, selected, correct, questionData } = JSON.parse(body || '{}');
         if (questionId == null && !(questionData && (questionData.content || questionData.prompt))) return err(res, 400, '缺少 questionId');
-        const agent = getAgent('xingce-explainer');
+        const agent = requestAgent(req, 'xingce-explainer');
         const browserOnly = agent && normalizeKeyStorageMode(agent.key_storage_mode, String(agent.api_key || '').trim() ? 'server' : 'browser') === 'browser';
         if (!agent || (!agent.api_key && !browserOnly)) {
           return json(res, 200, {
@@ -3448,7 +3679,7 @@ const server = http.createServer(async (req, res) => {
           };
         } else if (String(questionId).startsWith('custom-')) {
           const cid = Number(String(questionId).replace(/^custom-/, ''));
-          const cr = pdb.prepare('SELECT * FROM custom_questions WHERE id = ?').get(cid);
+            const cr = pdb.prepare('SELECT * FROM custom_questions WHERE user_id = ? AND id = ?').get(ownerId, cid);
           if (cr) {
             customMaterial = String(cr.material || '').trim();
             q = {
@@ -3467,8 +3698,8 @@ const server = http.createServer(async (req, res) => {
         // 缓存键：题 + 作答（selected/correct 归一化；同一题同一作答只调一次 LLM）
         const selKey = selected == null ? 'none' : JSON.stringify((Array.isArray(selected) ? selected : [selected]).map(Number));
         const corKey = correct == null ? 'none' : (correct ? 'true' : 'false');
-        const hit = pdb.prepare('SELECT content, image_note, model FROM ai_explains WHERE question_id = ? AND selected = ? AND correct = ?')
-          .get(questionId, selKey, corKey);
+        const hit = pdb.prepare('SELECT content, image_note, model FROM ai_explains WHERE user_id = ? AND question_id = ? AND selected = ? AND correct = ?')
+          .get(ownerId, questionId, selKey, corKey);
         if (hit) {
           return json(res, 200, {
             notice: '解析完成（已缓存，秒回）',
@@ -3563,7 +3794,7 @@ const server = http.createServer(async (req, res) => {
           materialImgOk = matDownloads.filter(Boolean).length;
           const imgs = [...downloads, ...matDownloads].filter(Boolean);
           if (imgs.length) {
-            const imgAgent = getAgent('image-reader');
+            const imgAgent = requestAgent(req, 'image-reader');
             const model = (imgAgent && imgAgent.model) || 'glm-4v-flash';
             const key = (imgAgent && imgAgent.api_key) || agent.api_key;
             const baseUrl = (imgAgent && imgAgent.base_url) || agent.base_url;
@@ -3618,8 +3849,8 @@ const server = http.createServer(async (req, res) => {
         if (r.error) return json(res, 200, { notice: r.error, content: null });
         // 落库缓存：同一题同一作答下次秒回，不重复花钱
         try {
-          pdb.prepare('INSERT OR REPLACE INTO ai_explains (question_id, selected, correct, content, image_note, model) VALUES (?, ?, ?, ?, ?, ?)')
-            .run(questionId, selKey, corKey, r.content, imageNote || null, agent.model || '');
+          pdb.prepare('INSERT OR REPLACE INTO ai_explains (user_id, question_id, selected, correct, content, image_note, model) VALUES (?, ?, ?, ?, ?, ?, ?)')
+            .run(ownerId, questionId, selKey, corKey, r.content, imageNote || null, agent.model || '');
         } catch {}
         return json(res, 200, { notice: '解析完成', content: r.content, imageNote: imageNote || null, cached: false });
       }
@@ -3636,8 +3867,8 @@ const server = http.createServer(async (req, res) => {
         const imageNote = String(parsed.imageNote || '').slice(0, 8000);
         const model = String(parsed.model || '').slice(0, 160);
         try {
-          pdb.prepare('INSERT OR REPLACE INTO ai_explains (question_id, selected, correct, content, image_note, model) VALUES (?, ?, ?, ?, ?, ?)')
-            .run(questionId, selected, correct, content, imageNote || null, model);
+          pdb.prepare('INSERT OR REPLACE INTO ai_explains (user_id, question_id, selected, correct, content, image_note, model) VALUES (?, ?, ?, ?, ?, ?, ?)')
+            .run(ownerId, questionId, selected, correct, content, imageNote || null, model);
         } catch {}
         return json(res, 200, { ok: true });
       }
@@ -3652,8 +3883,8 @@ const server = http.createServer(async (req, res) => {
         const buf = Buffer.from(m[2], 'base64');
         if (buf.length > 8 * 1024 * 1024) return err(res, 400, '图片过大（≤8MB）');
         // 2026-08-15：识图统一走合并后的「识图转写员」（image-reader），申论/综应手写作答与行测图形图表同用一模型
-        const imgAgent = getAgent('image-reader');
-        const agent = getAgent('xingce-explainer') || {};
+            const imgAgent = requestAgent(req, 'image-reader');
+        const agent = requestAgent(req, 'xingce-explainer') || {};
         const model = (imgAgent && imgAgent.model) || 'glm-4v-flash';
         const key = (imgAgent && imgAgent.api_key) || agent.api_key;
         const baseUrl = (imgAgent && imgAgent.base_url) || agent.base_url;
@@ -3689,7 +3920,7 @@ const server = http.createServer(async (req, res) => {
         let body = '';
         for await (const chunk of req) body += chunk;
         const { text, image } = JSON.parse(body || '{}');
-        const agent = getAgent('custom-question-parser');
+        const agent = requestAgent(req, 'custom-question-parser');
         if (!agent) return json(res, 200, { notice: '题目解析员未启用，请到 AI 设置页配置', text: null });
         const hasImage = String(image || '').startsWith('data:image');
         if (!hasImage && !String(text || '').trim()) return err(res, 400, '缺少文本或图片');
@@ -3776,7 +4007,7 @@ const server = http.createServer(async (req, res) => {
         let body = '';
         for await (const chunk of req) body += chunk;
         const { questionId, content, material } = JSON.parse(body || '{}');
-        const agent = getAgent('shenlun-grader');
+        const agent = requestAgent(req, 'shenlun-grader');
         const browserOnly = agent && normalizeKeyStorageMode(agent.key_storage_mode, String(agent.api_key || '').trim() ? 'server' : 'browser') === 'browser';
         if (!agent || (!agent.api_key && !browserOnly)) {
           return json(res, 200, {
@@ -3846,9 +4077,9 @@ const server = http.createServer(async (req, res) => {
             const p = db.prepare('SELECT subjectName FROM papers WHERE id = ?').get(q.paperId);
             const cg = classifySource(questionId);
             pdb.prepare(`
-              INSERT INTO practice_records (question_id, paper_id, subject, chapter, question_type, selected, is_correct, cost_ms, group_key, sub_key)
-              VALUES (?, ?, ?, ?, ?, ?, NULL, 0, ?, ?)
-            `).run(questionId, q.paperId, p?.subjectName || '', q.chapter || '', q.type, JSON.stringify({ answer: content }), cg.groupKey, cg.subKey);
+              INSERT INTO practice_records (user_id, question_id, paper_id, subject, chapter, question_type, selected, is_correct, cost_ms, group_key, sub_key)
+              VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 0, ?, ?)
+            `).run(ownerId, questionId, q.paperId, p?.subjectName || '', q.chapter || '', q.type, JSON.stringify({ answer: content }), cg.groupKey, cg.subKey);
           } catch { /* 落库失败不影响批改 */ }
         }
         if (r.error) return json(res, 200, { notice: r.error, score: null });
@@ -3868,9 +4099,9 @@ const server = http.createServer(async (req, res) => {
             const p = db.prepare('SELECT subjectName FROM papers WHERE id = ?').get(q.paperId);
             const cg = classifySource(questionId);
             pdb.prepare(`
-              INSERT INTO practice_records (question_id, paper_id, subject, chapter, question_type, selected, is_correct, cost_ms, group_key, sub_key)
-              VALUES (?, ?, ?, ?, ?, ?, NULL, 0, ?, ?)
-            `).run(questionId, q.paperId, p?.subjectName || '', q.chapter || '', q.type, JSON.stringify({ answer: String(parsed.answer || '') }), cg.groupKey, cg.subKey);
+              INSERT INTO practice_records (user_id, question_id, paper_id, subject, chapter, question_type, selected, is_correct, cost_ms, group_key, sub_key)
+              VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 0, ?, ?)
+            `).run(ownerId, questionId, q.paperId, p?.subjectName || '', q.chapter || '', q.type, JSON.stringify({ answer: String(parsed.answer || '') }), cg.groupKey, cg.subKey);
           } catch {}
         }
         return json(res, 200, { ok: true });
