@@ -197,6 +197,7 @@ const store = {
   notes: new Set(), // 笔记题 id（服务端跨设备同步；做题页「查看笔记/添加笔记」状态切换）
   noteMap: new Map(), // 笔记题 id → 笔记内容（弹层预填用，预载时与 notes 一起填充）
   navStack: [], // 导航栈：{name, subject, category, paperId, chapter, mock}，goBack 时逐级回退
+  aiTutor: null, // 当前题目的随题 AI 会话（切题时取消未完成请求）
   // 自定义刷题筛选（2026-08）：面板保存后，专项练习模块刷题按此出题；mode=practice|recite，year=all|3|5|10，difficulty=easy|balanced|hard|random
   customConfig: Object.assign({ mode: 'practice', year: '10', difficulty: 'random', count: 15 }, JSON.parse(localStorage.getItem('custom_practice_cfg') || '{}')),
 };
@@ -2887,11 +2888,240 @@ document.addEventListener('click', (e) => {
   openImageViewer(img.getAttribute('src') || img.currentSrc || img.src, img.alt || '题目图片');
 });
 
+// ---------- 随题 AI 辅导（WP5） ----------
+function aiTutorIdentity(q) {
+  const questionId = String(q.questionId ?? q.id ?? '').trim();
+  const questionUid = String(q.questionUid ?? q.question_uid ?? questionId).trim();
+  const revision = Number(q.revision ?? q.questionRevision ?? q.question_revision ?? 1) || 1;
+  return { questionId, questionUid, revision };
+}
+
+function aiTutorQuestionSnapshot(q) {
+  const s = store.state;
+  const answer = s.answers[s.idx] || {};
+  const selected = Array.isArray(answer.selected)
+    ? answer.selected.map((i) => LETTERS[Number(i)] || String(i)).join('')
+    : (answer.selected == null ? '' : String(answer.selected));
+  const identity = aiTutorIdentity(q);
+  const prompt = stripHtml(q.contentHtml || q.content || q.prompt || '').slice(0, 12000);
+  const material = stripHtml(q.materialHtml || q.material || '').slice(0, 12000);
+  const options = Array.isArray(q.options) ? q.options.map((o) => stripHtml(o).slice(0, 3000)) : [];
+  const hasImages = /<img\b/i.test(String(q.contentHtml || q.materialHtml || ''))
+    || (Array.isArray(q.images) && q.images.length > 0);
+  return {
+    ...identity,
+    subject: s.subject || q.subject || '',
+    chapter: q.chapter || s.chapter || '',
+    type: q.type ?? '',
+    prompt,
+    material,
+    options,
+    answer: q.answer ?? '',
+    answerIndex: q.answerIndex ?? -1,
+    analysis: stripHtml(q.analysis || '').slice(0, 8000),
+    selected,
+    answeredCorrectly: answer.correct == null ? null : !!answer.correct,
+    hasImages,
+  };
+}
+
+function aiTutorAgent(q) {
+  return q.type === 21 || Number(q.type) >= 20 ? 'shenlun-grader' : 'xingce-explainer';
+}
+
+function aiTutorApiWithAbort(path, opts, signal) {
+  if (!signal) return api(path, opts);
+  if (signal.aborted) {
+    const e = new Error('请求已停止');
+    e.name = 'AbortError';
+    return Promise.reject(e);
+  }
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const onAbort = () => {
+      if (settled) return;
+      settled = true;
+      const e = new Error('请求已停止');
+      e.name = 'AbortError';
+      reject(e);
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    Promise.resolve(api(path, opts)).then((value) => {
+      if (settled) return;
+      settled = true;
+      signal.removeEventListener('abort', onAbort);
+      resolve(value);
+    }, (error) => {
+      if (settled) return;
+      settled = true;
+      signal.removeEventListener('abort', onAbort);
+      reject(error);
+    });
+  });
+}
+
+function renderAiTutorMessages(card, state) {
+  const list = card.querySelector('.ai-tutor-messages');
+  if (!list) return;
+  list.textContent = '';
+  if (!state.messages.length) {
+    const empty = el('div', 'ai-tutor-empty', '围绕当前题目提问，例如：为什么我选的答案不对？');
+    list.appendChild(empty);
+  } else {
+    for (const message of state.messages) {
+      const row = el('div', `ai-tutor-message ${message.role === 'user' ? 'user' : 'assistant'}${message.status && message.status !== 'complete' ? ` ${message.status}` : ''}`);
+      const label = el('div', 'ai-tutor-message-label', message.role === 'user' ? '我' : 'AI');
+      const body = el('div', 'ai-tutor-message-body');
+      body.textContent = String(message.content || '');
+      row.append(label, body);
+      if (message.status && message.status !== 'complete') {
+        const status = el('div', 'ai-tutor-message-status', message.status === 'cancelled' ? '已停止' : (message.status === 'failed' ? '发送失败' : '处理中…'));
+        row.appendChild(status);
+      }
+      list.appendChild(row);
+    }
+  }
+  list.scrollTop = list.scrollHeight;
+}
+
+function mountAiTutor(view, q, token) {
+  const state = store.aiTutor;
+  const identity = aiTutorIdentity(q);
+  const snapshot = aiTutorQuestionSnapshot(q);
+  const card = el('section', 'ai-tutor-card');
+  card.innerHTML = `
+    <div class="ai-tutor-head">
+      <div>
+        <div class="ai-tutor-title">${ico('sparkles', 16)} 随题辅导</div>
+        <div class="ai-tutor-subtitle">AI 只会看到当前题目与本题会话</div>
+      </div>
+      <span class="ai-tutor-status">准备中</span>
+    </div>
+    <div class="ai-tutor-messages" aria-live="polite"></div>
+    <div class="ai-tutor-compose">
+      <textarea class="ai-tutor-input" rows="3" maxlength="12000" placeholder="继续追问当前题目…（Enter 发送，Shift+Enter 换行）"></textarea>
+      <div class="ai-tutor-actions">
+        <span class="ai-tutor-hint">${esc(aiTutorAgent(q) === 'shenlun-grader' ? '申论/综应辅导' : '行测/职测辅导')}</span>
+        <button class="btn btn-ghost btn-sm ai-tutor-stop" type="button" hidden>${ico('xCircle', 14)} 停止</button>
+        <button class="btn btn-primary btn-sm ai-tutor-send" type="button">${ico('sparkles', 14)} 发送</button>
+      </div>
+    </div>`;
+  view.appendChild(card);
+  renderAiTutorMessages(card, state);
+
+  const statusEl = card.querySelector('.ai-tutor-status');
+  const input = card.querySelector('.ai-tutor-input');
+  const sendBtn = card.querySelector('.ai-tutor-send');
+  const stopBtn = card.querySelector('.ai-tutor-stop');
+  const live = () => store.aiTutor === state && state.token === token && card.isConnected;
+  const setStatus = (text, bad = false) => {
+    if (!live()) return;
+    statusEl.textContent = text;
+    statusEl.classList.toggle('error', bad);
+  };
+  const syncControls = () => {
+    if (!live()) return;
+    sendBtn.disabled = state.loading;
+    input.disabled = state.loading;
+    stopBtn.hidden = !state.loading;
+  };
+
+  const send = async () => {
+    if (!live() || state.loading) return;
+    const content = input.value.trim();
+    if (!content) { input.focus(); return; }
+    state.loading = true;
+    state.controller = new AbortController();
+    const controller = state.controller;
+    const pending = { id: `pending-${Date.now()}`, role: 'user', content, status: 'pending' };
+    state.messages.push(pending);
+    input.value = '';
+    renderAiTutorMessages(card, state);
+    syncControls();
+    setStatus('生成中…');
+    try {
+      if (!state.conversationId) {
+        const created = await aiTutorApiWithAbort('/api/ai/conversations', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...identity,
+            subject: store.state.subject || q.subject || '',
+            title: snapshot.prompt.slice(0, 160),
+            questionSnapshot: snapshot,
+          }),
+        }, controller.signal);
+        if (created?.error || created?.ok === false) throw new Error(created.error || '创建会话失败');
+        state.conversationId = created.conversation?.conversationId;
+        if (!state.conversationId) throw new Error('会话响应缺少 conversationId');
+      }
+      const result = await aiTutorApiWithAbort(`/api/ai/conversations/${encodeURIComponent(state.conversationId)}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentId: aiTutorAgent(q), content }),
+        signal: controller.signal,
+      }, controller.signal);
+      if (result?.error || result?.ok === false) throw Object.assign(new Error(result.error || 'AI 回复失败'), result || {});
+      if (!live()) return;
+      state.messages = Array.isArray(result.messages) ? result.messages : state.messages;
+      pending.status = 'complete';
+      setStatus(result.mock ? '本地 Mock' : '已保存');
+      renderAiTutorMessages(card, state);
+    } catch (e) {
+      if (!live()) return;
+      pending.status = e?.name === 'AbortError' || controller.signal.aborted ? 'cancelled' : 'failed';
+      setStatus(pending.status === 'cancelled' ? '已停止' : (e.message || '发送失败'), pending.status !== 'cancelled');
+      renderAiTutorMessages(card, state);
+    } finally {
+      if (state.controller === controller) state.controller = null;
+      state.loading = false;
+      syncControls();
+    }
+  };
+
+  sendBtn.onclick = send;
+  stopBtn.onclick = () => {
+    if (!state.controller) return;
+    setStatus('正在停止…');
+    state.controller.abort();
+  };
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      send();
+    }
+  });
+
+  (async () => {
+    try {
+      const qs = new URLSearchParams({
+        questionId: identity.questionId,
+        questionUid: identity.questionUid,
+        questionRevision: String(identity.revision),
+      });
+      const loaded = await api(`/api/ai/conversations?${qs}`);
+      if (loaded?.error) throw new Error(loaded.error);
+      if (!live()) return;
+      state.conversationId = loaded.conversation?.conversationId || null;
+      state.messages = Array.isArray(loaded.messages) ? loaded.messages : [];
+      renderAiTutorMessages(card, state);
+      setStatus(state.messages.length ? '已恢复历史' : '可开始提问');
+    } catch (e) {
+      if (!live()) return;
+      setStatus(e.message || '历史加载失败', true);
+      renderAiTutorMessages(card, state);
+    }
+  })();
+}
+
 function renderQuestion() {
   cropSession++;          // 视图切换：使未完成的裁剪会话失效
   closeCropEditor();      // 清理可能残留的裁剪器 overlay
   closeImageOverlays();   // 切题时关闭全屏查看器/全屏材料页，避免残留
   const s = store.state;
+  const tutorToken = (store.aiTutor?.token || 0) + 1;
+  if (store.aiTutor?.controller) store.aiTutor.controller.abort();
+  store.aiTutor = { token: tutorToken, controller: null, loading: false, conversationId: null, messages: [] };
   const q = s.questions[s.idx];
   if (!q) { renderResult(); return; }
   const view = $('#view');
@@ -3356,6 +3586,7 @@ function renderQuestion() {
   }
   view.appendChild(actions);
   maybeSplitMaterial(view);
+  mountAiTutor(view, q, tutorToken);
 }
 
 /** 桌面/平板宽屏（≥980px）：材料题改为左右分屏——材料固定左侧滚动、题干+选项右侧，边看边算；手机端布局不变 */

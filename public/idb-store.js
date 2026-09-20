@@ -18,8 +18,8 @@
 'use strict';
 
 const DEFAULT_DB = 'kaogong-app';
-const DEFAULT_VERSION = 3; // 3：新增 notes（笔记，2026-08-20）
-const STORES = ['records', 'favorites', 'custom_batches', 'custom_questions', 'notes'];
+const DEFAULT_VERSION = 4; // 4：新增随题 AI 会话与消息
+const STORES = ['records', 'favorites', 'custom_batches', 'custom_questions', 'notes', 'ai_conversations', 'ai_messages'];
 
 function newId() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
@@ -89,15 +89,19 @@ export function createIdbStore(opts = {}) {
     });
   }
 
-  /** 取行 key：records 用 id（缺失自动生成），favorites/notes 用 question_id，custom_* 用数字自增 id */
+  /** 取行 key：records/messages 用 id（缺失自动生成），favorites/notes 用 question_id，custom_* 用数字自增 id */
   function rowKey(kind, row) {
-    if (kind === 'records') {
+    if (kind === 'records' || kind === 'ai_messages') {
       if (row.id == null) row.id = newId();
       return row.id;
     }
     if (kind === 'favorites' || kind === 'notes') {
       if (row.question_id == null) throw new Error(`${kind} 行缺少 question_id`);
       return String(row.question_id);
+    }
+    if (kind === 'ai_conversations') {
+      if (!row.conversation_id) throw new Error('ai_conversations 行缺少 conversation_id');
+      return String(row.conversation_id);
     }
     if (kind === 'custom_batches' || kind === 'custom_questions') {
       if (row.id == null) throw new Error(`${kind} 行缺少 id（应先分配数字自增 id）`);

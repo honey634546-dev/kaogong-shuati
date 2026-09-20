@@ -32,6 +32,7 @@ function makeMocks() {
   };
   const store = {
     getAll: async () => [],
+    put: async () => {},
     deleteBy: async () => {},
   };
   const ai = {
@@ -86,6 +87,8 @@ const ROUTES = [
   ['POST', '/api/ai/explain', { questionId: 123456, selected: 'A' }],
   ['POST', '/api/ai/chat', { agentId: 1, messages: [{ role: 'user', content: '测试' }] }],
   ['POST', '/api/ai/chat/stream', { agentId: 1, messages: [{ role: 'user', content: '测试' }] }],
+  ['GET', '/api/ai/conversations?questionId=local-1&questionUid=local-1&questionRevision=1'],
+  ['POST', '/api/ai/conversations', { questionId: 'local-1', questionUid: 'local-1', questionRevision: 1, questionSnapshot: { prompt: '测试题' } }],
   ['POST', '/api/ai/agents/1/test', { content: '测试内容' }],
   // PUT
   ['PUT', '/api/ai/agents/1', { system_prompt: '新提示词', skill: 'gongkao-huasheng13', api_key: 'sk-****' }],

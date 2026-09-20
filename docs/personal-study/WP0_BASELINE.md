@@ -89,3 +89,22 @@
 1. WP1 还没有迁移向导；旧版数据目录通过兼容路径读取，正式迁移和备份恢复放在 WP7。
 2. 自定义题库已经补上稳定逻辑身份和导入版本；WP3 已补上作答快照和提交幂等，手工编辑仍是原地更新，正式编辑历史与备份恢复放在 WP7。
 3. 现有 `npm test` 仍混合环境无关单测、题库 fixture 测试和浏览器 E2E；WP0 后续应拆成可重复的 fixture/mocked/integration/browser 层，不删除原有行为断言。WP4 的真实供应商连通性尚未作为默认测试运行，必须与本地 Mock 证据分开。
+
+## WP5 变更后结果
+
+- `practice.db` 新增 `ai_conversations` 与 `ai_messages`；会话身份按题目 ID、逻辑 UID 和 revision 唯一，题面快照随会话保存。
+- 新增 `/api/ai/conversations` 创建/恢复接口、`/:id/messages` JSON 消息接口和 `/:id/stream` SSE 消息接口；请求取消后记录取消状态，不产生 assistant 假成功。
+- App 本地 IndexedDB 版本升至 4，增加 `ai_conversations`/`ai_messages`；本地 handler 与服务端保持同一身份、历史和错误状态口径。
+- 练习页接入右侧随题 AI 辅导面板：题干、材料、选项、答案、解析和当前作答以快照传入；切题会取消旧请求，历史按题目版本恢复。
+
+命令：`npm run test:wp5`
+
+- 结果：`5 passed / 0 failed`。覆盖服务端多轮历史、revision 隔离、SSE 完成落库、主动停止、本地路由持久化和新表存在性。
+- 合并本地 handler 路由回归：`node --test test-local-handler.mjs test-wp5-conversations.mjs` 为 `10 passed / 0 failed`。
+
+当前限制：本地模式仍按一次性 JSON 结果显示，不伪造 SSE；真实供应商连通性、含真实题库的浏览器面板布局和完整备份恢复留到 WP8/WP7，不能由 Mock 专项测试替代。
+
+全量命令：`npm test`
+
+- 结果：`88 passed / 29 failed`。相较 WP4 没有新增失败；新增 5 个 WP5 测试全部通过。
+- 29 个失败仍是已知环境前提：缺失 `app-assets/tiku_app.db`、未安装 `playwright-core`/Edge E2E，以及依赖真实题库内容的随机出题测试；不能据此宣称全量绿灯。

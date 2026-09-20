@@ -552,6 +552,48 @@ h1, h2, h3, .hs-num, .stat-card .num { font-family: inherit; font-variant-numeri
 .ab-title svg, .card h3 svg, .mat-head svg, .li-tip svg, .result-banner svg, .sheet-head svg { vertical-align: -2.5px; margin-right: 4px; }
 #app-title svg { vertical-align: -3px; margin-right: 5px; }
 
+/* 随题 AI 辅导：桌面端固定右侧，窄屏回到题目下方；历史消息不与其它题目串联 */
+.ai-tutor-card {
+  background: var(--card-2);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 13px;
+  margin: 16px 0;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, .06);
+}
+.ai-tutor-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.ai-tutor-title { color: var(--primary); font-weight: 800; font-size: 15px; }
+.ai-tutor-title svg { vertical-align: -3px; margin-right: 3px; }
+.ai-tutor-subtitle { color: var(--text-3); font-size: 11px; margin-top: 3px; }
+.ai-tutor-status { color: var(--text-3); font-size: 11px; max-width: 150px; text-align: right; }
+.ai-tutor-status.error { color: var(--red); }
+.ai-tutor-messages {
+  display: flex; flex-direction: column; gap: 8px; min-height: 78px; max-height: min(42vh, 430px);
+  overflow-y: auto; margin: 12px 0; padding: 2px;
+}
+.ai-tutor-empty { color: var(--text-3); font-size: 12px; line-height: 1.6; padding: 17px 10px; text-align: center; background: var(--bg-soft); border-radius: 10px; }
+.ai-tutor-message { max-width: 92%; border-radius: 12px; padding: 8px 10px; font-size: 13px; line-height: 1.65; white-space: pre-wrap; word-break: break-word; }
+.ai-tutor-message.user { align-self: flex-end; background: var(--primary-soft); color: var(--text); }
+.ai-tutor-message.assistant { align-self: flex-start; background: var(--bg-soft); color: var(--text); border: 1px solid var(--border); }
+.ai-tutor-message.pending { opacity: .68; }
+.ai-tutor-message.failed { border-color: color-mix(in srgb, var(--red) 42%, var(--border)); }
+.ai-tutor-message.cancelled { opacity: .62; }
+.ai-tutor-message-label { color: var(--text-3); font-size: 10px; font-weight: 700; margin-bottom: 2px; }
+.ai-tutor-message-body { white-space: pre-wrap; }
+.ai-tutor-message-status { color: var(--text-3); font-size: 10px; margin-top: 3px; }
+.ai-tutor-compose { border-top: 1px solid var(--border); padding-top: 10px; }
+.ai-tutor-input { width: 100%; min-height: 64px; box-sizing: border-box; resize: vertical; border: 1px solid var(--border-strong); border-radius: 10px; padding: 8px 10px; background: var(--card); color: var(--text); font: inherit; font-size: 13px; line-height: 1.55; outline: none; }
+.ai-tutor-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+.ai-tutor-actions { display: flex; align-items: center; gap: 7px; margin-top: 7px; }
+.ai-tutor-hint { color: var(--text-3); font-size: 10px; flex: 1; }
+.ai-tutor-actions .btn { flex: 0 0 auto; padding: 8px 10px; border-radius: 10px; font-size: 12px; }
+
+@media (min-width: 1180px) {
+  #view[data-exam='1']:has(.ai-tutor-card) { max-width: min(790px, calc(100vw - 390px)); margin-left: max(14px, calc((100vw - 1180px) / 2)); margin-right: 390px; }
+  #view[data-exam='1'] .ai-tutor-card { position: fixed; z-index: 20; top: calc(var(--topbar-h) + 14px); right: max(14px, calc((100vw - 1180px) / 2)); width: min(350px, calc(100vw - 830px)); max-height: calc(100vh - var(--topbar-h) - 42px); display: flex; flex-direction: column; margin: 0; }
+  #view[data-exam='1'] .ai-tutor-messages { flex: 1 1 auto; min-height: 120px; }
+}
+
 /* 材料题（给定材料折叠块，由 JS 模板渲染） */
 .mat-head { display: flex; align-items: center; gap: 5px; cursor: pointer; font-weight: 700; font-size: 13px; color: var(--primary); flex-wrap: wrap; }
 .mat-chev { width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 6px solid currentColor; opacity: .55; transition: transform .18s ease; flex: 0 0 auto; }
