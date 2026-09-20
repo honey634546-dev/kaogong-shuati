@@ -55,6 +55,13 @@ test('富文本渲染：兼容行内公式、上下标和代码块', () => {
   assert.match(inline, /12\.5%/);
 });
 
+test('富文本渲染：连续下划线保留多个独立填空线', () => {
+  const html = renderRichText('第一空____，第二空\\_\\_。**粗体仍然正常**');
+  assert.equal((html.match(/class="rt-blank"/g) || []).length, 2);
+  assert.match(html, /<strong>粗体仍然正常<\/strong>/);
+  assert.doesNotMatch(html, /第二空<\/strong>/);
+});
+
 test('富文本渲染：不执行 AI 返回的 HTML/危险链接', () => {
   const html = renderRichText('<script>alert(1)</script> [危险](javascript:alert(1))');
   assert.doesNotMatch(html, /<script|onclick|javascript:/i);

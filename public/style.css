@@ -584,6 +584,7 @@ h1, h2, h3, .hs-num, .stat-card .num { font-family: inherit; font-variant-numeri
 .rt-math-inline { display: inline-block; max-width: 100%; padding: 0 .12em; color: var(--text); font: 1.04em/1.2 "Cambria Math", "STIX Two Math", "Latin Modern Math", "Times New Roman", serif; vertical-align: -.08em; white-space: nowrap; }
 .rt-math-block { display: block; max-width: 100%; overflow-x: auto; margin: .75em 0; padding: .7em .9em; border: 1px solid color-mix(in srgb, var(--primary) 20%, var(--border)); border-radius: 9px; background: color-mix(in srgb, var(--primary-soft) 45%, var(--card)); color: var(--text); text-align: center; font: 1.12em/1.45 "Cambria Math", "STIX Two Math", "Latin Modern Math", "Times New Roman", serif; white-space: nowrap; }
 .rt-inline-content { display: inline; line-height: inherit; white-space: normal; }
+.rt-blank { display: inline-block; width: 4.5em; height: .95em; margin: 0 .14em; border-bottom: 2px solid currentColor; vertical-align: -.08em; }
 .rt-inline-content > p { display: inline; margin: 0; }
 .rt-inline-content > .rt-math-block { display: inline-block; margin: 0 .15em; padding: .22em .4em; vertical-align: middle; }
 .opt-body > .rt-inline-content, .pv-opt > span:last-child > .rt-inline-content, .qd-opt > span:last-child > .rt-inline-content { display: inline; }

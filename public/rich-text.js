@@ -249,6 +249,11 @@
     };
     // Protect inline code before applying emphasis rules.
     source = source.replace(/`([^`\n]+)`/g, (_, code) => saveInline(`<code class="rt-inline-code">${code}</code>`));
+    // Question banks commonly encode fill-in blanks as "____" or "\\_\\_".
+    // Protect them before Markdown emphasis; otherwise the __...__ rule can
+    // consume all text between two blanks and make a multi-blank question
+    // appear to have only one line.
+    source = source.replace(/(?:\\_){2,}|_{2,}/g, () => saveInline('<span class="rt-blank" aria-label="填空线"></span>'));
     source = source.replace(/\*\*([^*\n]+?)\*\*/g, '<strong>$1</strong>');
     source = source.replace(/__([^_\n]+?)__/g, '<strong>$1</strong>');
     source = source.replace(/~~([^~\n]+?)~~/g, '<del>$1</del>');
