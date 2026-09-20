@@ -254,6 +254,47 @@ async function skillLoadedFor(skillField) {
   return (await resolveSkillLocal(skillField)).loaded;
 }
 
+function localInvalidResponse(res, text, label = 'AI') {
+  const status = res?.status || 200;
+  const contentType = String(res?.headers?.get?.('content-type') || '未知').split(';')[0];
+  if (/^<!doctype\s+html|^<html[\s>]/i.test(String(text || '').trim())) {
+    return `${label} 返回异常：状态 ${status}，网关返回了 HTML 页面（Content-Type: ${contentType}）。请检查 Base URL，通常应填写到 /v1 或供应商的 API 根路径。`;
+  }
+  return `${label} 返回异常：状态 ${status}，网关没有返回 OpenAI-compatible JSON（Content-Type: ${contentType}）。请检查 Base URL、路径和网关协议。`;
+}
+
+function localParseSse(text) {
+  let content = '';
+  let usage = null;
+  for (const line of String(text || '').split(/\r?\n/)) {
+    if (!line.startsWith('data:')) continue;
+    const payload = line.slice(5).trim();
+    if (!payload) continue;
+    if (payload === '[DONE]') break;
+    try {
+      const data = JSON.parse(payload);
+      const delta = data?.choices?.[0]?.delta?.content ?? data?.choices?.[0]?.message?.content ?? '';
+      if (delta) content += delta;
+      if (data?.usage) usage = data.usage;
+    } catch { /* 忽略 SSE 心跳或非 JSON 行 */ }
+  }
+  return { content, usage };
+}
+
+async function readLocalAiResponse(res, label = 'AI') {
+  let raw = '';
+  try {
+    raw = res?.text ? await res.text() : JSON.stringify(res?.data ?? '');
+  } catch (e) {
+    return { error: `${label} 返回异常：无法读取响应（${e.message || e}）` };
+  }
+  const text = typeof raw === 'string' ? raw : JSON.stringify(raw ?? '');
+  const contentType = String(res?.headers?.get?.('content-type') || '').toLowerCase();
+  const trimmed = text.trim();
+  if (contentType.includes('text/event-stream') || /^data:\s*/m.test(trimmed)) return localParseSse(text);
+  try { return { data: JSON.parse(trimmed) }; } catch { return { error: localInvalidResponse(res, text, label) }; }
+}
+
 // ---------- 视觉识别（多模态）：与 server.mjs callVision 同构（图片真正发给视觉模型） ----------
 async function callVisionLocal(agent, imageDataUrl, mode = 'ocr', request) {
   if (!agent.api_key) return { error: '该 AI 未配置 api_key，请到 AI 设置页填写' };
@@ -307,9 +348,10 @@ async function callVisionLocal(agent, imageDataUrl, mode = 'ocr', request) {
         }
         return { error: `识图 API ${r.status}: ${t.slice(0, 200)}` };
       }
-      const d = await r.json().catch(() => null);
-      if (!d) return { error: '识图 API 返回异常：状态 200 但响应体不是有效 JSON（网关异常）' };
-      const c = d.choices?.[0]?.message?.content;
+      const parsed = await readLocalAiResponse(r, '识图 AI');
+      if (parsed.error) return parsed;
+      const d = parsed.data || {};
+      const c = parsed.content || d.choices?.[0]?.message?.content;
       if (c) return { content: c };
       const reason = d.choices?.[0]?.finish_reason;
       const hasReasoning = !!d.choices?.[0]?.message?.reasoning;
@@ -421,12 +463,10 @@ async function callChat(agent, userContent, request, options = {}) {
     const text = res.text ? await res.text().catch(() => '') : '';
     return { error: `API 错误 ${res.status}：${text.slice(0, 300)}` };
   }
-  let data;
-  try {
-    data = res.json ? await res.json() : res.data;
-  } catch {
-    return { error: 'AI 返回异常：状态 200 但响应体不是有效 JSON（网关异常），请重试' };
-  }
+  const parsed = await readLocalAiResponse(res, 'AI');
+  if (parsed.error) return parsed;
+  if (parsed.content) return { content: parsed.content, model: agent.model || '', mock: false };
+  const data = parsed.data || {};
   const msg = data?.choices?.[0]?.message;
   const content = msg?.content;
   if (!content) {

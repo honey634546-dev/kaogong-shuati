@@ -5258,14 +5258,115 @@ async function renderAiSettings() {
     return;
   }
   view.innerHTML = '';
-  view.appendChild(el('div', 'card', `
-    <h3>${ico('sparkles', 17)} AI 智能体（独立配置）</h3>
-    <div class="li-sub">每个 AI 可独立修改 prompt、skill、API Key、URL、模型。<br>Key 默认只保存在当前浏览器页面内存中，刷新或关闭页面即清除；如需让本机服务端代为请求，必须主动选择「存服务端」。修改后<b>立即生效</b>，无需重启；prompt/skill 变更自动保存历史版本，并<b>自动清空题目解析缓存</b>。</div>
-    <div style="margin-top:10px">
-      <button class="btn" data-clear-explain-cache>${ico('trash', 14)} 清除解析缓存（重新解析所有已缓存题目）</button>
+  const endpointAgent = agents.find((a) => Number(a.id) === 1) || agents[0] || {};
+  const endpointKeyStore = window.__AI_BROWSER_KEYS__ || window.__LOCAL_AI_KEYS__;
+  const endpointCard = el('div', 'card');
+  endpointCard.innerHTML = `
+    <h3>${ico('sparkles', 17)} 连接 AI</h3>
+    <div class="li-sub">只需要配置一次模型端点，行测解析、申论批改、图片识别和题目整理都会使用它。更细的角色提示词和专业模型设置放在下方“高级配置”。</div>
+    <label class="field-label">模型端点（OpenAI-compatible）</label>
+    <input class="field" data-unified="base_url" value="${esc(endpointAgent.base_url || '')}" placeholder="https://api.example.com/v1">
+    <div class="li-sub" style="margin-top:4px">填写 API 根地址，不要把 Key 拼在 URL 里；常见格式以 <code>/v1</code> 结尾。</div>
+    <label class="field-label">模型名称</label>
+    <input class="field" data-unified="model" value="${esc(endpointAgent.model || '')}" placeholder="例如 deepseek-chat、gpt-4o-mini">
+    <label class="field-label">Key 保存位置</label>
+    <select class="field" data-unified="key_storage_mode">
+      <option value="browser" ${(endpointAgent.key_storage_mode || 'browser') === 'browser' ? 'selected' : ''}>仅浏览器保存（默认，刷新即清除）</option>
+      ${window.__LOCAL_MODE__ ? '' : `<option value="server" ${(endpointAgent.key_storage_mode || 'browser') === 'server' ? 'selected' : ''}>存服务端（写入本机 ai-config.db）</option>`}
+    </select>
+    <div class="li-sub" data-unified-hint style="margin-top:4px"></div>
+    <label class="field-label">API Key</label>
+    <div style="display:flex;gap:8px;align-items:center">
+      <input class="field" data-unified="api_key" type="password" value="" placeholder="${(endpointAgent.key_storage_mode || 'browser') === 'browser' && endpointKeyStore?.has?.(endpointAgent.id) ? '本次页面已设置' : (endpointAgent.api_key_masked || '输入后保存') }" autocomplete="off" spellcheck="false">
+      <button class="btn btn-ghost" type="button" data-unified-clear-key style="white-space:nowrap">清除本页 Key</button>
     </div>
-  `));
-  view.querySelector('[data-clear-explain-cache]').onclick = async () => {
+    <div class="action-row" style="margin-top:12px">
+      <button class="btn btn-primary" type="button" data-unified-save>${ico('save', 15)} 保存并启用</button>
+      <button class="btn btn-ghost" type="button" data-unified-test>${ico('flask', 15)} 测试连接</button>
+      <button class="btn btn-ghost" type="button" data-clear-explain-cache>${ico('trash', 14)} 清除解析缓存</button>
+    </div>
+    <div class="ai-test-result" data-unified-result style="display:none"></div>
+  `;
+  view.appendChild(endpointCard);
+  const advanced = el('div', 'card');
+  advanced.innerHTML = `
+    <details>
+      <summary style="cursor:pointer;font-weight:700">高级配置 <span class="li-sub" style="margin-left:8px">提示词、技能、单独模型和传输参数</span></summary>
+      <div data-advanced-body style="margin-top:12px"></div>
+    </details>
+  `;
+  view.appendChild(advanced);
+  const advancedBody = advanced.querySelector('[data-advanced-body]');
+  const syncEndpointHint = () => {
+    const mode = endpointCard.querySelector('[data-unified="key_storage_mode"]')?.value || 'browser';
+    const hint = endpointCard.querySelector('[data-unified-hint]');
+    if (hint) {
+      hint.textContent = mode === 'browser'
+        ? '安全默认：Key 只在当前页面内存中保存，浏览器直接请求网关；网关需要允许 CORS。'
+        : '注意：Key 会写入本机 ai-config.db，并由本机服务代为请求模型。';
+      hint.style.color = mode === 'browser' ? 'var(--muted)' : 'var(--red)';
+    }
+  };
+  endpointCard.querySelector('[data-unified="key_storage_mode"]').onchange = syncEndpointHint;
+  syncEndpointHint();
+  endpointCard.querySelector('[data-unified-clear-key]').onclick = () => {
+    for (const agent of agents) endpointKeyStore?.clear?.(agent.id);
+    const input = endpointCard.querySelector('[data-unified="api_key"]');
+    if (input) input.value = '';
+    toast('已清除当前页面中的 Key');
+    syncEndpointHint();
+  };
+  const collectEndpoint = () => ({
+    base_url: endpointCard.querySelector('[data-unified="base_url"]').value.trim(),
+    model: endpointCard.querySelector('[data-unified="model"]').value.trim(),
+    key_storage_mode: endpointCard.querySelector('[data-unified="key_storage_mode"]').value,
+    api_key: endpointCard.querySelector('[data-unified="api_key"]').value.trim(),
+  });
+  const saveEndpoint = async () => {
+    const fields = collectEndpoint();
+    if (!fields.base_url) throw new Error('请先填写模型端点');
+    if (!fields.model) throw new Error('请先填写模型名称');
+    if (fields.key_storage_mode === 'server' && !fields.api_key
+      && !agents.some((agent) => agent.key_storage_mode === 'server' && agent.api_key_masked)) {
+      throw new Error('选择“存服务端”时请填写 API Key；浏览器模式的 Key 不会自动转存到服务端');
+    }
+    for (const agent of agents) {
+      await saveAgent(agent.id, {
+        base_url: fields.base_url,
+        model: fields.model,
+        enabled: 1,
+        provider_mode: 'openai-compatible',
+        key_storage_mode: fields.key_storage_mode,
+        ...(fields.api_key ? { api_key: fields.api_key } : {}),
+      });
+    }
+    return fields;
+  };
+  endpointCard.querySelector('[data-unified-save]').onclick = async () => {
+    try {
+      await saveEndpoint();
+      toast('AI 连接已保存，四类 AI 已统一使用此端点');
+      renderAiSettings();
+    } catch (e) { toast(e.message); }
+  };
+  endpointCard.querySelector('[data-unified-test]').onclick = async () => {
+    const box = endpointCard.querySelector('[data-unified-result]');
+    box.style.display = 'block';
+    box.innerHTML = `${ico('hourglass', 14)} 正在测试连接…`;
+    try {
+      await saveEndpoint();
+      const r = await api('/api/ai/agents/1/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: '请只回复：连接成功。' }),
+      });
+      if (r?.content) box.innerHTML = `<div class="ab-title">${ico('checkCircle', 15)} 连接成功：</div><pre style="white-space:pre-wrap;font-size:13px;line-height:1.6">${esc(r.content)}</pre>`;
+      else box.innerHTML = `<div class="ab-title" style="color:var(--red)">${ico('xCircle', 15)} ${esc(r?.error || r?.notice || '调用失败')}</div>`;
+    } catch (e) {
+      box.innerHTML = `<div class="ab-title" style="color:var(--red)">${ico('xCircle', 15)} ${esc(e.message)}</div>`;
+    }
+  };
+  endpointCard.querySelector('[data-clear-explain-cache]').onclick = async () => {
     const r = await api('/api/ai/explain-cache', { method: 'DELETE' });
     toast(r.cleared > 0 ? `已清除 ${r.cleared} 条解析缓存` : '缓存本来就是空的');
   };
@@ -5289,7 +5390,7 @@ async function renderAiSettings() {
       <button class="btn btn-ghost" data-skill-builtin>${ico('package', 14)} 导入内置技能</button>
     </div>
   `);
-  view.appendChild(skillCard);
+  advancedBody.appendChild(skillCard);
   skillCard.querySelector('[data-skill-import]').onclick = () => renderSkillImport();
   // 导入打包内置的默认技能（gongkao-huasheng13 / shenlun-master）进技能库：
   // 导入后双端统一走 user_skills 注入（Web 端内置目录缺失时原本只是纯文本回退），下拉不再显示「不在技能库」
@@ -5557,7 +5658,7 @@ async function renderAiSettings() {
         <pre style="white-space:pre-wrap;font-size:12px;line-height:1.5;max-height:120px;overflow:auto;background:var(--bg);padding:8px;border-radius:8px">${esc((x.system_prompt || '').slice(0, 300))}</pre>
       `).join('');
     };
-    view.appendChild(card);
+    advancedBody.appendChild(card);
   }
 }
 

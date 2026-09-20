@@ -552,8 +552,28 @@ async function callVision(apiKey, baseUrl, model, imgs, mode = 'describe') {
         }
         return { error: `识图 API ${r.status}: ${text}` };
       }
-      const d = await r.json().catch(() => null);
-      if (!d) return { error: `识图 API 返回异常：状态 200 但响应体不是有效 JSON（网关异常）` };
+      const raw = await r.text().catch(() => '');
+      const trimmed = raw.trim();
+      let d;
+      if (String(r.headers.get('content-type') || '').toLowerCase().includes('text/event-stream') || /^data:\s*/m.test(trimmed)) {
+        let content = '';
+        for (const line of raw.split(/\r?\n/)) {
+          if (!line.startsWith('data:')) continue;
+          const payload = line.slice(5).trim();
+          if (!payload || payload === '[DONE]') continue;
+          try {
+            const part = JSON.parse(payload);
+            content += part?.choices?.[0]?.delta?.content ?? part?.choices?.[0]?.message?.content ?? '';
+          } catch { /* 忽略 SSE 心跳或非 JSON 行 */ }
+        }
+        if (content) return { content };
+        return { error: '识图 API 返回异常：SSE 响应中没有内容' };
+      }
+      try { d = JSON.parse(trimmed); } catch {
+        const ct = String(r.headers.get('content-type') || '未知').split(';')[0];
+        if (/^<!doctype\s+html|^<html[\s>]/i.test(trimmed)) return { error: `识图 API 返回 HTML 页面（Content-Type: ${ct}）。请检查 Base URL 是否填写到 /v1 或 API 根路径。` };
+        return { error: `识图 API 返回的不是 OpenAI-compatible JSON（Content-Type: ${ct}）。请检查 Base URL、路径和网关协议。` };
+      }
       const c = d.choices?.[0]?.message?.content;
       if (c) return { content: c };
       // 推理模型思维链吃光 max_tokens 的典型表现：finish_reason=length 且只有 reasoning_content

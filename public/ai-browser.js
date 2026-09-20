@@ -109,13 +109,43 @@
       && m.content.some((part) => part && (part.type === 'image_url' || part.type === 'input_image')));
   }
 
+  function invalidResponseMessage(response, text) {
+    const status = response?.status || 200;
+    const contentType = String(response?.headers?.get?.('content-type') || '未知').split(';')[0];
+    if (/^<!doctype\s+html|^<html[\s>]/i.test(String(text || '').trim())) {
+      return `API 返回异常：状态 ${status}，网关返回了 HTML 页面（Content-Type: ${contentType}）。请检查 Base URL，通常应填写到 /v1 或供应商的 API 根路径。`;
+    }
+    return `API 返回异常：状态 ${status}，网关没有返回 OpenAI-compatible JSON（Content-Type: ${contentType}）。请检查 Base URL、路径和网关协议。`;
+  }
+
+  function parseSseText(text, onDelta) {
+    let content = '';
+    let usage = null;
+    for (const line of String(text || '').split(/\r?\n/)) {
+      if (!line.startsWith('data:')) continue;
+      const payload = line.slice(5).trim();
+      if (!payload) continue;
+      if (payload === '[DONE]') break;
+      let data;
+      try { data = JSON.parse(payload); } catch { continue; }
+      const delta = data?.choices?.[0]?.delta?.content ?? data?.choices?.[0]?.message?.content ?? '';
+      if (delta) { content += delta; onDelta?.(delta); }
+      if (data?.usage) usage = data.usage;
+    }
+    return { content, usage };
+  }
+
   async function readSse(response, onDelta) {
     const contentType = String(response.headers.get('content-type') || '').toLowerCase();
     if (!contentType.includes('text/event-stream') || !response.body?.getReader) {
-      const data = await response.json();
+      const text = await response.text();
+      const trimmed = text.trim();
+      if (contentType.includes('text/event-stream') || /^data:\s*/m.test(trimmed)) return parseSseText(text, onDelta);
+      let data;
+      try { data = JSON.parse(trimmed); } catch { return { error: invalidResponseMessage(response, text) }; }
       const content = data?.choices?.[0]?.message?.content || '';
       if (content) onDelta?.(content);
-      return { content, usage: data?.usage || null };
+      return { data, content, usage: data?.usage || null };
     }
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
@@ -194,6 +224,7 @@
         return { ok: false, error: `API 错误 ${response.status}：${text.slice(0, 300)}` };
       }
       const result = await readSse(response);
+      if (result.error) return { ok: false, error: result.error };
       if (!result.content) return { ok: false, error: 'API 返回异常（无内容）' };
       return { ok: true, content: result.content, model: agent.model || '', mock: false, usage: result.usage || null };
     } catch (error) {

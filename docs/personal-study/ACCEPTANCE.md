@@ -48,10 +48,12 @@
 ## API Key 保存策略当前证据
 
 - [x] AI 设置页提供“仅浏览器保存”和“存服务端”可选项，默认是仅浏览器保存。
+- [x] AI 设置页默认只展示统一模型端点、模型名、Key 保存方式和连接测试；角色、技能、提示词和单独传输参数收进“高级配置”。
 - [x] 仅浏览器保存时，Key 只存在当前页面的内存闭包中，不写入 `localStorage`、`sessionStorage`、IndexedDB、Cookie 或服务端 `ai-config.db`；刷新/关闭页面后需要重新输入。
 - [x] 仅浏览器保存时由浏览器直连 OpenAI-compatible 网关，Key 不经过本项目服务端；网关需要允许浏览器 CORS。
 - [x] 显式选择“存服务端”后，Key 才写入本机 `ai-config.db` 并由服务端代为请求；切回浏览器模式会立即清除服务端旧 Key。
 - [x] `npm run test:key-storage`：4 passed / 0 failed；覆盖默认模式、服务端显式持久化、切回浏览器模式清除、浏览器直连描述协议和前端内存 Key 不落服务端。
+- [x] OpenAI-compatible 兼容层支持 `stream=false` 收到 SSE；200 HTML/空响应会返回端点诊断，而不是笼统要求重试。
 
 ## 后续 P0
 

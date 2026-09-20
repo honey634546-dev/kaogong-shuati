@@ -63,6 +63,16 @@ before(async () => {
       return;
     }
     if (parsed.model === 'slow-model') await sleep(1500);
+    if (parsed.model === 'sse-when-json') {
+      res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8' });
+      res.end(`data: ${JSON.stringify({ choices: [{ delta: { content: 'SSE_OK' } }] })}\n\ndata: [DONE]\n\n`);
+      return;
+    }
+    if (parsed.model === 'html-response') {
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end('<!doctype html><html><body>wrong endpoint</body></html>');
+      return;
+    }
     if (parsed.stream) {
       res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8' });
       const chunks = ['流式', '回答'];
@@ -142,6 +152,20 @@ test('WP4 SSE：返回 meta/delta/done，服务端流式协议可消费', async 
   assert.deepEqual(events.map((x) => x.event), ['meta', 'delta', 'delta', 'done']);
   assert.deepEqual(events.filter((x) => x.event === 'delta').map((x) => x.data.delta), ['流式', '回答']);
   assert.equal(events.at(-1).data.content, '流式回答');
+});
+
+test('WP4 兼容异常网关：stream=false 收到 SSE 可解析，HTML 返回可操作提示', async () => {
+  const sseSaved = await api('/api/ai/agents/1', { model: 'sse-when-json' }, { method: 'PUT' });
+  assert.equal(sseSaved.status, 200);
+  const sse = await api('/api/ai/chat', { agentId: 1, content: '兼容 SSE' });
+  assert.equal(sse.body.ok, true, JSON.stringify(sse.body));
+  assert.equal(sse.body.content, 'SSE_OK');
+
+  const htmlSaved = await api('/api/ai/agents/1', { model: 'html-response' }, { method: 'PUT' });
+  assert.equal(htmlSaved.status, 200);
+  const html = await api('/api/ai/chat', { agentId: 1, content: '错误端点' });
+  assert.equal(html.body.ok, false);
+  assert.match(html.body.error, /HTML|Base URL|JSON/);
 });
 
 test('WP4 超时与本地 Mock：不把网络失败伪装成成功', async () => {
