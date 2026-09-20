@@ -1,11 +1,12 @@
 // ai-local.mjs — App 本地模式（无服务器）下的 AI 能力
 // 职责：
-//   - 智能体配置存本机（localStorage），初始默认值来自 ai-agents.default.json
+//   - 非敏感智能体配置存本机（localStorage），Key 默认只在当前页面内存中
 //   - 直调 OpenAI 兼容接口（request 注入：浏览器 fetch / Capacitor CapacitorHttp，规避 CORS）
 //   - AI 解析结果缓存到 IndexedDB（ai_cache），断网/未配置时返回可读的降级提示
 // 与 server.mjs 的 /api/ai/* 返回结构保持一致，app.js 零改动。
 
 const STORE_KEY = 'ai_agents_v1'; // 本机智能体配置（localStorage）
+const SESSION_KEYS = new Map(); // agent id -> API Key；绝不持久化
 const CACHE_DB = 'kaogong_cache_db';
 const CACHE_STORE = 'ai_cache';
 const DEFAULT_AGENTS_URL = './ai-agents.default.json';
@@ -101,12 +102,42 @@ function loadAgents(defaults) {
   } catch {
     saved = {};
   }
-  return defaults.map((d) => ({ ...d, ...(saved[d.id] || {}) }));
+  let migrated = false;
+  const agents = defaults.map((d) => {
+    const merged = { key_storage_mode: 'browser', ...d, ...(saved[d.id] || {}) };
+    const id = String(d.id);
+    // 本地模式没有服务端配置库：任何历史遗留 Key 都只短暂读入内存，随后立刻从持久化配置移除。
+    // 即使旧配置误写了 server，也强制回到浏览器模式，避免把敏感值继续留在 localStorage。
+    if (String(merged.api_key || '').trim()) {
+      SESSION_KEYS.set(id, String(merged.api_key).trim());
+      delete merged.api_key;
+      merged.key_storage_mode = 'browser';
+      if (saved[d.id]) {
+        delete saved[d.id].api_key;
+        saved[d.id].key_storage_mode = 'browser';
+        migrated = true;
+      }
+    }
+    merged.key_storage_mode = 'browser';
+    merged.api_key = SESSION_KEYS.get(id) || '';
+    return merged;
+  });
+  if (migrated) {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(saved)); } catch {}
+  }
+  return agents;
 }
 
 function persistAgents(agents) {
   const saved = {};
-  for (const a of agents) saved[a.id] = a;
+  for (const a of agents) {
+    const row = { ...a };
+    if (row.key_storage_mode !== 'server') {
+      delete row.api_key;
+      row.key_storage_mode = 'browser';
+    }
+    saved[a.id] = row;
+  }
   try {
     localStorage.setItem(STORE_KEY, JSON.stringify(saved));
   } catch (e) {
@@ -439,8 +470,20 @@ export async function createAiApi({ request, tiku, query, defaultsUrl = DEFAULT_
   }));
 
   const maskKey = (a) => (a.api_key ? 'sk-****' : '');
+  if (typeof window !== 'undefined') {
+    window.__LOCAL_AI_KEYS__ = {
+      has: (id) => !!SESSION_KEYS.get(String(id)),
+      keyFor: (id) => SESSION_KEYS.get(String(id)) || '',
+      clear: (id) => SESSION_KEYS.delete(String(id)),
+      maskKey,
+    };
+  }
   const listAgents = () =>
-    loadAgents(defaults).map(({ api_key, ...rest }) => ({ ...rest, api_key: '', api_key_masked: maskKey({ api_key }) }));
+    loadAgents(defaults).map((a) => {
+      const api_key = a.key_storage_mode === 'server' ? a.api_key : SESSION_KEYS.get(String(a.id)) || '';
+      const { api_key: _ignored, ...rest } = a;
+      return { ...rest, key_storage_mode: a.key_storage_mode || 'browser', api_key: '', api_key_masked: maskKey({ api_key }) };
+    });
 
   return {
     /** GET /api/ai/agents — 返回数组（与 server 同构，app.js 直接 for..of） */
@@ -455,7 +498,8 @@ export async function createAiApi({ request, tiku, query, defaultsUrl = DEFAULT_
       const a = loadAgents(defaults).find((x) => String(x.id) === String(id));
       if (!a) return { error: '未找到该智能体' };
       a.skill_loaded = await skillLoadedFor(a.skill);
-      return { ...a, api_key: '', api_key_masked: maskKey({ api_key: a.api_key }) };
+      const key = a.key_storage_mode === 'server' ? a.api_key : SESSION_KEYS.get(String(a.id)) || '';
+      return { ...a, key_storage_mode: a.key_storage_mode || 'browser', api_key: '', api_key_masked: maskKey({ api_key: key }) };
     },
 
     /** PUT /api/ai/agents/:id — 保存配置；api_key 空值不覆盖旧值（脱敏占位保护） */
@@ -464,6 +508,12 @@ export async function createAiApi({ request, tiku, query, defaultsUrl = DEFAULT_
       const a = agents.find((x) => String(x.id) === String(id));
       if (!a) return { error: '未找到该智能体' };
       if (fields.api_key === '' || fields.api_key === 'sk-****') delete fields.api_key;
+      const selectedMode = fields.key_storage_mode || a.key_storage_mode || 'browser';
+      if (selectedMode === 'server') return { error: '本地模式没有服务端配置库，请选择“仅浏览器保存”' };
+      if (fields.api_key && String(fields.api_key).trim()) SESSION_KEYS.set(String(id), String(fields.api_key).trim());
+      delete fields.api_key;
+      a.key_storage_mode = 'browser';
+      a.api_key = SESSION_KEYS.get(String(id)) || '';
       const enable = fields.enabled;
       delete fields.enabled; // 防止 Object.assign 覆盖规范化后的值
       if (enable !== undefined) a.enabled = enable ? 1 : 0;

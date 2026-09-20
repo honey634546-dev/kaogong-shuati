@@ -13,7 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
-import { listAgents, getAgent, updateAgent, getHistory, callAgent, callAgentMessages, initAiConfig, listUserSkills, addUserSkill, deleteUserSkill } from './lib/ai-agents.mjs';
+import { listAgents, getAgent, updateAgent, getHistory, callAgent, callAgentMessages, buildAgentMessages, resolveSkill, normalizeKeyStorageMode, initAiConfig, listUserSkills, addUserSkill, deleteUserSkill } from './lib/ai-agents.mjs';
 import { extractMaterialFromPdf } from './lib/pdf-ocr.mjs';
 import { FENBI_TREE, ESSAY_TREE, SHENLUN_TREE, ZONGYING_TREE } from './lib/fenbi-tree.mjs';
 import { mapChapterToNode } from './lib/xingce-chapter-map.mjs';
@@ -3039,6 +3039,50 @@ const server = http.createServer(async (req, res) => {
           messages: conversationMessages(row.conversation_id),
         });
       }
+      // 浏览器直连模式读取单个会话：只返回题面快照和历史消息，不触发模型调用。
+      const conversationGetMatch = pathname.match(/^\/api\/ai\/conversations\/([^/]+)$/);
+      if (conversationGetMatch && req.method === 'GET') {
+        const conversation = getConversation(conversationGetMatch[1]);
+        if (!conversation) return err(res, 404, '会话不存在');
+        return json(res, 200, {
+          conversation: conversationView(conversation),
+          messages: conversationMessages(conversation.conversation_id),
+        });
+      }
+      // 浏览器直连模式只让服务端持久化结果；服务端不接收 API Key，也不调用模型。
+      const clientCompleteMatch = pathname.match(/^\/api\/ai\/conversations\/([^/]+)\/client-complete$/);
+      if (clientCompleteMatch && req.method === 'POST') {
+        const conversationId = clientCompleteMatch[1];
+        const conversation = getConversation(conversationId);
+        if (!conversation) return err(res, 404, '会话不存在');
+        let body = '';
+        for await (const chunk of req) body += chunk;
+        let parsed;
+        try { parsed = JSON.parse(body || '{}'); } catch { return err(res, 400, '请求体不是有效 JSON'); }
+        const content = String(parsed.content ?? '').trim();
+        const status = ['complete', 'failed', 'cancelled'].includes(String(parsed.status)) ? String(parsed.status) : 'complete';
+        if (!content) return err(res, 400, '消息内容不能为空');
+        if (content.length > AI_CONVERSATION_MAX_CONTENT) return err(res, 400, `消息过长（≤${AI_CONVERSATION_MAX_CONTENT} 字符）`);
+        const userMessageId = insertConversationMessage(conversationId, 'user', content, {
+          model: String(parsed.model || '').slice(0, 160),
+          status,
+        });
+        let assistantMessageId = null;
+        if (status === 'complete' && String(parsed.assistantContent || '').trim()) {
+          assistantMessageId = insertConversationMessage(conversationId, 'assistant', String(parsed.assistantContent).slice(0, AI_CONVERSATION_MAX_CONTENT), {
+            model: String(parsed.model || '').slice(0, 160),
+            status: 'complete',
+          });
+        }
+        const messages = conversationMessages(conversationId);
+        return json(res, 200, {
+          ok: status === 'complete',
+          conversation: conversationView(getConversation(conversationId)),
+          message: messages.find((m) => m.id === assistantMessageId) || messages.find((m) => m.id === userMessageId),
+          messages,
+          model: String(parsed.model || '').slice(0, 160),
+        });
+      }
       const conversationMessageMatch = pathname.match(/^\/api\/ai\/conversations\/([^/]+)\/(messages|stream)$/);
       if (conversationMessageMatch && req.method === 'POST') {
         const conversationId = conversationMessageMatch[1];
@@ -3055,6 +3099,20 @@ const server = http.createServer(async (req, res) => {
         const ref = parsed.agentId ?? parsed.agent_id ?? parsed.role ?? parsed.agentRole ?? 'xingce-explainer';
         const agent = getAgent(typeof ref === 'number' || /^\d+$/.test(String(ref)) ? Number(ref) : String(ref));
         if (!agent) return err(res, 404, 'AI 不存在');
+
+        if (normalizeKeyStorageMode(agent.key_storage_mode, String(agent.api_key || '').trim() ? 'server' : 'browser') === 'browser') {
+          return json(res, 200, {
+            ok: false,
+            browserOnly: true,
+            clientCall: {
+              kind: 'conversation',
+              conversationId,
+              agentId: agent.id,
+              content,
+              stream: streamConversation,
+            },
+          });
+        }
 
         const userMessageId = insertConversationMessage(conversationId, 'user', content, { status: 'pending' });
         const requestScope = requestAbortSignal(req, res);
@@ -3143,6 +3201,13 @@ const server = http.createServer(async (req, res) => {
         if (!messages.some((m) => ['user', 'assistant'].includes(String(m?.role || '').toLowerCase()) && m.content != null && m.content !== '')) {
           return err(res, 400, '缺少对话内容');
         }
+        if (normalizeKeyStorageMode(agent.key_storage_mode, String(agent.api_key || '').trim() ? 'server' : 'browser') === 'browser') {
+          return json(res, 200, {
+            ok: false,
+            browserOnly: true,
+            clientCall: { kind: 'chat', agentId: agent.id, messages, stream: wantsStream },
+          });
+        }
         const requestScope = requestAbortSignal(req, res);
         if (wantsStream) sseStart(res);
         try {
@@ -3176,10 +3241,22 @@ const server = http.createServer(async (req, res) => {
         const id = Number(pathname.split('/')[4]);
         const a = getAgent(id);
         if (!a) return err(res, 404, 'AI 不存在');
+        a.key_storage_mode = normalizeKeyStorageMode(a.key_storage_mode, String(a.api_key || '').trim() ? 'server' : 'browser');
         const k = String(a.api_key || '');
-        if (k) {
+        if (a.key_storage_mode === 'server' && k) {
           a.api_key_masked = k.length > 8 ? `${k.slice(0, 4)}…${k.slice(-4)}` : '****';
-          a.api_key = '';
+        }
+        // GET 永远不返回原始 Key；浏览器模式还会把异常残留完全隐藏。
+        a.api_key = '';
+        if (a.key_storage_mode !== 'server') a.api_key_masked = '';
+        if (url.searchParams.get('includeSkill') === '1') {
+          try {
+            const resolved = resolveSkill(a.skill);
+            a.skill_text = resolved.text || '';
+            a.skill_loaded = resolved.loaded || null;
+          } catch {
+            a.skill_text = '';
+          }
         }
         return json(res, 200, a);
       }
@@ -3254,6 +3331,13 @@ const server = http.createServer(async (req, res) => {
         const agent = getAgent(id);
         if (!agent) return err(res, 404, 'AI 不存在');
         const userContent = content || '（测试）请用一句话介绍你的职责，并说明你准备好了。';
+        if (normalizeKeyStorageMode(agent.key_storage_mode, String(agent.api_key || '').trim() ? 'server' : 'browser') === 'browser') {
+          return json(res, 200, {
+            ok: false,
+            browserOnly: true,
+            clientCall: { kind: 'chat', agentId: id, messages: [{ role: 'user', content: userContent }] },
+          });
+        }
         const r = await callAgent(agent, userContent);
         if (r.error) return json(res, 200, { ok: false, error: r.error });
         return json(res, 200, { ok: true, content: r.content });
@@ -3321,7 +3405,8 @@ const server = http.createServer(async (req, res) => {
         const { questionId, selected, correct, questionData } = JSON.parse(body || '{}');
         if (questionId == null && !(questionData && (questionData.content || questionData.prompt))) return err(res, 400, '缺少 questionId');
         const agent = getAgent('xingce-explainer');
-        if (!agent || !agent.api_key) {
+        const browserOnly = agent && normalizeKeyStorageMode(agent.key_storage_mode, String(agent.api_key || '').trim() ? 'server' : 'browser') === 'browser';
+        if (!agent || (!agent.api_key && !browserOnly)) {
           return json(res, 200, {
             notice: '行测解析 AI 尚未配置 api_key，请到「AI 设置」页面填写后重试。',
             content: null,
@@ -3498,6 +3583,17 @@ const server = http.createServer(async (req, res) => {
         }
         // （材料查询与图表图片提取已提前到图片处理之前）
         const prompt = `【所属模块】${q.chapter || '未分类'}\n【题型】${isJudgment ? '判断' : isMulti ? '多选' : '单选'}${hasImage ? '（含图片/图形）' : '（纯文字）'}${materialText ? '（材料题）' : ''}\n【题干】${q.content}\n${opts.length ? `【选项】\n${opts.map((o, i) => `${LETTERS[i]}、${o}`).join('\n')}\n` : ''}${materialText ? `【材料】\n${materialText}\n` : ''}【正确答案】${correctText}\n【用户选择】${selectedText}${correct != null ? `\n【用户回答${correct ? '正确' : '错误'}】` : ''}${imageNote ? `\n${imageNote}\n（以上是 AI 识图转写的图片内容，请基于它解答图形/图表部分）` : ''}${hasImage && !imageNote ? '\n【注意】本题含图片但识图失败，你无法查看图片。请如实说明并提示用户结合题目原图，切勿猜测图形内容。' : ''}\n\n请解析这道题，输出以下结构：\n1. 【考点】本题考察的核心知识点\n2. 【正确项解析】为什么选这个答案\n3. 【错误项排除】其他选项为什么错（判断题/材料题可省略）\n4. 【解题技巧】这类题目的通用解法与避坑提醒\n语言简洁，面向备考学生。`;
+        if (browserOnly) {
+          return json(res, 200, {
+            clientCall: {
+              kind: 'explain',
+              agentId: agent.id,
+              messages: [{ role: 'user', content: prompt }],
+              imageNote: imageNote || null,
+              commit: { questionId, selected: selKey, correct: corKey, imageNote: imageNote || null },
+            },
+          });
+        }
         const r = await callAgent(agent, prompt);
         if (r.error) return json(res, 200, { notice: r.error, content: null });
         // 落库缓存：同一题同一作答下次秒回，不重复花钱
@@ -3506,6 +3602,24 @@ const server = http.createServer(async (req, res) => {
             .run(questionId, selKey, corKey, r.content, imageNote || null, agent.model || '');
         } catch {}
         return json(res, 200, { notice: '解析完成', content: r.content, imageNote: imageNote || null, cached: false });
+      }
+      // 浏览器直连模式的解析结果回写：只保存结果缓存，不接收或处理 API Key。
+      if (pathname === '/api/ai/explain/client-result' && req.method === 'POST') {
+        let body = '';
+        for await (const chunk of req) body += chunk;
+        const parsed = JSON.parse(body || '{}');
+        const questionId = parsed.questionId;
+        const content = String(parsed.content || '').trim();
+        if (questionId == null || !content) return err(res, 400, '缺少解析结果');
+        const selected = String(parsed.selected || 'none');
+        const correct = String(parsed.correct || 'none');
+        const imageNote = String(parsed.imageNote || '').slice(0, 8000);
+        const model = String(parsed.model || '').slice(0, 160);
+        try {
+          pdb.prepare('INSERT OR REPLACE INTO ai_explains (question_id, selected, correct, content, image_note, model) VALUES (?, ?, ?, ?, ?, ?)')
+            .run(questionId, selected, correct, content, imageNote || null, model);
+        } catch {}
+        return json(res, 200, { ok: true });
       }
       // ---- 识图导入作答（OCR）：拍照/上传答案图片 → 视觉AI 识别成文字 ----
       if (pathname === '/api/ai/ocr' && req.method === 'POST') {
@@ -3523,6 +3637,20 @@ const server = http.createServer(async (req, res) => {
         const model = (imgAgent && imgAgent.model) || 'glm-4v-flash';
         const key = (imgAgent && imgAgent.api_key) || agent.api_key;
         const baseUrl = (imgAgent && imgAgent.base_url) || agent.base_url;
+        const browserOnly = imgAgent && normalizeKeyStorageMode(imgAgent.key_storage_mode, String(imgAgent.api_key || '').trim() ? 'server' : 'browser') === 'browser';
+        if (browserOnly) {
+          const ocrPrompt = '这是一张考生手写或打印的答题纸图片。请逐字准确转写图片中的全部作答文字（包括标点、数字、段落换行）。要求：不要修改、润色或添加任何内容；只输出识别出的原文。';
+          return json(res, 200, {
+            clientCall: {
+              kind: 'vision',
+              agentId: imgAgent.id,
+              messages: [{ role: 'user', content: [
+                { type: 'text', text: ocrPrompt },
+                { type: 'image_url', image_url: { url: image } },
+              ] }],
+            },
+          });
+        }
         if (!key || !baseUrl) {
           return json(res, 200, { notice: '识图 AI 尚未配置 api_key，请到「AI 设置」页面填写后重试。', text: null });
         }
@@ -3545,6 +3673,20 @@ const server = http.createServer(async (req, res) => {
         if (!agent) return json(res, 200, { notice: '题目解析员未启用，请到 AI 设置页配置', text: null });
         const hasImage = String(image || '').startsWith('data:image');
         if (!hasImage && !String(text || '').trim()) return err(res, 400, '缺少文本或图片');
+        const browserOnly = normalizeKeyStorageMode(agent.key_storage_mode, String(agent.api_key || '').trim() ? 'server' : 'browser') === 'browser';
+        if (browserOnly) {
+          const structurePrompt = '请把输入的考公题目整理为 JSON：{"questions":[{"prompt":"题干原文","material":"材料","options":["A. 选项1","B. 选项2"],"answer":"答案字母或判断结果","analysis":"解析","category":"题目分类"}]}。忠实原文，不编造；只输出 JSON，不要 Markdown。';
+          const content = hasImage
+            ? [{ type: 'text', text: structurePrompt }, { type: 'image_url', image_url: { url: image } }]
+            : `${structurePrompt}\n\n原始题目文本：\n${String(text)}`;
+          return json(res, 200, {
+            clientCall: {
+              kind: 'structure',
+              agentId: agent.id,
+              messages: [{ role: 'user', content }],
+            },
+          });
+        }
         if (hasImage) {
           const m = String(image).match(/^data:(image\/[a-z+]+);base64,(.+)$/i);
           if (!m) return err(res, 400, '图片格式不正确');
@@ -3615,7 +3757,8 @@ const server = http.createServer(async (req, res) => {
         for await (const chunk of req) body += chunk;
         const { questionId, content, material } = JSON.parse(body || '{}');
         const agent = getAgent('shenlun-grader');
-        if (!agent || !agent.api_key) {
+        const browserOnly = agent && normalizeKeyStorageMode(agent.key_storage_mode, String(agent.api_key || '').trim() ? 'server' : 'browser') === 'browser';
+        if (!agent || (!agent.api_key && !browserOnly)) {
           return json(res, 200, {
             notice: '申论/综应批改 AI 尚未配置 api_key，请到「AI 设置」页面填写后重试。',
             score: null,
@@ -3665,6 +3808,17 @@ const server = http.createServer(async (req, res) => {
           }
         }
         const prompt = `你是一名严格的申论/综应阅卷官，请按要点采分制批改。\n【题目要求】${q ? q.content : '(未提供题目)'}${fullScore ? `\n【满分】${fullScore} 分` : ''}${materialText ? `\n【给定材料】\n${materialText.slice(0, 8000)}\n` : '\n【注意】本题给定材料暂未关联，请基于题目要求评卷，并在结论中说明这一点。'}【用户作答】${content || '(空)'}\n\n评分必须按【满分】口径（禁止按 100 分制），先定档再给分（小题一档顶格 90%、大作文一类文顶格 80%）；不得编造考试统计、考场数据或题目出处；无官方评分细则时不得声称"漏某点固定扣 X 分"。\n\n请严格按以下格式输出批改结果：\n【总分】X/${fullScore || '满分'} 分\n【评分明细】逐条列出得分点与失分点（结合给定材料核对要点）\n【优点】2-3 条\n【不足】2-3 条，指出与题目要求及材料要点的差距\n【修改建议】具体、可操作的改进意见（针对内容、结构、语言）\n【参考思路】简要给出本题的答题思路/要点方向\n语言专业、中肯，面向备考学生。`;
+        if (browserOnly) {
+          return json(res, 200, {
+            clientCall: {
+              kind: 'grade',
+              agentId: agent.id,
+              messages: [{ role: 'user', content: prompt }],
+              fullScore,
+              commit: { questionId, answer: content, fullScore },
+            },
+          });
+        }
         const r = await callAgent(agent, prompt);
         // 批改记录落库（主观题 is_correct=NULL，计入做题数但不计正确率）
         if (questionId && q) {
@@ -3679,6 +3833,27 @@ const server = http.createServer(async (req, res) => {
         }
         if (r.error) return json(res, 200, { notice: r.error, score: null });
         return json(res, 200, { notice: '批改完成', score: null, result: r.content, fullScore });
+      }
+      // 浏览器直连模式的批改结果回写：保留原有练习记录能力，服务端不碰 Key。
+      if (pathname === '/api/ai/grade/client-result' && req.method === 'POST') {
+        let body = '';
+        for await (const chunk of req) body += chunk;
+        const parsed = JSON.parse(body || '{}');
+        const questionId = parsed.questionId;
+        const result = String(parsed.result || '').trim();
+        if (!result) return err(res, 400, '缺少批改结果');
+        const q = questionId ? qQuestionById.get(questionId) : null;
+        if (questionId && q) {
+          try {
+            const p = db.prepare('SELECT subjectName FROM papers WHERE id = ?').get(q.paperId);
+            const cg = classifySource(questionId);
+            pdb.prepare(`
+              INSERT INTO practice_records (question_id, paper_id, subject, chapter, question_type, selected, is_correct, cost_ms, group_key, sub_key)
+              VALUES (?, ?, ?, ?, ?, ?, NULL, 0, ?, ?)
+            `).run(questionId, q.paperId, p?.subjectName || '', q.chapter || '', q.type, JSON.stringify({ answer: String(parsed.answer || '') }), cg.groupKey, cg.subKey);
+          } catch {}
+        }
+        return json(res, 200, { ok: true });
       }
       return err(res, 404, '接口不存在');
     } catch (e) {

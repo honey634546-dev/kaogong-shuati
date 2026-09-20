@@ -83,14 +83,10 @@ const el = (tag, cls, html) => {
   return e;
 };
 
-const api = async (path, opts) => {
-  // 本地模式（无服务器）：window.__LOCAL_API_PROMISE__ 由 local-bootstrap.js 设置，
-  // 就绪后所有请求走本地路由（IndexedDB + sql.js 题库 + AI 直调）
-  if (window.__LOCAL_API_PROMISE__) {
-    const handler = await window.__LOCAL_API_PROMISE__;
-    return handler(path, opts);
-  }
-  const res = await fetch(path, opts);
+const rawApi = async (path, opts = {}) => {
+  const headers = new Headers(opts.headers || {});
+  const requestOpts = { ...opts, headers, cache: 'no-store' };
+  const res = await fetch(path, requestOpts);
   if (!res.ok) {
     let msg = `请求失败 (${res.status})`;
     let detail = {};
@@ -101,6 +97,22 @@ const api = async (path, opts) => {
     throw error;
   }
   return res.json();
+};
+
+const api = async (path, opts = {}) => {
+  // 本地模式（无服务器）：window.__LOCAL_API_PROMISE__ 由 local-bootstrap.js 设置，
+  // 就绪后所有请求走本地路由（IndexedDB + sql.js 题库 + AI 直调）。
+  if (window.__LOCAL_API_PROMISE__) {
+    const handler = await window.__LOCAL_API_PROMISE__;
+    return handler(path, opts);
+  }
+  // Web 服务模式下，浏览器内存 Key 的 AI 调用由 ai-browser.js 直接发往网关；
+  // 非 AI 请求和显式“存服务端”智能体继续走本地服务端 API。
+  if (window.__AI_BROWSER_KEYS__?.handle) {
+    const handled = await window.__AI_BROWSER_KEYS__.handle(path, opts, rawApi);
+    if (handled !== null && handled !== undefined) return handled;
+  }
+  return rawApi(path, opts);
 };
 
 const SUBJECT_ICONS = {
@@ -5248,7 +5260,7 @@ async function renderAiSettings() {
   view.innerHTML = '';
   view.appendChild(el('div', 'card', `
     <h3>${ico('sparkles', 17)} AI 智能体（独立配置）</h3>
-    <div class="li-sub">每个 AI 可独立修改 prompt、skill、API Key、URL、模型。<br>修改后<b>立即生效</b>，无需重启；prompt/skill 变更自动保存历史版本，并<b>自动清空题目解析缓存</b>（否则已解析过的题会直接返回旧结果）。</div>
+    <div class="li-sub">每个 AI 可独立修改 prompt、skill、API Key、URL、模型。<br>Key 默认只保存在当前浏览器页面内存中，刷新或关闭页面即清除；如需让本机服务端代为请求，必须主动选择「存服务端」。修改后<b>立即生效</b>，无需重启；prompt/skill 变更自动保存历史版本，并<b>自动清空题目解析缓存</b>。</div>
     <div style="margin-top:10px">
       <button class="btn" data-clear-explain-cache>${ico('trash', 14)} 清除解析缓存（重新解析所有已缓存题目）</button>
     </div>
@@ -5342,8 +5354,21 @@ async function renderAiSettings() {
       <label class="field-label">Base URL（OpenAI 兼容）</label>
       <input class="field" data-f="base_url" value="${esc(a.base_url)}" placeholder="https://api.deepseek.com/v1">
       `}
+      <label class="field-label">Key 保存位置</label>
+      <select class="field" data-f="key_storage_mode" data-key-storage-mode>
+        <option value="browser" ${(a.key_storage_mode || 'browser') === 'browser' ? 'selected' : ''}>仅浏览器保存（默认，刷新即清除）</option>
+        ${window.__LOCAL_MODE__ ? '' : `<option value="server" ${(a.key_storage_mode || 'browser') === 'server' ? 'selected' : ''}>存服务端（写入本机 ai-config.db）</option>`}
+      </select>
+      <div class="li-sub" data-key-storage-hint style="margin-top:5px;color:${(a.key_storage_mode || 'browser') === 'server' ? 'var(--red)' : 'var(--muted)'}">
+        ${(a.key_storage_mode || 'browser') === 'server'
+          ? '注意：服务端会持久化 Key，并代为请求模型服务。'
+          : '安全默认：Key 不进入服务端配置库；浏览器会直接请求模型网关，网关需允许 CORS。'}
+      </div>
       <label class="field-label">API Key</label>
-      <input class="field" data-f="api_key" type="password" value="${esc(a.api_key)}" placeholder="${a.api_key_masked || '未配置'}">
+      <div style="display:flex;gap:8px;align-items:center">
+        <input class="field" data-f="api_key" type="password" value="${esc(a.api_key)}" placeholder="${(a.key_storage_mode || 'browser') === 'browser' && (window.__AI_BROWSER_KEYS__ || window.__LOCAL_AI_KEYS__)?.has(a.id) ? '本次页面已设置' : (a.api_key_masked || ((a.key_storage_mode || 'browser') === 'browser' ? '仅本次页面保存' : '未配置'))}" autocomplete="off" spellcheck="false">
+        <button class="btn btn-ghost" type="button" data-ai-clear-browser-key style="white-space:nowrap;${(a.key_storage_mode || 'browser') === 'browser' ? '' : 'display:none'}">清除本页 Key</button>
+      </div>
       <label class="field-label">模型</label>
       <input class="field" data-f="model" value="${esc(a.model)}" placeholder="deepseek-chat">
       <button class="btn btn-ghost" data-ai-models style="margin-top:8px">${ico('list', 14)} 获取该 URL 的全部模型</button>
@@ -5419,6 +5444,28 @@ async function renderAiSettings() {
       };
       syncBaseCustom();
     }
+    const storagePick = card.querySelector('[data-key-storage-mode]');
+    const storageHint = card.querySelector('[data-key-storage-hint]');
+    const clearBrowserKey = card.querySelector('[data-ai-clear-browser-key]');
+    const syncStorageHint = () => {
+      const isBrowser = storagePick?.value !== 'server';
+      if (storageHint) {
+        storageHint.textContent = isBrowser
+          ? '安全默认：Key 不进入服务端配置库；浏览器会直接请求模型网关，网关需允许 CORS。'
+          : '注意：服务端会持久化 Key，并代为请求模型服务。';
+        storageHint.style.color = isBrowser ? 'var(--muted)' : 'var(--red)';
+      }
+      if (clearBrowserKey) clearBrowserKey.style.display = isBrowser ? '' : 'none';
+    };
+    if (storagePick) storagePick.onchange = syncStorageHint;
+    if (clearBrowserKey) clearBrowserKey.onclick = async () => {
+      const keyStore = window.__AI_BROWSER_KEYS__ || window.__LOCAL_AI_KEYS__;
+      if (keyStore?.clear) keyStore.clear(agentId);
+      const input = card.querySelector('[data-f="api_key"]');
+      if (input) input.value = '';
+      toast('已清除当前页面中的 Key（未修改服务端配置）');
+      syncStorageHint();
+    };
     // 收集字段：下拉模式选了「自定义…」时，用对应自定义输入框的值作为最终值
     const collectFields = () => {
       const fields = {};
@@ -5474,11 +5521,16 @@ async function renderAiSettings() {
       const baseUrl = ((baseEl && baseEl.value === '__custom__')
         ? (card.querySelector('[data-f="base_url-custom"]') || { value: '' }).value
         : (baseEl ? baseEl.value : '')).trim();
-      const apiKey = card.querySelector('[data-f="api_key"]').value.trim();
+      const storageMode = card.querySelector('[data-f="key_storage_mode"]')?.value || a.key_storage_mode || 'browser';
+      const typedKey = card.querySelector('[data-f="api_key"]').value.trim();
+      const keyStore = window.__AI_BROWSER_KEYS__ || window.__LOCAL_AI_KEYS__;
+      const apiKey = typedKey || (storageMode === 'browser' ? (keyStore?.keyFor?.(agentId) || '') : '');
       const modelInput = card.querySelector('[data-f="model"]');
       box.style.display = 'block';
       box.innerHTML = `${ico('hourglass', 14)} 正在获取模型列表…`;
-      const r = await fetchModelList(baseUrl, apiKey);
+      const r = storageMode === 'browser' && window.__AI_BROWSER_KEYS__?.listModels
+        ? await window.__AI_BROWSER_KEYS__.listModels(baseUrl, apiKey)
+        : await fetchModelList(baseUrl, apiKey);
       if (r.error) {
         box.innerHTML = `<div style="color:var(--red)">${ico('xCircle', 15)} ${esc(r.error)}</div>`;
         return;
