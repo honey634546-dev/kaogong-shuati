@@ -2987,7 +2987,10 @@ function renderAiTutorMessages(card, state) {
       body.textContent = String(message.content || '');
       row.append(label, body);
       if (message.status && message.status !== 'complete') {
-        const status = el('div', 'ai-tutor-message-status', message.status === 'cancelled' ? '已停止' : (message.status === 'failed' ? '发送失败' : '处理中…'));
+        const statusText = message.status === 'cancelled'
+          ? '已停止'
+          : (message.status === 'failed' ? (message.error || '发送失败') : '处理中…');
+        const status = el('div', 'ai-tutor-message-status', statusText);
         row.appendChild(status);
       }
       list.appendChild(row);
@@ -3082,6 +3085,7 @@ function mountAiTutor(view, q, token) {
     } catch (e) {
       if (!live()) return;
       pending.status = e?.name === 'AbortError' || controller.signal.aborted ? 'cancelled' : 'failed';
+      pending.error = pending.status === 'cancelled' ? '' : (e?.message || '发送失败');
       setStatus(pending.status === 'cancelled' ? '已停止' : (e.message || '发送失败'), pending.status !== 'cancelled');
       renderAiTutorMessages(card, state);
     } finally {

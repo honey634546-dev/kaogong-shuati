@@ -65,8 +65,27 @@
     const cached = agents.get(key);
     // 配置字段可以热更新；短期复用只用于一次调用链，设置保存后会覆盖。
     const suffix = `?includeSkill=1&_=${Date.now()}`;
-    const result = await rawJson(`/api/ai/agents/${encodeURIComponent(key)}${suffix}`);
-    return rememberAgent(result || cached);
+    // 练习页为了让接口语义稳定，会传智能体 role（如 xingce-explainer）；
+    // 服务端的单体配置接口则按数字 id 提供。先从脱敏列表解析 role，再读取
+    // 详情，避免把 role 直接拼到只接受数字的 URL 后得到 HTML/404。
+    let numericId = key;
+    if (!/^\d+$/.test(key)) {
+      const list = await rawJson(`/api/ai/agents?_=${Date.now()}`);
+      const found = (Array.isArray(list) ? list : []).find((agent) =>
+        idOf(agent?.role) === key || idOf(agent?.id) === key
+      );
+      if (!found || found.id == null) {
+        const error = new Error(`AI 不存在：${key}`);
+        error.status = 404;
+        throw error;
+      }
+      numericId = idOf(found.id);
+    }
+    const result = await rawJson(`/api/ai/agents/${encodeURIComponent(numericId)}${suffix}`);
+    const remembered = rememberAgent(result || cached);
+    // 保留 role 别名只用于当前页面内的查找，不保存任何 Key。
+    if (remembered && key !== numericId) agents.set(key, { ...remembered, api_key: '' });
+    return remembered;
   }
 
   function extractBody(opts) {

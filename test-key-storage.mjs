@@ -142,6 +142,7 @@ test('browser client keeps the key out of server requests and persistent storage
     clearTimeout,
     console,
     fetch: async (url, options = {}) => {
+      if (String(url) === '/api/ai/agents' || String(url).startsWith('/api/ai/agents?_=')) return response([agent]);
       if (String(url).startsWith('/api/ai/agents/1?')) return response(agent);
       if (String(url) === 'https://gateway.example/v1/chat/completions') {
         providerRequests.push(options);
@@ -178,6 +179,13 @@ test('browser client keeps the key out of server requests and persistent storage
   assert.equal(providerRequests.length, 1);
   assert.equal(providerRequests[0].headers.Authorization, 'Bearer browser-memory-secret');
   assert.equal(JSON.stringify(serverRequests), JSON.stringify(serverRequests).replace('browser-memory-secret', ''));
+
+  const roleChat = await browser.handle('/api/ai/chat', {
+    method: 'POST',
+    body: JSON.stringify({ role: 'test-agent', content: '按角色查找也应成功' }),
+  }, rawFetch);
+  assert.equal(roleChat.content, '浏览器直连成功');
+  assert.equal(providerRequests.length, 2);
 
   browser.clear(1);
   assert.equal(browser.has(1), false);
