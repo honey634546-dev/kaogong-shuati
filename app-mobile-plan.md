@@ -91,7 +91,7 @@
 
 ### 阶段 5：Capacitor 打包 + 真机验收 — ✅ 完成（2026-08-11，真机验收待用户）
 - [x] 新建 `app/` 目录：npm init + 安装 @capacitor/core@6.2.1、@capacitor/android@6.2.1、@capacitor/cli@6.2.1（仅此目录）
-- [x] 配置：App 名「没钱考什么公」、webDir 直连 public/、androidScheme https；构建环境复用已有 **JDK 17.0.1 + Android SDK**（platforms/android-36.1 + build-tools/36.0.0），**无需安装 Android Studio**
+- [x] 配置：App 名「刷题」、webDir 直连 public/、androidScheme https；构建环境复用已有 **JDK 17.0.1 + Android SDK**（platforms/android-36.1 + build-tools/36.0.0），**无需安装 Android Studio**
 - [x] Gradle 构建：官方源超时 → 腾讯云镜像 + bin 包 + networkTimeout 600s；AAPT 资源冲突（foo.db 与 foo.db.gz 视为重复）→ assets 只保留 `tiku_app.db` + `images.db`
 - [x] **真机首测发现并修复**：App 报"下载题库失败 HTTP 404 (tiku_app.db.gz)"——根因：**Android aapt2 打包 assets 时会自动解压 `.gz` 文件并去掉扩展名**（tiku_app.db.gz → tiku_app.db 明文），App 请求 .gz 必然 404。修复：local-bootstrap.js 改为请求未压缩 `./app-assets/tiku_app.db`（130MB SQLite 明文，APK 内由 zip 压缩到 ~36MB），浏览器联调同步改（fetchBuf 对非 .gz 不 gunzip，既有 images.db 路径已覆盖）；重新构建并验证 APK 内文件与前端请求路径一致
 - [x] **真机二测发现并修复**：App 报"Failed to fetch dynamically imported module: https://localhost/local-api.mjs"——两个根因：① **Android WebView 的 MimeTypeMap 不认识 `.mjs`**，ES module 加载被拒；② `local-api.mjs`/`local-handler.mjs` import `../lib/local-queries.mjs`，**lib/ 在 public/ 外未打进 APK**。修复：public/ 全部 `.mjs` 改名为 `.js`（含 lib 依赖副本：新建 `public/lib/` 放 local-queries.js/fenbi-tree.js/xingce-chapter-map.js，浏览器专用 .js 版与 node 原版 lib/*.mjs 并存），所有 import 引用同步更新（local-bootstrap.js 4 处动态 import、test-idb.html、test-local-api.mjs、app.js 注释）；验证：node --check 全过 + 3 个离线测试全绿 + npm test 全绿 + APK 内确认 lib/ 与 .js 模块存在且无 .mjs

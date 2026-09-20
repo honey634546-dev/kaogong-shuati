@@ -1,6 +1,6 @@
 # 考公刷题（行测/申论/事业编）—— Web + Android + AI 解析
 
-> 中文名：**没钱考什么公** · 关键词：考公 / 公考 / 刷题 / 行测 / 申论 / 事业单位 / kaogong / gongkao / xingce / shenlun
+> 中文名：**刷题** · 关键词：考公 / 公考 / 刷题 / 行测 / 申论 / 事业单位 / kaogong / gongkao / xingce / shenlun
 >
 > ⭐ 如果它帮到了你，欢迎点 **Star** / **Watch** —— 这会让更多备考的人在 GitHub 上搜到它。
 

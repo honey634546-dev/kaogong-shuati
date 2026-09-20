@@ -56,7 +56,7 @@ after(async () => {
 
 test('WP1 空数据目录可以启动并进入自定义题库', async () => {
   const html = await (await fetch(`${base}/`)).text();
-  assert.match(html, /<title>没钱考什么公/);
+  assert.match(html, /<title>刷题/);
   assert.deepEqual(await api('/api/subjects'), []);
   assert.deepEqual((await api('/api/custom/batches')).batches, []);
 });

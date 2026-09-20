@@ -563,7 +563,7 @@ function toast(msg) {
 async function renderHome() {
   closeImageOverlays(); // 回到首页时关闭任何残留的全屏层
   setView('home');
-  $('#app-title').textContent = '没钱考什么公';
+  $('#app-title').textContent = '刷题';
   const view = $('#view');
   view.innerHTML = '<div class="spinner"></div>';
   try {
