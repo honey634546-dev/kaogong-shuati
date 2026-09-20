@@ -106,11 +106,26 @@ pdb.exec(`
     archived INTEGER DEFAULT 0,     -- 错题本移除标记（保留历史供统计/进度 AI）
     group_key TEXT DEFAULT '',      -- 错题本/收藏/笔记 来源归档：大模块（科目名 / 'custom' / ''=未分类）
     sub_key TEXT DEFAULT '',        -- 子模块（章节树大模块；自定义题不分子模块）
+    submission_key TEXT DEFAULT '', -- 客户端提交幂等键（同一作答重复发送只保留一条）
+    attempt_id TEXT DEFAULT '',     -- 一次刷题会话
+    question_uid TEXT DEFAULT '',   -- 作答时题目的逻辑身份
+    question_revision INTEGER DEFAULT 1,
+    question_snapshot TEXT DEFAULT '',
+    answer_snapshot TEXT DEFAULT '',
     created_at TEXT DEFAULT (datetime('now','localtime'))
   );
   CREATE INDEX IF NOT EXISTS idx_records_subject ON practice_records(subject, chapter);
   CREATE INDEX IF NOT EXISTS idx_records_correct ON practice_records(is_correct);
   CREATE INDEX IF NOT EXISTS idx_records_time ON practice_records(created_at);
+  CREATE TABLE IF NOT EXISTS practice_attempts (
+    attempt_id TEXT PRIMARY KEY,
+    subject TEXT DEFAULT '',
+    mode TEXT DEFAULT '',
+    question_count INTEGER DEFAULT 0,
+    started_at TEXT DEFAULT (datetime('now','localtime')),
+    completed_at TEXT DEFAULT NULL,
+    completed INTEGER DEFAULT 0
+  );
   CREATE TABLE IF NOT EXISTS question_categories (
     question_id TEXT NOT NULL,
     subject TEXT NOT NULL DEFAULT '',
@@ -138,8 +153,17 @@ try { pdb.exec('ALTER TABLE practice_records ADD COLUMN archived INTEGER DEFAULT
 // 兼容已存在的库：补充来源归档列（group_key/sub_key，旧数据靠"一键整理"回填）
 try { pdb.exec("ALTER TABLE practice_records ADD COLUMN group_key TEXT DEFAULT ''"); } catch {}
 try { pdb.exec("ALTER TABLE practice_records ADD COLUMN sub_key TEXT DEFAULT ''"); } catch {}
+// WP3：作答提交幂等键、会话和不可变题面/答案快照。
+try { pdb.exec("ALTER TABLE practice_records ADD COLUMN submission_key TEXT DEFAULT ''"); } catch {}
+try { pdb.exec("ALTER TABLE practice_records ADD COLUMN attempt_id TEXT DEFAULT ''"); } catch {}
+try { pdb.exec("ALTER TABLE practice_records ADD COLUMN question_uid TEXT DEFAULT ''"); } catch {}
+try { pdb.exec('ALTER TABLE practice_records ADD COLUMN question_revision INTEGER DEFAULT 1'); } catch {}
+try { pdb.exec("ALTER TABLE practice_records ADD COLUMN question_snapshot TEXT DEFAULT ''"); } catch {}
+try { pdb.exec("ALTER TABLE practice_records ADD COLUMN answer_snapshot TEXT DEFAULT ''"); } catch {}
 // 来源归档索引（旧库补列后才可建，故单独执行）
 try { pdb.exec('CREATE INDEX IF NOT EXISTS idx_records_group ON practice_records(group_key, sub_key, archived, is_correct)'); } catch {}
+try { pdb.exec('CREATE INDEX IF NOT EXISTS idx_records_attempt ON practice_records(attempt_id, question_id)'); } catch {}
+try { pdb.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_records_submission_key ON practice_records(submission_key) WHERE submission_key IS NOT NULL AND submission_key <> ''"); } catch {}
 // 兼容已存在的库：custom_batches 补充 subject 列（旧库无此列）
 try { pdb.exec('ALTER TABLE custom_batches ADD COLUMN subject TEXT DEFAULT \'自定义\''); } catch {}
 // ---- 自定义题库（2026-08-15）：批次 = 一次导入的文件；题目字段与粉笔 questions 同构 ----
@@ -516,6 +540,95 @@ function planCustomImport(questions, { batchId = 0, conflictMode = 'reject' } = 
     items.push({ kind: 'revision', index, question: revised, existing });
   }
   return { items, unchanged, conflicts, targetBatch: target || null };
+}
+
+function jsonArray(value) {
+  if (Array.isArray(value)) return value;
+  try { return JSON.parse(value || '[]'); } catch { return []; }
+}
+
+/** 解析作答时锁定的题目版本；后续改题/换版本不影响历史记录。 */
+function resolveRecordQuestion(questionId) {
+  const id = String(questionId ?? '');
+  if (id.startsWith('custom-')) {
+    const cid = Number(id.replace(/^custom-/, ''));
+    const row = pdb.prepare('SELECT * FROM custom_questions WHERE id = ?').get(cid);
+    if (!row) return null;
+    const question = {
+      content: row.prompt || '',
+      material: row.material || '',
+      options: row.options || '[]',
+      answer: row.answer || '',
+      answerIndex: row.answer_index == null ? -1 : Number(row.answer_index),
+      analysis: row.analysis || '',
+      type: 'custom',
+    };
+    return {
+      question,
+      questionUid: row.question_uid || '',
+      revision: Number(row.revision) > 0 ? Number(row.revision) : 1,
+      snapshot: {
+        questionId: id,
+        questionUid: row.question_uid || '',
+        revision: Number(row.revision) > 0 ? Number(row.revision) : 1,
+        type: 'custom',
+        prompt: row.prompt || '',
+        material: row.material || '',
+        options: jsonArray(row.options),
+        answer: row.answer || '',
+        answerIndex: row.answer_index == null ? -1 : Number(row.answer_index),
+        answerStatus: row.answer_status || 'unconfirmed',
+        analysis: row.analysis || '',
+        category: row.category || '',
+        images: parseImages(row.images),
+      },
+    };
+  }
+  const q = qQuestionById.get(questionId);
+  if (!q) return null;
+  const revision = Number(q.revision) > 0 ? Number(q.revision) : 1;
+  return {
+    question: q,
+    questionUid: q.questionUid || q.questionId || id,
+    revision,
+    snapshot: {
+      questionId: q.questionId || id,
+      questionUid: q.questionUid || q.questionId || id,
+      revision,
+      type: q.type ?? 0,
+      prompt: q.content || '',
+      contentHtml: q.contentHtml || '',
+      material: q.material || '',
+      options: jsonArray(q.options),
+      answer: q.answer || '',
+      answerIndex: q.answerIndex == null ? -1 : Number(q.answerIndex),
+      analysis: q.analysis || '',
+    },
+  };
+}
+
+function normalizeSubmissionKey(value) {
+  const key = String(value || '').trim();
+  return key.length > 0 && key.length <= 256 ? key : '';
+}
+
+function ensureAttempt(attemptId, subject, mode, questionCount) {
+  const id = String(attemptId || '').trim();
+  if (!id || id.length > 128) return;
+  pdb.prepare(`
+    INSERT INTO practice_attempts (attempt_id, subject, mode, question_count)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(attempt_id) DO UPDATE SET
+      subject = CASE WHEN excluded.subject <> '' THEN excluded.subject ELSE practice_attempts.subject END,
+      mode = CASE WHEN excluded.mode <> '' THEN excluded.mode ELSE practice_attempts.mode END,
+      question_count = CASE WHEN excluded.question_count > 0 THEN excluded.question_count ELSE practice_attempts.question_count END
+  `).run(id, String(subject || ''), String(mode || ''), Number(questionCount || 0));
+}
+
+function finishAttempt(attemptId) {
+  const id = String(attemptId || '').trim();
+  if (!id) return;
+  pdb.prepare("UPDATE practice_attempts SET completed = 1, completed_at = datetime('now','localtime') WHERE attempt_id = ?").run(id);
 }
 
 function checkAnswer(q, selected) {
@@ -2030,16 +2143,10 @@ const server = http.createServer(async (req, res) => {
         for await (const chunk of req) body += chunk;
         const { questionId, selected } = JSON.parse(body || '{}');
         if (questionId == null) return err(res, 400, '缺少 questionId');
-        let q = null;
-        if (String(questionId).startsWith('custom-')) {
-          const cid = Number(String(questionId).replace(/^custom-/, ''));
-          const r = pdb.prepare('SELECT * FROM custom_questions WHERE id = ?').get(cid);
-          if (r) q = { content: r.prompt, material: r.material || '', options: r.options, answer: r.answer || '', answerIndex: r.answer_index == null ? -1 : Number(r.answer_index), analysis: r.analysis || '', type: 'custom' };
-        } else {
-          q = qQuestionById.get(questionId);
-        }
-        if (!q) return err(res, 404, '题目不存在');
-        return json(res, 200, checkAnswer(q, selected));
+        const resolved = resolveRecordQuestion(questionId);
+        if (!resolved) return err(res, 404, '题目不存在');
+        const result = checkAnswer(resolved.question, selected);
+        return json(res, 200, { ...result, questionUid: resolved.questionUid, revision: resolved.revision });
       }
       // ---- 自定义题库（2026-08-15）：批次=一次导入的文件；题目字段与粉笔 questions 同构 ----
       // WP2 预览：只校验和计算重复/冲突，不写入数据库。
@@ -2425,65 +2532,139 @@ const server = http.createServer(async (req, res) => {
       if (pathname === '/api/custom/check' && req.method === 'POST') {
         let body = '';
         for await (const chunk of req) body += chunk;
-        const { questionId, selected, batchId, chapter } = JSON.parse(body || '{}');
+        const parsed = JSON.parse(body || '{}');
+        const { questionId, selected, batchId, chapter, attemptId } = parsed;
         const cid = Number(String(questionId || '').replace(/^custom-/, ''));
         if (!cid) return err(res, 400, '缺少 questionId');
-        const q = pdb.prepare('SELECT * FROM custom_questions WHERE id = ?').get(cid);
-        if (!q) return err(res, 404, '题目不存在');
-        const fq = {
-          content: q.prompt,
-          material: q.material || '',
-          options: q.options,
-          answer: q.answer || '',
-          answerIndex: q.answer_index == null ? -1 : Number(q.answer_index),
-          analysis: q.analysis || '',
-          type: 'custom',
-        };
-        const result = checkAnswer(fq, selected);
+        const resolved = resolveRecordQuestion(`custom-${cid}`);
+        if (!resolved) return err(res, 404, '题目不存在');
+        const result = checkAnswer(resolved.question, selected);
         const bm = pdb.prepare('SELECT name, subject FROM custom_batches WHERE id = ?').get(Number(batchId || 0));
         const ch = chapter || (bm && bm.name) || '';
         const subj = (bm && (bm.subject || '').trim()) || '自定义';
+        const submissionKey = normalizeSubmissionKey(parsed.submissionKey ?? parsed.submission_key);
+        if (submissionKey) {
+          const previous = pdb.prepare('SELECT id, question_id, selected, is_correct FROM practice_records WHERE submission_key = ?').get(submissionKey);
+          if (previous) {
+            if (String(previous.question_id) !== String(questionId) || String(previous.selected) !== JSON.stringify(selected ?? null)) {
+              return json(res, 409, { error: 'submission_key 已用于其他作答', code: 'submission_key_conflict' });
+            }
+            return json(res, 200, { ...result, id: Number(previous.id), idempotent: true });
+          }
+        }
+        ensureAttempt(attemptId, subj, 'custom', 0);
         // 自定义题归档固定归「自定义题库」（不分子模块）
         // 注意：is_correct 用 result.ok（result.correct 是正确答案索引数组，恒 truthy，直接复用会把答错记成答对）
         pdb.prepare(`
-          INSERT INTO practice_records (question_id, paper_id, subject, chapter, question_type, selected, is_correct, cost_ms, group_key, sub_key)
-          VALUES (?, NULL, ?, ?, 0, ?, ?, 0, 'custom', '')
-        `).run(questionId, subj, ch, JSON.stringify(selected ?? null), result.ok == null ? null : (result.ok ? 1 : 0));
-        return json(res, 200, result);
+          INSERT INTO practice_records
+            (question_id, paper_id, subject, chapter, question_type, selected, is_correct, cost_ms, group_key, sub_key,
+             submission_key, attempt_id, question_uid, question_revision, question_snapshot, answer_snapshot)
+          VALUES (?, NULL, ?, ?, 0, ?, ?, 0, 'custom', ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          questionId,
+          subj,
+          ch,
+          JSON.stringify(selected ?? null),
+          result.ok == null ? null : (result.ok ? 1 : 0),
+          '',
+          submissionKey,
+          String(attemptId || '').trim(),
+          resolved.questionUid,
+          resolved.revision,
+          JSON.stringify(resolved.snapshot),
+          JSON.stringify({ selected: result.selected, correct: result.correct, correctText: result.correctText, ok: result.ok }),
+        );
+        return json(res, 200, { ...result, questionUid: resolved.questionUid, revision: resolved.revision, idempotent: false });
       }
       // ---- 做题记录（practice.db，服务端跨设备同步） ----
-      // 提交一条做题记录（前端判分后自动上报）
+      // 提交一条做题记录：服务端重新判分，并以题目版本快照写入；同一 submission_key 幂等。
       if (pathname === '/api/records' && req.method === 'POST') {
         let body = '';
         for await (const chunk of req) body += chunk;
-        const { questionId, subject, chapter, type, selected, correct, costMs, paperId } = JSON.parse(body || '{}');
+        const parsed = JSON.parse(body || '{}');
+        const { questionId, subject, chapter, type, selected, correct, costMs, paperId, attemptId, attemptMode, attemptQuestionCount } = parsed;
         if (questionId == null) return err(res, 400, '缺少 questionId');
+        const selectedJson = JSON.stringify(selected ?? null);
+        const submissionKey = normalizeSubmissionKey(parsed.submissionKey ?? parsed.submission_key);
+        if (submissionKey) {
+          const previous = pdb.prepare('SELECT id, question_id, selected, is_correct, question_uid, question_revision FROM practice_records WHERE submission_key = ?').get(submissionKey);
+          if (previous) {
+            if (String(previous.question_id) !== String(questionId) || String(previous.selected) !== selectedJson) {
+              return json(res, 409, { error: 'submission_key 已用于其他作答', code: 'submission_key_conflict' });
+            }
+            return json(res, 200, {
+              ok: true,
+              id: Number(previous.id),
+              correct: previous.is_correct == null ? null : Boolean(previous.is_correct),
+              questionUid: previous.question_uid || '',
+              revision: Number(previous.question_revision) || 1,
+              idempotent: true,
+            });
+          }
+        }
+        const resolved = resolveRecordQuestion(questionId);
+        const judged = resolved ? checkAnswer(resolved.question, selected) : null;
+        const finalCorrect = judged ? judged.ok : (correct == null ? null : Boolean(correct));
+        const snapshot = resolved?.snapshot ? JSON.stringify(resolved.snapshot) : String(parsed.questionSnapshot || '');
+        const answerSnapshot = judged ? JSON.stringify({
+          selected: judged.selected,
+          correct: judged.correct,
+          correctText: judged.correctText,
+          ok: judged.ok,
+        }) : '';
+        ensureAttempt(attemptId, subject, attemptMode, attemptQuestionCount);
         // 来源归档：按题目真实来源算大模块/子模块（与错题本/收藏/笔记分组同口径），旧记录靠一键整理回填
         const cls = classifySource(questionId);
         const r = pdb.prepare(`
-          INSERT INTO practice_records (question_id, paper_id, subject, chapter, question_type, selected, is_correct, cost_ms, group_key, sub_key)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO practice_records
+            (question_id, paper_id, subject, chapter, question_type, selected, is_correct, cost_ms, group_key, sub_key,
+             submission_key, attempt_id, question_uid, question_revision, question_snapshot, answer_snapshot)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           questionId,
           paperId ?? cls.paperId ?? null,
           subject || '',
           chapter || '',
           type ?? 0,
-          JSON.stringify(selected ?? null),
-          correct == null ? null : (correct ? 1 : 0),
+          selectedJson,
+          finalCorrect == null ? null : (finalCorrect ? 1 : 0),
           costMs ?? 0,
           cls.groupKey,
           cls.subKey,
+          submissionKey,
+          String(attemptId || '').trim(),
+          resolved?.questionUid || String(parsed.questionUid || ''),
+          resolved?.revision || (Number(parsed.questionRevision) > 0 ? Number(parsed.questionRevision) : 1),
+          snapshot,
+          answerSnapshot,
         );
         // 错题自动移除：客观题累计做对 3 次（按不同日期计，避免同日多次去重口径不一致）→ 错题记录软删除（archived=1，统计历史保留）
         // 只针对行测/职测客观题（错题本收录范围），主观题（correct=null）不参与
-        if (correct === true) {
+        if (finalCorrect === true) {
           const okDays = pdb.prepare('SELECT COUNT(DISTINCT date(created_at)) n FROM practice_records WHERE question_id = ? AND is_correct = 1').get(questionId).n;
           if (okDays >= 3) {
             pdb.prepare('UPDATE practice_records SET archived = 1 WHERE question_id = ? AND is_correct = 0 AND archived = 0').run(questionId);
           }
         }
-        return json(res, 200, { ok: true, id: r.lastInsertRowid, removedFromWrong: correct === true });
+        return json(res, 200, {
+          ok: true,
+          id: Number(r.lastInsertRowid),
+          correct: finalCorrect,
+          authoritative: !!resolved,
+          questionUid: resolved?.questionUid || '',
+          revision: resolved?.revision || 1,
+          removedFromWrong: finalCorrect === true,
+          idempotent: false,
+        });
+      }
+      // 标记一次刷题会话完成；记录写入本身仍可在网络恢复后补交。
+      if (pathname === '/api/attempts/complete' && req.method === 'POST') {
+        let body = '';
+        for await (const chunk of req) body += chunk;
+        const parsed = JSON.parse(body || '{}');
+        if (!String(parsed.attemptId || '').trim()) return err(res, 400, '缺少 attemptId');
+        finishAttempt(parsed.attemptId);
+        return json(res, 200, { ok: true });
       }
       // 统计（学习进度 AI 的数据源）：总数/正确率/按章节/近7天
       // 参数: subject=真实科目(经 question_id 关联 tiku 判定); days=30|180|365 或 from+to(YYYY-MM-DD); 缺省不过滤

@@ -191,7 +191,7 @@ const modTint = (i) => MOD_TINTS[Math.abs(i) % MOD_TINTS.length];
 
 const store = {
   subjects: [],
-  state: { view: 'home', subject: null, chapter: null, mode: null, questions: [], idx: 0, results: [], answers: [], timing: null },
+  state: { view: 'home', subject: null, chapter: null, mode: null, questions: [], idx: 0, results: [], answers: [], timing: null, attemptId: null, attemptStartedAt: null },
   wrong: JSON.parse(localStorage.getItem('wrong_questions') || '[]'), // [{id, content, answer, myAnswer, subject, chapter, time}]
   fav: new Set(), // 收藏题 id（服务端跨设备同步）
   notes: new Set(), // 笔记题 id（服务端跨设备同步；做题页「查看笔记/添加笔记」状态切换）
@@ -203,6 +203,10 @@ const store = {
 
 // ---------- 答题辅助 ----------
 const LETTERS = 'ABCDEFGH';
+function newAttemptId() {
+  if (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function') return globalThis.crypto.randomUUID();
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+}
 /** 前端判分（客观题）：返回 { ok, correct:number[], valid }；valid=false 表示无标准答案 */
 function judge(q, sel) {
   const selected = (Array.isArray(sel) ? sel : [sel]).map(Number);
@@ -2309,6 +2313,9 @@ function enterQuiz(questions, subject, mode, chapter, mock, limitSec, backMode) 
   store.state.chapter = chapter ?? null;
   store.state.mock = mock ?? null;
   store.state.backMode = !!backMode;
+  store.state.attemptId = newAttemptId();
+  store.state.attemptStartedAt = Date.now();
+  store.state.attemptCompleted = false;
   stopTimer();
   startTimer(limitSec); // 组卷（mode='quiz'）传 durationMinutes×60 → 倒计时；其余正计时
   renderQuestion();
@@ -3438,7 +3445,8 @@ async function submitExam(force) {
     if (!s.answers[i]) s.answers[i] = { selected: null, correct: false, costMs: 0 };
     else s.answers[i].selected = null, s.answers[i].correct = false;
   }
-  // 批量落库 + 错题本
+  // 批量落库 + 错题本；submissionKey 使网络重试/重复点击不会生成第二条相同作答记录。
+  const writes = [];
   for (let i = 0; i < s.questions.length; i++) {
     const q = s.questions[i];
     const a = s.answers[i];
@@ -3446,18 +3454,28 @@ async function submitExam(force) {
     // 多选已选但从未点「确认选择」的题：交卷时兜底判分，避免成绩页出现「无标准答案」
     const finalCorrect = a.correct != null ? a.correct : (j.valid ? j.ok : null);
     const selSorted = a.selected ? [...a.selected].sort((x, y) => x - y) : a.selected;
-    api('/api/records', {
+    writes.push(api('/api/records', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         questionId: q.id, subject: q.subject || s.subject, chapter: q.chapter, type: q.type,
         selected: selSorted || [], correct: finalCorrect, costMs: a.costMs,
+        attemptId: s.attemptId, attemptMode: s.mode, attemptQuestionCount: s.questions.length,
+        submissionKey: `${s.attemptId}:final:${i}:${q.id}`,
+        questionUid: q.questionUid || '', questionRevision: q.revision || 1,
       }),
-    }).catch(() => {});
+    }));
     if (finalCorrect === false) {
       store.wrong.unshift({ id: q.id, content: q.content.slice(0, 60), answer: j.correct.join(','), myAnswer: a.selected ? [...a.selected].sort((x, y) => x - y).join(',') : '未答', subject: q.subject || s.subject, chapter: q.chapter, time: Date.now() });
       saveWrong();
     }
   }
+  const results = await Promise.allSettled(writes);
+  if (results.some((r) => r.status === 'rejected')) toast('部分作答记录未能保存，可保持当前页面后重试');
+  await api('/api/attempts/complete', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ attemptId: s.attemptId }),
+  }).catch(() => {});
+  s.attemptCompleted = true;
   renderReview();
 }
 /** 漏答提示弹层：未答题号 + 继续作答 / 直接交卷 */

@@ -180,7 +180,34 @@ export function createLocalHandler({ query, records, store, ai }) {
     }
 
     // ---------- 记录 / 收藏 ----------
-    if (route === 'POST /records') return records.addRecord(body);
+    if (route === 'POST /records') {
+      // 本地模式同样以题库答案为准，不信任前端传入的 correct；无法解析题目时保留旧兼容回退。
+      if (body && body.questionId != null) {
+        let q = null;
+        let questionUid = '';
+        let questionRevision = 1;
+        let questionSnapshot = '';
+        if (String(body.questionId).startsWith('custom-')) {
+          const cid = Number(String(body.questionId).replace(/^custom-/, ''));
+          const all = await store.getAll('custom_questions');
+          const r = all.find((x) => Number(x.id) === cid);
+          if (r) {
+            q = { content: r.prompt, material: r.material || '', options: r.options || [], answer: r.answer || '', answerIndex: r.answer_index ?? -1, analysis: r.analysis || '', type: 'custom' };
+            questionUid = r.question_uid || '';
+            questionRevision = Number(r.revision) > 0 ? Number(r.revision) : 1;
+            questionSnapshot = JSON.stringify({ questionId: body.questionId, questionUid, revision: questionRevision, type: 'custom', prompt: r.prompt || '', material: r.material || '', options: r.options || [], answer: r.answer || '', answerIndex: r.answer_index ?? -1, analysis: r.analysis || '' });
+          }
+        } else {
+          q = query.questionById(body.questionId);
+        }
+        if (q) {
+          const judged = checkAnswer(q, body.selected);
+          body = { ...body, correct: judged.ok, questionUid, questionRevision, questionSnapshot };
+        }
+      }
+      return records.addRecord(body);
+    }
+    if (route === 'POST /attempts/complete') return { ok: true };
     if (route === 'GET /records/stats') {
       return statsWithParams({
         subject: qs.get('subject') || undefined,
@@ -570,7 +597,20 @@ export function createLocalHandler({ query, records, store, ai }) {
       const batches = await store.getAll('custom_batches');
       const bb = batches.find((x) => Number(x.id) === Number(body.batchId || 0));
       const subject = (bb && String(bb.subject || '').trim()) || '自定义';
-      await records.addRecord({ questionId: body.questionId, subject, chapter: body.chapter || '', type: 'custom', selected: Array.isArray(body.selected) ? body.selected : (body.selected == null ? [] : [body.selected]), correct: result.ok, costMs: 0 });
+      await records.addRecord({
+        questionId: body.questionId,
+        subject,
+        chapter: body.chapter || '',
+        type: 'custom',
+        selected: Array.isArray(body.selected) ? body.selected : (body.selected == null ? [] : [body.selected]),
+        correct: result.ok,
+        costMs: 0,
+        submissionKey: body.submissionKey || body.submission_key,
+        attemptId: body.attemptId,
+        questionUid: r.question_uid || '',
+        questionRevision: r.revision || 1,
+        questionSnapshot: JSON.stringify({ questionId: body.questionId, questionUid: r.question_uid || '', revision: r.revision || 1, type: 'custom', prompt: r.prompt || '', material: r.material || '', options: r.options || [], answer: r.answer || '', answerIndex: r.answer_index ?? -1, analysis: r.analysis || '' }),
+      });
       return result;
     }
 

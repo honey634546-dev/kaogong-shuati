@@ -247,9 +247,18 @@ export function createRecordsApi(store, tiku, onChanged) {
       return new Set(rows.map((r) => String(r.question_id)));
     },
     /** 提交做题记录（与 /api/records POST 同构；同卷同题同日去重，重复则更新；写入即按题目真实来源归档） */
-    async addRecord({ questionId, subject, chapter, type, selected, correct, costMs, paperId }) {
+    async addRecord({ questionId, subject, chapter, type, selected, correct, costMs, paperId, submissionKey, attemptId, questionUid, questionRevision, questionSnapshot, answerSnapshot }) {
       if (questionId == null) throw new Error('缺少 questionId');
       const now = Date.now();
+      if (submissionKey) {
+        const sameSubmission = (await store.getAll('records')).find((r) => String(r.submission_key || '') === String(submissionKey));
+        if (sameSubmission) {
+          if (String(sameSubmission.question_id) !== String(questionId) || JSON.stringify(sameSubmission.selected ?? null) !== JSON.stringify(selected ?? null)) {
+            throw new Error('submission_key 已用于其他作答');
+          }
+          return { ok: true, id: sameSubmission.id, correct: sameSubmission.is_correct == null ? null : Boolean(sameSubmission.is_correct), idempotent: true };
+        }
+      }
       // 按本地时区（中国 UTC+8）取当天零点：UTC 零点会在上午 8 点前把记录归到前一天，
       // 导致“每天去重”失效与每日统计错位。
       const d = new Date(now);
@@ -261,7 +270,7 @@ export function createRecordsApi(store, tiku, onChanged) {
       );
       // 主观题（申论/综应，correct=null）is_correct 存 NULL（与 server 同构）：不计入错题本
       const cls = classifyLocal(store, tiku, questionId);
-      const row = { question_id: questionId, paper_id: paperId ?? cls.paperId ?? null, subject: subject || '', chapter: chapter || '', question_type: type ?? null, selected: selected ?? null, is_correct: correct == null ? null : (correct ? 1 : 0), cost_ms: costMs ?? null, group_key: cls.groupKey, sub_key: cls.subKey, created_at: now };
+      const row = { question_id: questionId, paper_id: paperId ?? cls.paperId ?? null, subject: subject || '', chapter: chapter || '', question_type: type ?? null, selected: selected ?? null, is_correct: correct == null ? null : (correct ? 1 : 0), cost_ms: costMs ?? null, group_key: cls.groupKey, sub_key: cls.subKey, submission_key: submissionKey || '', attempt_id: attemptId || '', question_uid: questionUid || '', question_revision: Number(questionRevision) > 0 ? Number(questionRevision) : 1, question_snapshot: questionSnapshot || '', answer_snapshot: answerSnapshot || '', created_at: now };
       if (existing.length) await store.deleteBy('records', 'id', existing[0].id);
       await store.put('records', row);
       // 错题自动移除：客观题累计做对 3 次（按不同日期计，与 server 口径一致）→ 删除该题错题记录，正确记录与统计保留
@@ -280,7 +289,7 @@ export function createRecordsApi(store, tiku, onChanged) {
       }
       // 提交后刷新统计快照，使首页/章节完成度立即反映本次作答（无需重启 App）
       if (onChanged) await onChanged();
-      return { ok: true };
+      return { ok: true, id: row.id, correct: correct == null ? null : Boolean(correct), idempotent: false };
     },
     /** 统计（与 /api/records/stats 同构，聚合本地记录） */
     async stats() {

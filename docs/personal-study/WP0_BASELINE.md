@@ -61,8 +61,20 @@
 
 当前 `npm test`（已纳入 WP1/WP2 专项测试）：`78 passed / 29 failed`。新增专项测试全部通过；29 个失败仍是仓库未提供的 `app-assets/tiku_app.db`、未安装的 `playwright-core`/Edge E2E 和依赖真实题库内容的组卷测试。
 
+## WP3 变更后结果
+
+- `practice_records` 增加提交幂等键、attempt、题目逻辑身份/revision、题面快照和答案快照；新增 `practice_attempts` 会话表。
+- `/api/check`、`/api/custom/check` 和 `/api/records` 对可解析题目统一按题库答案重判；重复 `submission_key` 幂等，冲突返回 409。
+- Web 交卷为每道题生成稳定的 attempt/submission key，等待批量写入完成后标记 attempt 完成；本地 handler 保持同构。
+
+命令：`npm run test:wp3`
+
+- 结果：`1 passed / 0 failed`。
+- 合并回归（WP1/WP2/材料分组/解析/本地 handler）：`66 passed / 0 failed`；其中 `test-organize.mjs` 未纳入该命令，因当前 checkout 缺少真实题库 fixture。
+- 当前 `npm test`：`79 passed / 29 failed`。新增 WP3 专项通过；剩余失败仍集中在缺失 `app-assets/tiku_app.db`、未安装的 `playwright-core`/Edge E2E 和依赖真实题库内容的组卷测试。
+
 ## 已知限制与下一步
 
 1. WP1 还没有迁移向导；旧版数据目录通过兼容路径读取，正式迁移和备份恢复放在 WP7。
-2. 自定义题库已经补上稳定逻辑身份和导入版本；手工编辑目前仍是原地更新，作答快照和提交幂等要在 WP3 完成。
+2. 自定义题库已经补上稳定逻辑身份和导入版本；WP3 已补上作答快照和提交幂等，手工编辑仍是原地更新，正式编辑历史与备份恢复放在 WP7。
 3. 现有 `npm test` 仍混合环境无关单测、题库 fixture 测试和浏览器 E2E；WP0 后续应拆成可重复的 fixture/mocked/integration/browser 层，不删除原有行为断言。

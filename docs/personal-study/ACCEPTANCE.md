@@ -20,11 +20,19 @@
 - [x] Web/App 导入协议保留逻辑身份字段；浏览器导入入口已接受 CSV，服务端和本地 handler 共享规范化规则。
 - [x] `npm run test:wp2` 加 `node --test test-custom-bank-group.mjs test-wp1-empty-start.mjs`：17 passed / 0 failed。
 
+## WP3 当前证据
+
+- [x] 已知题目由服务端/本地 handler 重新判分，不采信客户端传入的 `correct`；未知旧题仍保留兼容回退并明确返回 `authoritative`。
+- [x] 作答记录保存题面、答案、逻辑题目 ID 和 revision 快照；后续自定义题建立新 revision 不改变旧作答记录。
+- [x] `submission_key` 重试幂等；同一 key 换题或换答案返回冲突，不静默追加第二条记录。
+- [x] `practice_attempts` 记录一次刷题会话及完成状态；交卷等待记录写入后再标记完成，统计以服务端记录为准。
+- [x] `npm run test:wp3`：1 passed / 0 failed；WP1/WP2/材料分组/本地 handler 合并回归：27 passed / 0 failed。
+
 ## 后续 P0
 
 - [ ] 题目、材料、选项、答案、解析和图片可导入前预览与修正。
 - [ ] 单选、多选、判断和主观题的作答与判分口径明确。
-- [ ] 题目稳定 ID、版本、作答快照和提交幂等性通过测试。
+- [x] 题目稳定 ID、版本、作答快照和提交幂等性通过 WP3 专项测试；跨历史完整题库的浏览器验收仍待 WP8。
 - [ ] AI 配置支持自定义地址、Key、模型名、流式/视觉能力和超时。
 - [ ] AI 侧栏能携带当前题目、当前作答和必要材料，支持多轮、停止、恢复和切题隔离。
 - [ ] 错题、收藏、笔记、历史作答和会话可查看、导出和恢复。
