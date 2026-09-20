@@ -552,6 +552,56 @@ h1, h2, h3, .hs-num, .stat-card .num { font-family: inherit; font-variant-numeri
 .ab-title svg, .card h3 svg, .mat-head svg, .li-tip svg, .result-banner svg, .sheet-head svg { vertical-align: -2.5px; margin-right: 4px; }
 #app-title svg { vertical-align: -3px; margin-right: 5px; }
 
+/* AI/解析富文本：统一处理 Markdown、公式、长段落和结构化输出。 */
+.rt-content { line-height: 1.82; word-break: break-word; overflow-wrap: anywhere; white-space: normal; }
+.rt-content > :first-child { margin-top: 0; }
+.rt-content > :last-child { margin-bottom: 0; }
+.rt-content p { margin: .48em 0; }
+.rt-content strong { color: var(--text); font-weight: 800; }
+.rt-content em { color: var(--text-2); }
+.rt-content del { color: var(--text-3); }
+.rt-content a { color: var(--primary); text-decoration: underline; text-underline-offset: 2px; }
+.rt-heading { color: var(--primary); font-size: 1.05em; line-height: 1.45; margin: .8em 0 .35em; }
+.rt-heading:first-child { margin-top: 0; }
+.rt-section-heading { display: flex; align-items: baseline; gap: 8px; margin: .9em 0 .28em; color: var(--primary); font-size: 1em; line-height: 1.5; }
+.rt-section-heading:first-child { margin-top: 0; }
+.rt-section-heading > span { flex: 0 0 auto; border-left: 3px solid var(--primary); padding-left: 8px; font-weight: 800; }
+.rt-section-heading > strong { color: var(--text); font-weight: 700; }
+.rt-list { margin: .4em 0 .65em; padding-left: 1.55em; }
+.rt-list li { margin: .25em 0; padding-left: .2em; }
+.rt-quote { margin: .65em 0; padding: .45em .8em; border-left: 3px solid var(--primary); color: var(--text-2); background: var(--bg-soft); border-radius: 0 8px 8px 0; }
+.rt-quote .rt-content { line-height: 1.7; }
+.rt-rule { border: 0; border-top: 1px solid var(--border); margin: 1em 0; }
+.rt-inline-code { padding: .12em .35em; border-radius: 5px; background: var(--bg-soft); border: 1px solid var(--border); color: var(--primary); font: .9em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.rt-code-block { position: relative; overflow-x: auto; margin: .7em 0; padding: 11px 12px; border-radius: 9px; background: var(--bg); border: 1px solid var(--border); color: var(--text); font: 12.5px/1.65 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre; }
+.rt-code-block code { font: inherit; }
+.rt-code-lang { position: absolute; top: 5px; right: 8px; color: var(--text-3); font: 10px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.rt-table-wrap { width: 100%; overflow-x: auto; margin: .7em 0; border: 1px solid var(--border); border-radius: 9px; }
+.rt-table { width: 100%; min-width: 380px; border-collapse: collapse; font-size: .94em; line-height: 1.6; }
+.rt-table th, .rt-table td { padding: 7px 9px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+.rt-table th { background: var(--bg-soft); color: var(--text-2); font-weight: 800; white-space: nowrap; }
+.rt-table tr:last-child td { border-bottom: 0; }
+.rt-math-inline { display: inline-block; max-width: 100%; padding: 0 .12em; color: var(--text); font: 1.04em/1.2 "Cambria Math", "STIX Two Math", "Latin Modern Math", "Times New Roman", serif; vertical-align: -.08em; white-space: nowrap; }
+.rt-math-block { display: block; max-width: 100%; overflow-x: auto; margin: .75em 0; padding: .7em .9em; border: 1px solid color-mix(in srgb, var(--primary) 20%, var(--border)); border-radius: 9px; background: color-mix(in srgb, var(--primary-soft) 45%, var(--card)); color: var(--text); text-align: center; font: 1.12em/1.45 "Cambria Math", "STIX Two Math", "Latin Modern Math", "Times New Roman", serif; white-space: nowrap; }
+.rt-inline-content { display: inline; line-height: inherit; white-space: normal; }
+.rt-inline-content > p { display: inline; margin: 0; }
+.rt-inline-content > .rt-math-block { display: inline-block; margin: 0 .15em; padding: .22em .4em; vertical-align: middle; }
+.opt-body > .rt-inline-content, .pv-opt > span:last-child > .rt-inline-content, .qd-opt > span:last-child > .rt-inline-content { display: inline; }
+.rt-frac { display: inline-flex; flex-direction: column; justify-content: center; vertical-align: middle; margin: 0 .14em; text-align: center; line-height: 1.05; }
+.rt-frac > span:first-child { padding: 0 .2em .12em; border-bottom: 1px solid currentColor; }
+.rt-frac > span:last-child { padding: .12em .2em 0; }
+.rt-root { display: inline-flex; align-items: flex-start; vertical-align: middle; }
+.rt-root-symbol { font-size: 1.35em; line-height: .9; }
+.rt-root-body { border-top: 1px solid currentColor; padding: .04em .12em 0; }
+.rt-overline { border-top: 1px solid currentColor; padding-top: .04em; }
+.rt-math-text { font-family: inherit; }
+.rt-math-space { display: inline-block; width: .45em; }
+.ab-body > .rt-content, .ai-test-result > .rt-content, .qd-content > .rt-content, .pv-fold > .rt-content { width: 100%; }
+.ai-tutor-message-body { white-space: normal; }
+.ai-tutor-message-body .rt-content { line-height: 1.68; }
+.q-content > .rt-content { white-space: normal; }
+.mat-body > .rt-content, .iv-html > .rt-content { white-space: normal; }
+
 /* 随题 AI 辅导：桌面端固定右侧，窄屏回到题目下方；历史消息不与其它题目串联 */
 .ai-tutor-card {
   background: var(--card-2);
@@ -579,7 +629,7 @@ h1, h2, h3, .hs-num, .stat-card .num { font-family: inherit; font-variant-numeri
 .ai-tutor-message.failed { border-color: color-mix(in srgb, var(--red) 42%, var(--border)); }
 .ai-tutor-message.cancelled { opacity: .62; }
 .ai-tutor-message-label { color: var(--text-3); font-size: 10px; font-weight: 700; margin-bottom: 2px; }
-.ai-tutor-message-body { white-space: pre-wrap; }
+.ai-tutor-message-body { white-space: normal; }
 .ai-tutor-message-status { color: var(--text-3); font-size: 10px; margin-top: 3px; }
 .ai-tutor-compose { border-top: 1px solid var(--border); padding-top: 10px; }
 .ai-tutor-input { width: 100%; min-height: 64px; box-sizing: border-box; resize: vertical; border: 1px solid var(--border-strong); border-radius: 10px; padding: 8px 10px; background: var(--card); color: var(--text); font: inherit; font-size: 13px; line-height: 1.55; outline: none; }
@@ -900,7 +950,7 @@ textarea.field { resize: vertical; line-height: 1.6; }
   0%, 55% { box-shadow: 0 0 0 3px var(--primary); }
   100% { box-shadow: none; }
 }
-.answer-box .ab-body { white-space: pre-wrap; font-size: 13.5px; line-height: 1.8; }
+.answer-box .ab-body { white-space: normal; font-size: 13.5px; line-height: 1.8; }
 .answer-box .ab-cache { color: var(--text-3); font-size: 11px; margin-left: 4px; }
 .answer-box .ab-err { color: var(--red); }
 .sheet-hint { margin-left: auto; color: var(--text-3); font-size: 11.5px; }

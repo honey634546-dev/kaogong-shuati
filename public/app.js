@@ -397,7 +397,7 @@ function showAnswerFeedback(q, j, selected) {
       <span class="cmp-item"><i class="cmp-dot mine"></i>我的答案 <b>${selected.map((x) => LETTERS[x]).join('') || '—'}</b></span>
       <span class="cmp-item"><i class="cmp-dot right"></i>正确答案 <b>${j.correct.map((x) => LETTERS[x]).join('') || '见解析'}</b></span>
     </div>
-    ${q.analysis ? `<div class="ab-body" style="margin:0 0 10px">${esc(q.analysis)}</div>` : ''}
+    ${q.analysis ? `<div class="ab-body" style="margin:0 0 10px">${renderStudyText(q.analysis)}</div>` : ''}
     <div class="action-row" style="margin-bottom:6px">
       <button class="btn btn-ghost ${store.notes.has(String(fbqid)) ? 'on' : ''}" data-note-btn="${String(fbqid)}" id="btn-note-fb">${ico('pen', 14)} ${noteBtnLabel(fbqid)}</button>
       <button class="btn btn-ghost" id="btn-ai-explain-fb">${ico('sparkles', 15)} AI 解析本题（考点/错项/技巧）</button>
@@ -946,7 +946,7 @@ async function renderCustomBatch(id, skipNav) {
           ${(customSplitMode || customGroupMode) ? `<label class="cb-check-wrap"><input type="checkbox" class="cq-check" data-id="${q.id}"><span></span></label>` : ''}
           <div class="cq-no">${i + 1}</div>
           <div class="cq-main">
-            <div class="cq-prompt">${esc(q.prompt || '（空题干）')}${(q.images || []).length ? ' <span class="tag">图</span>' : ''}</div>
+            <div class="cq-prompt">${renderStudyInline(q.prompt || '（空题干）')}${(q.images || []).length ? ' <span class="tag">图</span>' : ''}</div>
             <div class="cq-meta">
               ${q.material ? '<span class="tag">材料</span>' : ''}
               ${q.material_id ? `<span class="tag tag-chapter">材料组 · ${groupCounts.get(q.material_id) || 1} 题</span>` : ''}
@@ -1757,14 +1757,14 @@ function previewCardHtml(q, i) {
           <button class="mini danger" data-pv="del">${ico('trash', 13)} 删除</button>
         </span>
       </div>
-      <div class="pv-prompt">${esc(q.prompt || '（空题干）')}</div>
+      <div class="pv-prompt">${renderStudyText(q.prompt || '（空题干）')}</div>
       ${(q.images || []).length ? `<div class="pv-imgs">${q.images.map((im) => `<div class="pv-img"><img src="${im.dataUrl}" alt="题目图片"><span class="pv-img-role">${im.role === 'material' ? '材料图' : '题干图'}</span></div>`).join('')}</div>` : ''}
-      ${q.material ? `<details class="pv-details"><summary>材料</summary><div class="pv-fold">${esc(q.material)}</div></details>` : ''}
+      ${q.material ? `<details class="pv-details"><summary>材料</summary><div class="pv-fold">${renderStudyText(q.material, true)}</div></details>` : ''}
       ${opts.length ? `<div class="pv-opts">${opts.map((o, oi) => {
         const p = customOptionParts(o, oi);
-        return `<div class="pv-opt${ansLetters.has(p.letter) ? ' ok' : ''}"><span class="pv-opt-letter">${p.letter || '•'}</span><span>${esc(customOptionDisplayText(p.text))}</span></div>`;
+        return `<div class="pv-opt${ansLetters.has(p.letter) ? ' ok' : ''}"><span class="pv-opt-letter">${p.letter || '•'}</span><span>${renderStudyInline(customOptionDisplayText(p.text))}</span></div>`;
       }).join('')}</div>` : ''}
-      ${q.analysis ? `<details class="pv-details"><summary>解析</summary><div class="pv-fold">${esc(q.analysis)}</div></details>` : '<div class="pv-no-fold">无解析</div>'}
+      ${q.analysis ? `<details class="pv-details"><summary>解析</summary><div class="pv-fold">${renderStudyText(q.analysis)}</div></details>` : '<div class="pv-no-fold">无解析</div>'}
     </div>`;
 }
 
@@ -1966,13 +1966,13 @@ function customQuestionDetail(q, batchName) {
     ${q.material_id ? `<div class="cfg-tip" style="margin-bottom:8px">${ico('layers', 13)} 该题属于材料组：刷题时同组题共用一份材料，显示「第 n/m 小问」</div>` : ''}
     <div class="qd-block">
       <div class="qd-label">题干</div>
-      <div class="qd-content">${esc(q.prompt || '（空题干）')}</div>
+      <div class="qd-content">${renderStudyText(q.prompt || '（空题干）')}</div>
     </div>
     ${(q.images || []).length ? `<div class="qd-block"><div class="qd-label">图片</div><div class="qd-content">${q.images.map((im) => `<img src="${im.dataUrl}" alt="题目图片" style="max-width:100%;border-radius:8px;margin:4px 0;display:block"><span class="muted" style="font-size:12px">${im.role === 'material' ? '材料图' : '题干图'}</span>`).join('')}</div></div>` : ''}
-    ${q.material ? `<div class="qd-block"><div class="qd-label">材料</div><div class="qd-content">${esc(q.material)}</div></div>` : ''}
+    ${q.material ? `<div class="qd-block"><div class="qd-label">材料</div><div class="qd-content">${renderStudyText(q.material, true)}</div></div>` : ''}
     ${opts.length ? `<div class="qd-block"><div class="qd-label">选项</div><div class="qd-opts">${opts.map((o, oi) => {
       const p = customOptionParts(o, oi);
-      return `<div class="qd-opt${ansLetters.has(p.letter) ? ' ok' : ''}"><span class="qd-opt-letter">${p.letter || '•'}</span><span>${esc(customOptionDisplayText(p.text))}</span></div>`;
+      return `<div class="qd-opt${ansLetters.has(p.letter) ? ' ok' : ''}"><span class="qd-opt-letter">${p.letter || '•'}</span><span>${renderStudyInline(customOptionDisplayText(p.text))}</span></div>`;
     }).join('')}</div></div>` : ''}
     <div class="qd-block">
       <div class="qd-label">答案</div>
@@ -1980,7 +1980,7 @@ function customQuestionDetail(q, batchName) {
     </div>
     <div class="qd-block">
       <div class="qd-label">解析</div>
-      <div class="qd-content">${q.analysis ? esc(q.analysis) : '<span class="muted">无解析</span>'}</div>
+      <div class="qd-content">${q.analysis ? renderStudyText(q.analysis) : '<span class="muted">无解析</span>'}</div>
     </div>
     <div class="sheet-actions">
       <button class="btn btn-primary" id="qd-edit" style="flex:0 0 auto">${ico('pen', 15)} 编辑</button>
@@ -2621,7 +2621,7 @@ function renderPaperPreview(res) {
         ${res.questions.map((q, i) => `
           <div class="pp-q-item" data-i="${i}">
             <span class="pp-q-num">${i + 1}</span>
-            <span class="pp-q-text">${esc(stripHtml(q.contentHtml || q.content || ''))}</span>
+            <span class="pp-q-text">${renderStudyInline(stripHtml(q.contentHtml || q.content || ''))}</span>
             <span class="pp-q-tags">
               ${q.groupTotal > 1 ? `<span class="tag tag-chapter">材料 ${q.groupIndex + 1}/${q.groupTotal}</span>` : ''}
               <span class="tag tag-chapter">${esc(q.module || q.chapter || '')}</span>
@@ -2648,21 +2648,23 @@ function paperQSheet(q) {
   const ans = String(q.answer || '').trim();
   const isMulti = ans.startsWith('[') || (/^[\d,\s]+$/.test(ans) && ans.includes(','));
   const opts = (q.options && q.options.length) ? q.options : [];
+  const contentHtml = sanitizeHtml(q.contentHtml);
+  const hasContentHtml = /<[a-z][^>]*>/i.test(contentHtml);
   const sel = new Set(ans.split(',').map((s) => s.trim()).filter(Boolean).map((s) => parseInt(s, 10)));
   const optHtml = opts.map((o, oi) => {
     const ohtml = sanitizeHtml(o);
     const hasHtml = /<[a-z][^>]*>/i.test(ohtml);
-    return `<div class="opt-row ${sel.has(oi + 1) ? 'on' : ''}"><span class="opt-key">${LETTERS[oi] || oi + 1}</span><span class="opt-body">${hasHtml ? fixImgLoading(ohtml) : esc(o.replace(/<[^>]+>/g, '').trim())}</span></div>`;
+    return `<div class="opt-row ${sel.has(oi + 1) ? 'on' : ''}"><span class="opt-key">${LETTERS[oi] || oi + 1}</span><span class="opt-body">${hasHtml ? fixImgLoading(ohtml) : renderStudyInline(o.replace(/<[^>]+>/g, '').trim())}</span></div>`;
   }).join('');
   overlay.innerHTML = `
     <div class="sheet">
       <div class="sheet-head"><b>题目预览</b><button class="sheet-close">✕</button></div>
       <div style="font-size:13px;line-height:1.9;max-height:70vh;overflow:auto">
-        <div class="q-content">${sanitizeHtml(q.contentHtml) || esc(q.content || '')}</div>
-        ${q.material ? `<div class="material-box"><div class="mat-body" style="display:block">${fixImgLoading(sanitizeHtml(q.material))}</div></div>` : ''}
+        <div class="q-content">${hasContentHtml ? fixImgLoading(contentHtml) : renderStudyText(q.content || q.contentHtml || '')}</div>
+        ${q.material ? `<div class="material-box"><div class="mat-body" style="display:block">${renderStudyText(q.material, true)}</div></div>` : ''}
         ${opts.length ? `<div style="margin-top:12px">${optHtml}</div>` : ''}
         <div class="ab-title" style="margin-top:14px">${ico('checkCircle', 14)} 参考答案</div>
-        <div style="font-size:13.5px;line-height:1.8">${isMulti ? '多选' : '单选'}：${sel.size ? [...sel].map((s) => LETTERS[s - 1]).join('、') : esc(ans)}${q.answerDetail ? `<div style="margin-top:8px;color:var(--text-2)">${sanitizeHtml(q.answerDetail)}</div>` : ''}</div>
+        <div style="font-size:13.5px;line-height:1.8">${isMulti ? '多选' : '单选'}：${sel.size ? [...sel].map((s) => LETTERS[s - 1]).join('、') : esc(ans)}${q.answerDetail ? `<div style="margin-top:8px;color:var(--text-2)">${renderStudyText(q.answerDetail, true)}</div>` : ''}</div>
       </div>
     </div>
   `;
@@ -2687,13 +2689,29 @@ function sanitizeHtml(h) {
                    .replace(/&#(\d+);/g, (m, d) => String.fromCharCode(parseInt(d, 10)));
   return decoded.replace(/javascript:|vbscript:|data:text\/html/gi, '');
 }
+// AI、官方解析和自定义题目文本统一走安全的富文本渲染；只有明确的
+// contentHtml/materialHtml 才保留受限 HTML（主要是题图和材料图）。
+function renderStudyText(value, allowHtml = false) {
+  const text = String(value ?? '');
+  if (!text.trim()) return '';
+  if (allowHtml && /<[a-z][^>]*>/i.test(text)) return fixImgLoading(sanitizeHtml(text));
+  if (typeof window.renderRichText === 'function') return window.renderRichText(text);
+  return `<div class="rt-content">${esc(text).replace(/\n/g, '<br>')}</div>`;
+}
+function renderStudyInline(value, allowHtml = false) {
+  const text = String(value ?? '');
+  if (!text.trim()) return '';
+  if (allowHtml && /<[a-z][^>]*>/i.test(text)) return fixImgLoading(sanitizeHtml(text));
+  if (typeof window.renderRichText === 'function') return window.renderRichText(text, { inline: true });
+  return esc(text).replace(/\n/g, '<br>');
+}
 // 渲染题目内容：优先 contentHtml（含图片/公式），否则纯文本
 function renderContent(el, q) {
   const html = sanitizeHtml(q.contentHtml);
   if (html && /<[a-z][^>]*>/i.test(html)) {
     el.innerHTML = fixImgLoading(html);
   } else {
-    el.textContent = q.content || '';
+    el.innerHTML = renderStudyText(q.content || '');
   }
   markWideImages(el); // 宽表格图加可放大角标（markWideImages 幂等）
 }
@@ -2874,7 +2892,7 @@ function openMaterialFull(html, title) {
   overlay.innerHTML = `
     <div class="sheet sheet-wide iv-material-sheet">
       <div class="sheet-head"><b>${ico('fileText', 16)} ${esc(title || '材料全文')}</b><button class="sheet-close">✕</button></div>
-      <div class="iv-html">${fixImgLoading(sanitizeHtml(html))}</div>
+      <div class="iv-html">${renderStudyText(html, true)}</div>
       <div class="iv-material-foot">${ico('move', 13)} 点击材料中的图片可放大查看</div>
     </div>`;
   document.body.appendChild(overlay);
@@ -2984,7 +3002,7 @@ function renderAiTutorMessages(card, state) {
       const row = el('div', `ai-tutor-message ${message.role === 'user' ? 'user' : 'assistant'}${message.status && message.status !== 'complete' ? ` ${message.status}` : ''}`);
       const label = el('div', 'ai-tutor-message-label', message.role === 'user' ? '我' : 'AI');
       const body = el('div', 'ai-tutor-message-body');
-      body.textContent = String(message.content || '');
+      body.innerHTML = renderStudyText(message.content || '');
       row.append(label, body);
       if (message.status && message.status !== 'complete') {
         const statusText = message.status === 'cancelled'
@@ -3224,7 +3242,7 @@ function renderQuestion() {
   // 材料题组：显示材料（material HTML）+ 小问标记
   // 默认展开（材料题需边看边算），状态栏显示字数/图片数，头部可收起，支持全屏查看 + 点图放大
   if (q.material || q.materialHtml) {
-    const matHtml = fixImgLoading(sanitizeHtml(q.materialHtml || q.material));
+    const matHtml = renderStudyText(q.materialHtml || q.material, true);
     const textLen = stripHtml(q.material).replace(/\s+/g, '').length;
     const imgCount = (matHtml.match(/<img\b/gi) || []).length;
     // 纯图表材料（文字很少）直接标"图表材料"，避免出现"0 字"这种奇怪的文案
@@ -3262,12 +3280,12 @@ function renderQuestion() {
     api(`/api/ai/material?paperId=${q.paperId || ''}`).then((m) => {
       if (m.text) {
         status.textContent = `（点击展开 · ${m.text.length} 字）`;
-        body.textContent = m.text;
+        body.innerHTML = renderStudyText(m.text);
       } else {
         status.textContent = '（暂无材料）';
-        body.textContent = m.notice || '材料未提取';
+        body.innerHTML = renderStudyText(m.notice || '材料未提取');
       }
-    }).catch((e) => { status.textContent = '（加载失败）'; body.textContent = e.message; });
+    }).catch((e) => { status.textContent = '（加载失败）'; body.innerHTML = renderStudyText(e.message); });
   }
 
   if (isEssay) {
@@ -3387,7 +3405,7 @@ function renderQuestion() {
           body: JSON.stringify({ questionId: q.id, content: text }),
         });
         if (r.result) {
-          resultBox.innerHTML = `<div class="ab-title">${ico('sparkles', 15)} AI 批改结果</div>${r.fullScore ? `<div style="font-size:13px;color:#8a8f98;margin:4px 0 8px">本题满分 ${esc(r.fullScore)} 分 · 批改分数请以此口径核对</div>` : ''}<div style="white-space:pre-wrap;font-size:14px;line-height:1.9">${esc(r.result)}</div>`;
+          resultBox.innerHTML = `<div class="ab-title">${ico('sparkles', 15)} AI 批改结果</div>${r.fullScore ? `<div style="font-size:13px;color:#8a8f98;margin:4px 0 8px">本题满分 ${esc(r.fullScore)} 分 · 批改分数请以此口径核对</div>` : ''}${renderStudyText(r.result)}`;
         } else {
           resultBox.innerHTML = `<div class="ab-title" style="color:var(--red)">${ico('alert', 15)} ${esc(r.notice || '批改失败')}</div>`;
         }
@@ -3424,7 +3442,7 @@ function renderQuestion() {
       box.id = 'inline-explain';
       box.innerHTML = `
         <div class="ab-title">${ico('book', 16)} 解析</div>
-        ${q.analysis ? `<div class="ab-body" style="margin:0 0 10px">${esc(q.analysis)}</div>` : '<div class="ab-body" style="margin:0 0 10px;color:var(--muted)">本题暂无官方解析，可用上方「AI 批改」获取评分与讲解。</div>'}
+        ${q.analysis ? `<div class="ab-body" style="margin:0 0 10px">${renderStudyText(q.analysis)}</div>` : '<div class="ab-body" style="margin:0 0 10px;color:var(--muted)">本题暂无官方解析，可用上方「AI 批改」获取评分与讲解。</div>'}
         <button class="btn btn-ghost btn-block" style="margin-bottom:6px" id="btn-ai-explain">${ico('sparkles', 15)} AI 解析本题（解析考点/错项/技巧）</button>
         <div id="ai-explain-result" style="display:none"></div>
       `;
@@ -3451,7 +3469,7 @@ function renderQuestion() {
     // 自定义题：图形选项（AI 无法转写只剩字母）显示占位，避免与真实单字母选项混淆
     const optText = q.type === 'custom' ? customOptionDisplayText(rawText) : rawText;
     const hasHtml = /<[a-z][^>]*>/i.test(optHtml);
-    b.innerHTML = `<span class="opt-key">${LETTERS[i] || i + 1}</span><span class="opt-body">${hasHtml ? fixImgLoading(optHtml) : esc(optText)}</span>`;
+    b.innerHTML = `<span class="opt-key">${LETTERS[i] || i + 1}</span><span class="opt-body">${hasHtml ? fixImgLoading(optHtml) : renderStudyInline(optText)}</span>`;
     if (prevAnswer && prevAnswer.includes(i)) b.classList.add('selected');
     if ((s.answers[s.idx]?.excluded || []).includes(i)) b.classList.add('excluded');
     b.onclick = () => {
@@ -3568,7 +3586,7 @@ function renderQuestion() {
         <span class="cmp-item"><i class="cmp-dot mine"></i>我的答案 <b>${mySel || '—'}</b></span>
         <span class="cmp-item"><i class="cmp-dot right"></i>正确答案 <b>${rightSel}</b></span>
       </div>
-      ${q.analysis ? `<div class="ab-body" style="margin:0 0 10px">${esc(q.analysis)}</div>` : ''}
+      ${q.analysis ? `<div class="ab-body" style="margin:0 0 10px">${renderStudyText(q.analysis)}</div>` : ''}
       <button class="btn btn-ghost btn-block" style="margin-bottom:6px" id="btn-ai-explain">${ico('sparkles', 15)} AI 解析本题（考点/错项/技巧）</button>
       <div id="ai-explain-result" style="display:none"></div>
     `;
@@ -3654,7 +3672,7 @@ function submitAnswer(q, selected, optWrap, opts, isMulti) {
     view.insertBefore(banner, actions);
     // 解析框：答案对照 + AI 解析按钮
     const box = el('div', 'answer-box');
-    box.innerHTML = `<div class="ab-title">${ico('book', 16)} 解析</div>${q.analysis ? `<div class="ab-body" style="margin:8px 0">${esc(q.analysis)}</div>` : ''}${r.correctText?.length ? '正确答案内容：' + r.correctText.map((t) => esc(t)).join(' | ') : ''}
+    box.innerHTML = `<div class="ab-title">${ico('book', 16)} 解析</div>${q.analysis ? `<div class="ab-body" style="margin:8px 0">${renderStudyText(q.analysis)}</div>` : ''}${r.correctText?.length ? '正确答案内容：' + r.correctText.map((t) => esc(t)).join(' | ') : ''}
       <button class="btn btn-ghost btn-block" style="margin-top:10px" id="btn-ai-explain">${ico('sparkles', 15)} AI 解析本题（解析考点/错项/技巧）</button>
       <div id="ai-explain-result" style="margin-top:8px;display:none"></div>`;
     view.insertBefore(box, actions);
@@ -3837,7 +3855,7 @@ function renderReview() {
         // 自定义题：图形选项（AI 无法转写只剩字母）显示占位
         const txt = q.type === 'custom' ? customOptionDisplayText(rawTxt) : rawTxt;
         const hasHtml = /<[a-z][^>]*>/i.test(optHtml);
-        b.innerHTML = `<span class="opt-key">${LETTERS[oi]}</span><span class="opt-body">${hasHtml ? fixImgLoading(optHtml) : esc(txt)}</span>`;
+        b.innerHTML = `<span class="opt-key">${LETTERS[oi]}</span><span class="opt-body">${hasHtml ? fixImgLoading(optHtml) : renderStudyInline(txt)}</span>`;
         if (correctSet.has(oi)) b.classList.add('correct');
         else if (a.selected && a.selected.includes(oi)) b.classList.add('wrong');
         b.style.pointerEvents = 'none';
@@ -3849,7 +3867,7 @@ function renderReview() {
     if (q.analysis) {
       const oa = el('div', 'answer-box');
       oa.style.marginTop = '10px';
-      oa.innerHTML = `<div class="ab-title">${ico('book', 16)} 解析</div><div class="ab-body">${esc(q.analysis)}</div>`;
+      oa.innerHTML = `<div class="ab-title">${ico('book', 16)} 解析</div><div class="ab-body">${renderStudyText(q.analysis)}</div>`;
       card.appendChild(oa);
     }
     const rowBtns = el('div', 'action-row');
@@ -3983,7 +4001,7 @@ async function explainAllReview(cards, btn) {
         body: JSON.stringify({ questionId: q.id, selected: a.selected, correct: a.correct }),
       }).catch((e) => ({ notice: e.message }));
       if (r.content) {
-        box.innerHTML = `<div class="ab-title">${ico('sparkles', 15)} AI 解析${r.cached ? '<span class="ab-cache">（缓存）</span>' : ''}</div><div class="ab-body">${esc(r.content)}</div>`;
+        box.innerHTML = `<div class="ab-title">${ico('sparkles', 15)} AI 解析${r.cached ? '<span class="ab-cache">（缓存）</span>' : ''}</div><div class="ab-body">${renderStudyText(r.content)}</div>`;
       } else {
         box.innerHTML = `<div class="ab-title ab-err">${ico('alert', 15)} ${esc(r.notice || '解析失败')}</div>`;
       }
@@ -4019,7 +4037,7 @@ async function explainReview(q, selected, correct, box, btn) {
         return b;
       })()),
     }).catch((e) => ({ notice: e.message }));
-    if (r.content) box.innerHTML = `<div class="ab-title">${ico('sparkles', 15)} AI 解析${r.cached ? ' <span style="color:var(--muted);font-size:11px">（缓存）</span>' : ''}</div><div style="white-space:pre-wrap;font-size:13.5px;line-height:1.8">${esc(r.content)}</div>`;
+    if (r.content) box.innerHTML = `<div class="ab-title">${ico('sparkles', 15)} AI 解析${r.cached ? ' <span style="color:var(--muted);font-size:11px">（缓存）</span>' : ''}</div>${renderStudyText(r.content)}`;
     else box.innerHTML = `<div class="ab-title" style="color:var(--red)">${ico('alert', 15)} ${esc(r.notice || r.error || '解析失败')}</div>`;
     btn.disabled = false;
     btn.innerHTML = `${ico('sparkles', 15)} AI 解析本题`;
@@ -4398,9 +4416,9 @@ async function explainQuestion(q, selected, correct, box) {  const btn = $('#btn
     if (r.content) {
       let html = `<div class="ab-title">${ico('sparkles', 15)} AI 解析${r.cached ? ' <span style="color:var(--muted);font-size:11px">（缓存）</span>' : ''}</div>`;
       if (r.imageNote) {
-        html += `<details style="margin-bottom:8px"><summary style="font-size:13px;color:var(--muted);cursor:pointer">${ico('camera', 13)} 查看 AI 识图转写（含图题）</summary><div style="white-space:pre-wrap;font-size:12.5px;line-height:1.7;color:var(--muted);margin-top:6px;background:var(--bg);padding:8px;border-radius:8px">${esc(r.imageNote.replace(/^【图片转写（AI 识图）】\s*/, ''))}</div></details>`;
+        html += `<details style="margin-bottom:8px"><summary style="font-size:13px;color:var(--muted);cursor:pointer">${ico('camera', 13)} 查看 AI 识图转写（含图题）</summary><div style="font-size:12.5px;line-height:1.7;color:var(--muted);margin-top:6px;background:var(--bg);padding:8px;border-radius:8px">${renderStudyText(r.imageNote.replace(/^【图片转写（AI 识图）】\s*/, ''))}</div></details>`;
       }
-      html += `<div style="white-space:pre-wrap;font-size:14px;line-height:1.8">${esc(r.content)}</div>`;
+      html += renderStudyText(r.content);
       result.innerHTML = html;
     } else {
       result.innerHTML = `<div class="ab-title" style="color:var(--red)">${ico('alert', 15)} ${esc(r.notice || r.error || '解析失败')}</div>`;
@@ -4642,7 +4660,7 @@ function wrongItemEl(w, onClick, onRemove) {
   const item = el('div', `list-item${w.available === false ? ' is-disabled' : ''}`, `
     <span class="li-icon tint-red">${ico('xCircle', 18)}</span>
     <div class="li-main">
-      <div class="li-title">${w.available === false ? `${esc(w.content || '（题目已移除）')} <span class="li-badge">已移除</span>` : esc(w.content || '（无题干）')}</div>
+      <div class="li-title">${w.available === false ? `${renderStudyInline(w.content || '（题目已移除）')} <span class="li-badge">已移除</span>` : renderStudyInline(w.content || '（无题干）')}</div>
       <div class="li-sub">你的答案 ${esc(w.myAnswer || '-')} · ${esc(w.subject || '')} ${esc(w.chapter || '')}</div>
     </div>
     <span class="li-del" title="移出错题本">${ico('trash', 15)}</span>
@@ -4876,7 +4894,7 @@ function favItemEl(f, listEl, view, batchType, groupKey, subKey, subName) {
   const item = el('div', 'list-item', `
     <span class="li-icon tint-amber">${ico('star', 18)}</span>
     <div class="li-main">
-      <div class="li-title">${esc(f.content || '（无题干）')}</div>
+      <div class="li-title">${renderStudyInline(f.content || '（无题干）')}</div>
       <div class="li-sub">${esc(f.subject || '')} ${esc(f.chapter || '')} · ${esc(f.time || '')}</div>
     </div>
     <span class="li-arrow">›</span>
@@ -5144,7 +5162,7 @@ function noteItemEl(n, listEl, view, batchType, groupKey, subKey, subName) {
   item.innerHTML = `
     <span class="li-icon tint-green">${ico('note', 18)}</span>
     <div class="li-main">
-      <div class="li-title">${esc(n.content || '（无题干）')}</div>
+      <div class="li-title">${renderStudyInline(n.content || '（无题干）')}</div>
       ${n.note ? `<div class="li-note">${esc(n.note)}</div>` : ''}
       <div class="li-foot">
         <span class="li-sub">${esc(n.subject || '')}${n.chapter ? ' · ' + esc(n.chapter) : ''} · ${esc(n.time || '')}</span>
@@ -5364,7 +5382,7 @@ async function renderAiSettings() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: '请只回复：连接成功。' }),
       });
-      if (r?.content) box.innerHTML = `<div class="ab-title">${ico('checkCircle', 15)} 连接成功：</div><pre style="white-space:pre-wrap;font-size:13px;line-height:1.6">${esc(r.content)}</pre>`;
+      if (r?.content) box.innerHTML = `<div class="ab-title">${ico('checkCircle', 15)} 连接成功：</div>${renderStudyText(r.content)}`;
       else box.innerHTML = `<div class="ab-title" style="color:var(--red)">${ico('xCircle', 15)} ${esc(r?.error || r?.notice || '调用失败')}</div>`;
     } catch (e) {
       box.innerHTML = `<div class="ab-title" style="color:var(--red)">${ico('xCircle', 15)} ${esc(e.message)}</div>`;
@@ -5611,7 +5629,7 @@ async function renderAiSettings() {
           body: JSON.stringify({ content: `（测试）请用一句话介绍你的职责，并说明你准备好了。` }),
         });
         if (r && r.content) {
-          box.innerHTML = `<div class="ab-title">${ico('checkCircle', 15)} 调用成功：</div><pre style="white-space:pre-wrap;font-size:13px;line-height:1.6">${esc(r.content)}</pre>`;
+          box.innerHTML = `<div class="ab-title">${ico('checkCircle', 15)} 调用成功：</div>${renderStudyText(r.content)}`;
         } else {
           box.innerHTML = `<div class="ab-title" style="color:var(--red)">${ico('xCircle', 15)} ${esc(r.error || '调用失败')}</div>`;
         }
