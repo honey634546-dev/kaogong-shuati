@@ -1070,7 +1070,7 @@ async function renderImport() {
         <span class="import-ico tint-blue">${ico('upload', 22)}</span>
         <div>
           <h3>选择文件（可多选）</h3>
-          <p class="muted">支持 PDF（扫描版自动识图）、Excel（.xlsx/.xls）、Word（.docx）、TXT、JSON（外部 AI 预处理的题库文件）、图片。一次导入 = 一个模块。</p>
+          <p class="muted">支持 PDF（扫描版自动识图）、Excel（.xlsx/.xls/.csv）、Word（.docx）、TXT/JSONL、JSON（含公开评测题库适配）、图片。一次导入 = 一个模块。</p>
         </div>
       </div>
       <div class="import-mode-bar">
@@ -1082,7 +1082,7 @@ async function renderImport() {
         <b>${ico('upload', 26)} 点击选择或拖拽文件到此处</b>
         <span>可多选；图片/扫描版 PDF 由 AI 识图解析，约 5~20 秒/张</span>
       </label>
-      <input type="file" id="import-file" class="import-file-input" accept=".pdf,.xlsx,.xls,.csv,.txt,.docx,.json,.jpg,.jpeg,.png,.webp,.bmp,.gif" multiple>
+      <input type="file" id="import-file" class="import-file-input" accept=".pdf,.xlsx,.xls,.csv,.txt,.jsonl,.docx,.json,.jpg,.jpeg,.png,.webp,.bmp,.gif" multiple>
       <div id="import-progress" class="import-progress"></div>
     </div>
     <div class="card" style="margin-top:12px">
@@ -1191,7 +1191,16 @@ function customOptionDisplayText(text) {
 async function customParseFile(file, mode = 'ai') {
   const ext = (file.name.split('.').pop() || '').toLowerCase();
   const P = () => import('./lib/custom-parser.js');
-  if (ext === 'txt') { const text = await file.text(); return customAiStructureText(text, mode); }
+  if (ext === 'txt' || ext === 'jsonl') {
+    const text = await file.text();
+    const { parseJsonLines, adaptPublicDataset } = await P();
+    const rows = parseJsonLines(text);
+    if (rows && rows.some((row) => row && row.question != null && Array.isArray(row.options) && (row.text != null || row.example_id != null))) {
+      const split = (file.name.match(/(?:^|[-_.])(train|dev|val|test)(?:[-_.]|$)/i) || [])[1] || 'all';
+      return { questions: adaptPublicDataset(rows, { source: 'logiqa', split: split.toLowerCase() }), raw: text, source: 'logiqa' };
+    }
+    return customAiStructureText(text, mode);
+  }
   if (ext === 'docx') { const { docxToText } = await P(); const text = await docxToText(file); return customAiStructureText(text, mode); }
   if (ext === 'doc') throw new Error('旧版 .doc 请用 Word 另存为 .docx 或 TXT 后再导入');
   if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') {
@@ -1231,13 +1240,18 @@ async function customParseFile(file, mode = 'ai') {
  *  - 无答案/不可判分 → failed（预览标红待人工修正）；图形题占位选项且无图 → image_missing（预览黄色提示）
  */
 async function customParseJson(file) {
-  const { normalizeAnswer, splitInlineOptions } = await import('./lib/custom-parser.js');
+  const { normalizeAnswer, splitInlineOptions, adaptPublicDataset, detectPublicDataset } = await import('./lib/custom-parser.js');
   let parsed;
   try { parsed = JSON.parse(await file.text()); }
   catch (e) { throw new Error(`JSON 解析失败（${file.name}）：${e.message}`); }
   const list = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.questions) ? parsed.questions : null);
   if (!list) throw new Error(`JSON 中未找到 questions 数组（${file.name}），请检查文件是否符合题库格式`);
   if (!list.length) throw new Error(`JSON 的 questions 为空（${file.name}）`);
+  const publicSource = detectPublicDataset(list, file.name);
+  if (publicSource !== 'generic' && list.some((row) => row && row.question != null && (row.options != null || row.A != null))) {
+    const split = (file.name.match(/(?:^|[-_.])(train|dev|val|test)(?:[-_.]|$)/i) || [])[1] || 'all';
+    return { questions: adaptPublicDataset(list, { source: publicSource, split: split.toLowerCase() }), source: publicSource, name: String(parsed?.name || '').trim() || undefined };
+  }
   const questions = [];
   for (const raw of list) {
     const q = (raw && typeof raw === 'object') ? raw : {};

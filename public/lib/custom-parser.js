@@ -37,6 +37,168 @@ export function normalizeAnswer(rawAnswer, rawOptions = []) {
   return { answer, answer_index, options };
 }
 
+/** RFC 4180 兼容的轻量 CSV 解析（公共评测集导入用；不依赖 XLSX）。 */
+export function parseCsv(text) {
+  const source = String(text ?? '').replace(/^\uFEFF/, '');
+  const rows = [];
+  let row = [];
+  let cell = '';
+  let quoted = false;
+  for (let i = 0; i < source.length; i++) {
+    const ch = source[i];
+    if (quoted) {
+      if (ch === '"' && source[i + 1] === '"') { cell += '"'; i++; }
+      else if (ch === '"') quoted = false;
+      else cell += ch;
+      continue;
+    }
+    if (ch === '"' && cell.length === 0) { quoted = true; continue; }
+    if (ch === ',') { row.push(cell); cell = ''; continue; }
+    if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && source[i + 1] === '\n') i++;
+      row.push(cell); cell = '';
+      if (row.some((value) => String(value).trim())) rows.push(row);
+      row = [];
+      continue;
+    }
+    cell += ch;
+  }
+  if (cell.length || row.length) {
+    row.push(cell);
+    if (row.some((value) => String(value).trim())) rows.push(row);
+  }
+  return rows;
+}
+
+/** JSONL 解析；普通 TXT 遇到非 JSON 行时返回 null，交回原有文本解析器。 */
+export function parseJsonLines(text) {
+  const rows = [];
+  for (const [lineNo, line] of String(text ?? '').split(/\r?\n/).entries()) {
+    const value = line.trim();
+    if (!value) continue;
+    try {
+      const parsed = JSON.parse(value);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+      rows.push(parsed);
+    } catch {
+      return null;
+    }
+  }
+  return rows.length ? rows : null;
+}
+
+function publicField(row, names) {
+  for (const name of names) {
+    if (row && Object.prototype.hasOwnProperty.call(row, name) && row[name] != null && String(row[name]).trim() !== '') return row[name];
+  }
+  return '';
+}
+
+function publicOption(value, letter, placeholder = false) {
+  const raw = String(value ?? '').trim();
+  if (!raw) return placeholder ? `${letter}. （原数据缺少此选项）` : '';
+  const m = raw.match(/^[（(]?([A-Ha-h])[)）]?[.、．:：]\s*(.*)$/s);
+  if (m) return `${m[1].toUpperCase()}. ${m[2].trim() || m[1].toUpperCase()}`;
+  return `${letter}. ${raw}`;
+}
+
+function publicOptions(row) {
+  if (Array.isArray(row?.options)) {
+    const count = Math.max(4, row.options.length);
+    return row.options.slice(0, count).map((value, index) => publicOption(value, String.fromCharCode(65 + index), true));
+  }
+  const hasPublicOptions = 'A' in (row || {}) || 'B' in (row || {}) || 'C' in (row || {}) || 'D' in (row || {});
+  if (!hasPublicOptions) return [];
+  const options = [];
+  for (const letter of 'ABCD') {
+    const value = publicField(row, [letter, letter.toLowerCase(), `option_${letter}`, `option${letter}`, `选项${letter}`]);
+    options.push(publicOption(value, letter, true));
+  }
+  return options;
+}
+
+/** 将表头行和数据行转成对象；用于 CMMLU CSV / Parquet 转 JSON。 */
+export function rowsToRecords(rows) {
+  if (!Array.isArray(rows) || !rows.length) return [];
+  const headers = (rows[0] || []).map((value, index) => {
+    const key = String(value ?? '').trim();
+    return key || `column_${index}`;
+  });
+  return rows.slice(1).filter((row) => Array.isArray(row) && row.some((value) => String(value ?? '').trim())).map((row) => {
+    const record = {};
+    headers.forEach((key, index) => { record[key] = row[index] ?? ''; });
+    return record;
+  });
+}
+
+export function detectPublicDataset(records, hint = '') {
+  const row = Array.isArray(records) ? records[0] : records;
+  const name = String(hint || '').toLowerCase();
+  if (/logiqa/.test(name) || (row && 'example_id' in row && 'text' in row && Array.isArray(row.options))) return 'logiqa';
+  if (/cmmlu/.test(name) || (row && ('Question' in row || 'Answer' in row))) return 'cmmlu';
+  if (/ceval/.test(name) || (row && 'explanation' in row && 'question' in row)) return 'ceval';
+  return 'generic';
+}
+
+/**
+ * CMMLU / LogiQA / C-Eval → 自定义题库协议。
+ * 只转换字段和答案索引，不补写不存在的官方解析。
+ */
+export function adaptPublicDataset(records, { source = 'auto', split = '' } = {}) {
+  const list = Array.isArray(records) ? records : [];
+  const sourceKey = source === 'auto' ? detectPublicDataset(list) : String(source || 'generic').toLowerCase();
+  const safeSource = ['cmmlu', 'logiqa', 'ceval'].includes(sourceKey) ? sourceKey : 'public';
+  const splitKey = String(split || 'all').replace(/[^A-Za-z0-9._-]+/g, '-');
+  const idCounts = new Map();
+  return list.map((row, index) => {
+    const rawId = publicField(row, ['example_id', 'id', 'question_id', 'uid']) || String(index);
+    const promptText = String(sourceKey === 'logiqa'
+      ? publicField(row, ['question'])
+      : publicField(row, ['Question', 'question', 'prompt', '题目', '题干'])).trim();
+    const material = String(sourceKey === 'logiqa'
+      ? publicField(row, ['text', 'material', 'context'])
+      : publicField(row, ['material', 'context', 'passage'])).trim();
+    let options = publicOptions(row);
+    const rawAnswer = publicField(row, ['Answer', 'answer', '答案', 'label', 'correct_answer']);
+    const suppliedIndex = publicField(row, ['answer_index', 'answerIndex', 'correct_index']);
+    let answer = String(rawAnswer ?? '').trim();
+    let answerIndex = Number.isInteger(Number(suppliedIndex)) && String(suppliedIndex).trim() !== '' ? Number(suppliedIndex) : -1;
+    if (/^\d+$/.test(answer) && Number(answer) >= 0 && Number(answer) < options.length) {
+      answerIndex = Number(answer);
+      answer = String.fromCharCode(65 + answerIndex);
+    } else {
+      const normalized = normalizeAnswer(answer, options);
+      answer = normalized.answer;
+      answerIndex = answerIndex >= 0 ? answerIndex : normalized.answer_index;
+      options = normalized.options;
+    }
+    if (!answer && answerIndex >= 0 && answerIndex < options.length) answer = String.fromCharCode(65 + answerIndex);
+    const incompleteOptions = options.some((option) => /原数据缺少此选项/.test(option));
+    const prompt = promptText || (sourceKey !== 'generic' ? '（原数据缺少题干）' : '');
+    if (incompleteOptions || !promptText) { answer = ''; answerIndex = -1; }
+    const analysis = String(publicField(row, ['explanation', 'analysis', '解析']) || '').trim();
+    const rawIdKey = String(rawId).replace(/[^A-Za-z0-9._:-]+/g, '-');
+    const occurrence = (idCounts.get(rawIdKey) || 0) + 1;
+    idCounts.set(rawIdKey, occurrence);
+    const sourceId = `${safeSource}:${splitKey}:${rawIdKey}${occurrence > 1 ? `-${occurrence}` : ''}`;
+    const uid = `public:${sourceId}`.slice(0, 128);
+    return {
+      prompt,
+      material,
+      options,
+      answer,
+      answer_index: answerIndex,
+      analysis,
+      category: safeSource === 'public' ? '公开题库' : safeSource.toUpperCase(),
+      external_id: sourceId.slice(0, 256),
+      question_uid: uid,
+      answer_status: incompleteOptions || !promptText || answerIndex < 0 ? 'missing' : 'unconfirmed',
+      failed: !prompt || answerIndex < 0,
+      image_missing: false,
+    };
+  }).filter((question) => question.prompt || question.options.length);
+}
+
 // 选项行（需标点分隔）——Excel 单元格等结构化文本用；parseBlock 另有宽松版
 const OPT_RE = /^(?:[（(]?([A-Ha-h])[)）]?[.、．:：]\s*)(.+)$/;
 
@@ -494,13 +656,14 @@ export function parseExcel(jsonRows) {
     const cols = {};
     rows[i].forEach((c, j) => {
       const k = c.replace(/[ *]/g, '');
-      if (/^提示$|^题干$|^题目$/.test(k)) cols.prompt = j;
-      else if (/^材料$/.test(k)) cols.material = j;
-      else if (/^选项$/.test(k)) cols.options = j;
-      else if (/^选项[A-H]$/.test(k)) cols[`opt${k.slice(2)}`] = j;
-      else if (/^答案$/.test(k)) cols.answer = j;
-      else if (/^解析$/.test(k)) cols.analysis = j;
-      else if (/^(?:外部ID|来源ID|external_id|externalId)$/i.test(k)) cols.external_id = j;
+      if (/^(?:提示|题干|题目|Question|prompt)$/i.test(k)) cols.prompt = j;
+      else if (/^(?:材料|material|context|passage|text)$/i.test(k)) cols.material = j;
+      else if (/^(?:选项|options?)$/i.test(k)) cols.options = j;
+      else if (/^选项[A-H]$/i.test(k)) cols[`opt${k.slice(-1).toUpperCase()}`] = j;
+      else if (/^[A-H]$/.test(k)) cols[`opt${k}`] = j; // CMMLU / C-Eval
+      else if (/^(?:答案|Answer|answer|label|correct_answer)$/i.test(k)) cols.answer = j;
+      else if (/^(?:解析|analysis|explanation)$/i.test(k)) cols.analysis = j;
+      else if (/^(?:外部ID|来源ID|external_id|externalId|id)$/i.test(k)) cols.external_id = j;
       else if (/^(?:题目ID|题目UID|question_uid|questionUid)$/i.test(k)) cols.question_uid = j;
       else if (/^(?:答案状态|answer_status)$/i.test(k)) cols.answer_status = j;
     });
