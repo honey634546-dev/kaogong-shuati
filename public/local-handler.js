@@ -266,6 +266,10 @@ export function createLocalHandler({ query, records, store, ai }) {
       if (r.error) return { notice: r.error, content: null };
       return r;
     }
+    if (route === 'POST /ai/chat' || route === 'POST /ai/chat/stream') {
+      if (typeof ai.chat !== 'function') return { ok: false, error: '本地 AI 对话能力不可用' };
+      return ai.chat({ ...body, stream: route.endsWith('/stream') || body.stream === true });
+    }
     if (route === 'GET /ai/agents') return ai.agents();
     if (route === 'DELETE /ai/explain-cache') return ai.clearExplainCache();
     if (route === 'POST /ai/structure') {

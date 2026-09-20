@@ -11,7 +11,11 @@
     "model": "deepseek-v4-flash-free",
     "temperature": 0.3,
     "max_tokens": 12000,
-    "enabled": 0
+    "enabled": 0,
+    "stream_enabled": 1,
+    "vision_enabled": 0,
+    "timeout_ms": 120000,
+    "provider_mode": "openai-compatible"
   },
   {
     "id": 2,
@@ -25,7 +29,11 @@
     "model": "deepseek-v4-flash-free",
     "temperature": 0.4,
     "max_tokens": 12000,
-    "enabled": 0
+    "enabled": 0,
+    "stream_enabled": 1,
+    "vision_enabled": 0,
+    "timeout_ms": 120000,
+    "provider_mode": "openai-compatible"
   },
   {
     "id": 4,
@@ -39,7 +47,11 @@
     "model": "GLM-4.1V-Thinking-Flash",
     "temperature": 0.1,
     "max_tokens": 12000,
-    "enabled": 0
+    "enabled": 0,
+    "stream_enabled": 1,
+    "vision_enabled": 1,
+    "timeout_ms": 120000,
+    "provider_mode": "openai-compatible"
   },
   {
     "id": 6,
@@ -53,6 +65,10 @@
     "model": "GLM-4.1V-Thinking-Flash",
     "temperature": 0.1,
     "max_tokens": 12000,
-    "enabled": 0
+    "enabled": 0,
+    "stream_enabled": 1,
+    "vision_enabled": 1,
+    "timeout_ms": 120000,
+    "provider_mode": "openai-compatible"
   }
 ]

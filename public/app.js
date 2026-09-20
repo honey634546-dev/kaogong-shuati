@@ -5127,6 +5127,23 @@ async function renderAiSettings() {
           <input class="field" data-f="max_tokens" type="number" step="100" min="100" value="${a.max_tokens ?? 1500}">
         </div>
       </div>
+      <div style="display:flex;gap:10px;margin-top:8px">
+        <div style="flex:1">
+          <label class="field-label">请求超时（毫秒）</label>
+          <input class="field" data-f="timeout_ms" type="number" step="1000" min="1000" max="600000" value="${a.timeout_ms ?? 120000}">
+        </div>
+        <div style="flex:1">
+          <label class="field-label">传输模式</label>
+          <select class="field" data-f="provider_mode">
+            <option value="openai-compatible" ${a.provider_mode !== 'mock' ? 'selected' : ''}>OpenAI 兼容接口</option>
+            <option value="mock" ${a.provider_mode === 'mock' ? 'selected' : ''}>本地 Mock（不联网）</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:flex;gap:16px;margin-top:8px;flex-wrap:wrap">
+        <label class="check-row"><input type="checkbox" data-f="stream_enabled" ${a.stream_enabled !== 0 ? 'checked' : ''}> 启用流式回答</label>
+        <label class="check-row"><input type="checkbox" data-f="vision_enabled" ${a.vision_enabled ? 'checked' : ''}> 支持视觉输入</label>
+      </div>
       ${a.skill_loaded ? `<div class="li-sub" style="color:#2e7d32">✓ 已自动加载 skill：<b>${esc(a.skill_loaded.name)}</b>（${a.skill_loaded.files} 个文件：SKILL.md + references${a.skill_loaded.source === 'user' ? '，用户导入' : ''}）</div>` : ''}
       ${[1, 2].includes(a.id) && !skillsErr ? `
       <label class="field-label">Skill（从技能库选择）</label>
@@ -5176,9 +5193,10 @@ async function renderAiSettings() {
       const fields = {};
       card.querySelectorAll('[data-f]').forEach((input) => {
         const key = input.dataset.f;
-        let val = input.value;
+        let val = input.type === 'checkbox' ? (input.checked ? 1 : 0) : input.value;
         if (key === 'temperature') val = Number(val);
         if (key === 'max_tokens') val = Number(val);
+        if (key === 'timeout_ms') val = Number(val);
         fields[key] = val;
       });
       if (fields.skill === '__custom__') fields.skill = fields['skill-text'] || '';

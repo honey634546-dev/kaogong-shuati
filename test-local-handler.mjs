@@ -39,6 +39,7 @@ function makeMocks() {
     ocr: fn('ai.ocr'),
     grade: fn('ai.grade'),
     explain: fn('ai.explain'),
+    chat: fn('ai.chat'),
     agents: fn('ai.agents'),
     getAgent: fn('ai.getAgent'),
     updateAgent: fn('ai.updateAgent'),
@@ -83,6 +84,8 @@ const ROUTES = [
   ['POST', '/api/ai/ocr', { image: 'data:image/png;base64,xxx', subject: '公务员·行测' }],
   ['POST', '/api/ai/grade', { questionId: 123, answer: '我的作答' }],
   ['POST', '/api/ai/explain', { questionId: 123456, selected: 'A' }],
+  ['POST', '/api/ai/chat', { agentId: 1, messages: [{ role: 'user', content: '测试' }] }],
+  ['POST', '/api/ai/chat/stream', { agentId: 1, messages: [{ role: 'user', content: '测试' }] }],
   ['POST', '/api/ai/agents/1/test', { content: '测试内容' }],
   // PUT
   ['PUT', '/api/ai/agents/1', { system_prompt: '新提示词', skill: 'gongkao-huasheng13', api_key: 'sk-****' }],

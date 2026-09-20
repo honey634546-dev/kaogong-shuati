@@ -13,7 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
-import { listAgents, getAgent, updateAgent, getHistory, callAgent, initAiConfig, listUserSkills, addUserSkill, deleteUserSkill } from './lib/ai-agents.mjs';
+import { listAgents, getAgent, updateAgent, getHistory, callAgent, callAgentMessages, initAiConfig, listUserSkills, addUserSkill, deleteUserSkill } from './lib/ai-agents.mjs';
 import { extractMaterialFromPdf } from './lib/pdf-ocr.mjs';
 import { FENBI_TREE, ESSAY_TREE, SHENLUN_TREE, ZONGYING_TREE } from './lib/fenbi-tree.mjs';
 import { mapChapterToNode } from './lib/xingce-chapter-map.mjs';
@@ -323,6 +323,38 @@ const json = (res, code, data) => {
   res.end(JSON.stringify(data));
 };
 const err = (res, code, msg) => json(res, code, { error: msg });
+
+/** 给 AI SSE 请求绑定客户端断开信号，避免浏览器停止生成后上游仍继续消耗请求。 */
+function requestAbortSignal(req, res) {
+  const controller = new AbortController();
+  const abort = () => controller.abort(new Error('client disconnected'));
+  const onRequestAborted = () => abort();
+  const onResponseClose = () => { if (!res.writableEnded) abort(); };
+  req.once('aborted', onRequestAborted);
+  res.once('close', onResponseClose);
+  return {
+    signal: controller.signal,
+    cleanup() {
+      req.removeListener('aborted', onRequestAborted);
+      res.removeListener('close', onResponseClose);
+    },
+  };
+}
+
+function sseStart(res) {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+}
+
+function sseEvent(res, event, data) {
+  if (res.writableEnded || res.destroyed) return false;
+  res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  return true;
+}
 
 /** 多模态识图调用（OpenAI 兼容 image_url 格式，用于 GLM-4.1V-Thinking-Flash / GLM-4V-Flash 等视觉模型）
  *  含 429 限流自动重试（免费视觉模型常见访问量过大）
@@ -2822,6 +2854,47 @@ const server = http.createServer(async (req, res) => {
         return json(res, 200, rows);
       }
       // ---- AI 智能体配置 ----
+      // 通用 OpenAI-compatible 对话：WP5 的随题多轮侧栏直接复用此协议。
+      // POST /api/ai/chat：默认返回完整 JSON；stream=true 或 /chat/stream 返回 SSE。
+      if ((pathname === '/api/ai/chat' || pathname === '/api/ai/chat/stream') && req.method === 'POST') {
+        let body = '';
+        for await (const chunk of req) body += chunk;
+        let parsed;
+        try { parsed = JSON.parse(body || '{}'); } catch { return err(res, 400, '请求体不是有效 JSON'); }
+        const ref = parsed.agentId ?? parsed.agent_id ?? parsed.role ?? parsed.agentRole ?? 'xingce-explainer';
+        const agent = getAgent(typeof ref === 'number' || /^\d+$/.test(String(ref)) ? Number(ref) : String(ref));
+        const wantsStream = pathname.endsWith('/stream') || parsed.stream === true;
+        if (!agent) return err(res, 404, 'AI 不存在');
+        const messages = Array.isArray(parsed.messages)
+          ? parsed.messages
+          : (parsed.content == null ? [] : [{ role: 'user', content: parsed.content }]);
+        if (!messages.some((m) => ['user', 'assistant'].includes(String(m?.role || '').toLowerCase()) && m.content != null && m.content !== '')) {
+          return err(res, 400, '缺少对话内容');
+        }
+        const requestScope = requestAbortSignal(req, res);
+        if (wantsStream) sseStart(res);
+        try {
+          if (wantsStream) sseEvent(res, 'meta', { model: agent.model || '', role: agent.role, protocol: 'openai-compatible-sse' });
+          const result = await callAgentMessages(agent, messages, {
+            stream: wantsStream,
+            mock: parsed.mock === true,
+            signal: requestScope.signal,
+            onDelta: wantsStream ? (delta) => sseEvent(res, 'delta', { delta }) : undefined,
+          });
+          if (wantsStream) {
+            if (result.error) sseEvent(res, 'error', { error: result.error, cancelled: !!result.cancelled, timedOut: !!result.timedOut });
+            else sseEvent(res, 'done', { content: result.content, model: result.model || agent.model || '', mock: !!result.mock, usage: result.usage || null });
+            if (!res.writableEnded) res.end();
+          } else {
+            return json(res, 200, result.error
+              ? { ok: false, error: result.error, cancelled: !!result.cancelled, timedOut: !!result.timedOut }
+              : { ok: true, content: result.content, model: result.model || agent.model || '', mock: !!result.mock, usage: result.usage || null });
+          }
+        } finally {
+          requestScope.cleanup();
+        }
+        return;
+      }
       // 列表（key 脱敏）
       if (pathname === '/api/ai/agents' && req.method === 'GET') {
         return json(res, 200, listAgents(true));

@@ -11,8 +11,9 @@
         "start": "node server.mjs 3000",
         "test:wp1": "node --test test-wp1-empty-start.mjs",
         "test:wp2": "node --test test-wp2-custom-bank.mjs test-wp2-legacy-migration.mjs",
+        "test:wp4": "node --test test-wp4-ai.mjs test-wp4-ai-local.mjs",
         "test:wp3": "node --test test-wp3-attempts.mjs",
-        "test": "node --test test-wp1-empty-start.mjs test-wp2-custom-bank.mjs test-wp2-legacy-migration.mjs test-wp3-attempts.mjs test-custom-parser.mjs test-local-api.mjs test-local-queries.mjs test-random-practice-count.mjs test-local-ai.mjs test-local-handler.mjs test-local-fixes.mjs test-native-engine.mjs test-custom-practice.mjs test-custom-practice-e2e.mjs test-custom-bank-group.mjs test-user-skills.mjs"
+        "test": "node --test test-wp1-empty-start.mjs test-wp2-custom-bank.mjs test-wp2-legacy-migration.mjs test-wp3-attempts.mjs test-wp4-ai.mjs test-wp4-ai-local.mjs test-custom-parser.mjs test-local-api.mjs test-local-queries.mjs test-random-practice-count.mjs test-local-ai.mjs test-local-handler.mjs test-local-fixes.mjs test-native-engine.mjs test-custom-practice.mjs test-custom-practice-e2e.mjs test-custom-bank-group.mjs test-user-skills.mjs"
     },
     "dependencies": {
         "sharp": "^0.35.4"

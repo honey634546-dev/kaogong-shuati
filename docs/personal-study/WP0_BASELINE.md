@@ -73,8 +73,19 @@
 - 合并回归（WP1/WP2/材料分组/解析/本地 handler）：`66 passed / 0 failed`；其中 `test-organize.mjs` 未纳入该命令，因当前 checkout 缺少真实题库 fixture。
 - 当前 `npm test`：`79 passed / 29 failed`。新增 WP3 专项通过；剩余失败仍集中在缺失 `app-assets/tiku_app.db`、未安装的 `playwright-core`/Edge E2E 和依赖真实题库内容的组卷测试。
 
+## WP4 变更后结果
+
+- `ai_agents` 增加 `stream_enabled`、`vision_enabled`、`timeout_ms` 和 `provider_mode`；旧配置库启动时自动补列。
+- 新增通用 `/api/ai/chat` JSON 和 `/api/ai/chat/stream` SSE；系统 prompt/技能仍由服务端注入，客户端只能追加 user/assistant 多轮消息。
+- 上游请求使用 OpenAI-compatible `/chat/completions`，支持 `reasoning_effort` 不兼容回退、超时、客户端断开取消和显式本地 Mock；App 本地模式返回一次性降级结果并标识 `streamed=false`。
+
+命令：`npm run test:wp4`
+
+- 结果：`4 passed / 0 failed`；覆盖服务端 JSON/SSE、网关参数回退、请求超时、主动取消、本地 Mock 和多轮消息。
+- 当前 `npm test`：`83 passed / 29 failed`。新增 WP4 专项通过；剩余失败仍集中在缺失 `app-assets/tiku_app.db`、未安装的 `playwright-core`/Edge E2E 和依赖真实题库内容的组卷测试。
+
 ## 已知限制与下一步
 
 1. WP1 还没有迁移向导；旧版数据目录通过兼容路径读取，正式迁移和备份恢复放在 WP7。
 2. 自定义题库已经补上稳定逻辑身份和导入版本；WP3 已补上作答快照和提交幂等，手工编辑仍是原地更新，正式编辑历史与备份恢复放在 WP7。
-3. 现有 `npm test` 仍混合环境无关单测、题库 fixture 测试和浏览器 E2E；WP0 后续应拆成可重复的 fixture/mocked/integration/browser 层，不删除原有行为断言。
+3. 现有 `npm test` 仍混合环境无关单测、题库 fixture 测试和浏览器 E2E；WP0 后续应拆成可重复的 fixture/mocked/integration/browser 层，不删除原有行为断言。WP4 的真实供应商连通性尚未作为默认测试运行，必须与本地 Mock 证据分开。
