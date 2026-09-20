@@ -11,6 +11,15 @@
 - [x] 服务重启后批次、题目和记录仍存在。
 - [x] 默认监听地址为回环地址；数据文件不进入 Git。
 
+## WP2 当前证据
+
+- [x] 自定义题目进入统一规范化层；空题、非法选项、越界答案索引和非法图片在写库前拒绝。
+- [x] 支持 `external_id`/`question_uid`、内容指纹、`revision`、`is_current` 和答案状态；保留旧的 `custom-${id}` 兼容标识。
+- [x] 重复导入相同内容幂等，不新建批次；服务端预览接口能返回重复项和冲突项。
+- [x] 同一逻辑题内容变化默认返回 409；显式 `conflict_mode=new_revision` 后保留旧版本且仅当前版本进入刷题。
+- [x] Web/App 导入协议保留逻辑身份字段；浏览器导入入口已接受 CSV，服务端和本地 handler 共享规范化规则。
+- [x] `npm run test:wp2` 加 `node --test test-custom-bank-group.mjs test-wp1-empty-start.mjs`：17 passed / 0 failed。
+
 ## 后续 P0
 
 - [ ] 题目、材料、选项、答案、解析和图片可导入前预览与修正。

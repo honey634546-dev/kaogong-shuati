@@ -8,6 +8,7 @@
  * 启动：node server.mjs [端口]   （默认 3000）
  */
 import http from 'node:http';
+import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -17,6 +18,7 @@ import { extractMaterialFromPdf } from './lib/pdf-ocr.mjs';
 import { FENBI_TREE, ESSAY_TREE, SHENLUN_TREE, ZONGYING_TREE } from './lib/fenbi-tree.mjs';
 import { mapChapterToNode } from './lib/xingce-chapter-map.mjs';
 import { customQuestionHtml, parseImages } from './public/lib/custom-parser.js';
+import { ANSWER_STATUSES, normalizeCustomQuestion, normalizeCustomQuestions } from './public/lib/custom-bank.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.argv[2] || process.env.PORT || 3000);
@@ -157,7 +159,14 @@ pdb.exec(`
     options TEXT DEFAULT '[]',
     answer TEXT DEFAULT '',
     answer_index INTEGER DEFAULT -1,
-    analysis TEXT DEFAULT ''
+    analysis TEXT DEFAULT '',
+    category TEXT DEFAULT '',
+    question_uid TEXT DEFAULT '',
+    external_id TEXT DEFAULT '',
+    revision INTEGER DEFAULT 1,
+    is_current INTEGER DEFAULT 1,
+    answer_status TEXT DEFAULT 'unconfirmed',
+    fingerprint TEXT DEFAULT ''
   );
   CREATE INDEX IF NOT EXISTS idx_cq_batch ON custom_questions(batch_id);
 `);
@@ -165,6 +174,64 @@ pdb.exec(`
 try { pdb.exec("ALTER TABLE custom_questions ADD COLUMN images TEXT DEFAULT '[]'"); } catch {}
 // 兼容已存在的库：自定义题补充 material_id 列（材料分组：同 material_id 的题共用一份材料，刷题时显示 第 n/m 小问）
 try { pdb.exec("ALTER TABLE custom_questions ADD COLUMN material_id TEXT DEFAULT ''"); } catch {}
+try { pdb.exec("ALTER TABLE custom_questions ADD COLUMN category TEXT DEFAULT ''"); } catch {}
+// WP2：逻辑题目身份、外部来源 ID、修订号、当前版本、答案状态和内容指纹。
+try { pdb.exec("ALTER TABLE custom_questions ADD COLUMN question_uid TEXT DEFAULT ''"); } catch {}
+try { pdb.exec("ALTER TABLE custom_questions ADD COLUMN external_id TEXT DEFAULT ''"); } catch {}
+try { pdb.exec('ALTER TABLE custom_questions ADD COLUMN revision INTEGER DEFAULT 1'); } catch {}
+try { pdb.exec('ALTER TABLE custom_questions ADD COLUMN is_current INTEGER DEFAULT 1'); } catch {}
+try { pdb.exec("ALTER TABLE custom_questions ADD COLUMN answer_status TEXT DEFAULT 'unconfirmed'"); } catch {}
+try { pdb.exec("ALTER TABLE custom_questions ADD COLUMN fingerprint TEXT DEFAULT ''"); } catch {}
+pdb.exec(`
+  CREATE INDEX IF NOT EXISTS idx_cq_uid_revision ON custom_questions(question_uid, revision);
+  CREATE INDEX IF NOT EXISTS idx_cq_external ON custom_questions(external_id);
+  CREATE INDEX IF NOT EXISTS idx_cq_current ON custom_questions(batch_id, is_current, id);
+`);
+// 旧库回填逻辑身份和指纹；不改动旧题的自增 id，保证 custom-${id} 记录/笔记/收藏继续可用。
+{
+  const legacyRows = pdb.prepare(`
+    SELECT * FROM custom_questions
+    WHERE COALESCE(TRIM(question_uid), '') = ''
+       OR COALESCE(TRIM(fingerprint), '') = ''
+       OR revision IS NULL OR revision < 1
+       OR is_current IS NULL
+       OR COALESCE(TRIM(answer_status), '') = ''
+  `).all();
+  const backfill = pdb.prepare(`
+    UPDATE custom_questions
+    SET question_uid = ?, revision = ?, is_current = ?, answer_status = ?, fingerprint = ?
+    WHERE id = ?
+  `);
+  for (const row of legacyRows) {
+    const currentUid = String(row.question_uid || '').trim();
+    let questionUid = currentUid || randomUUID();
+    let revision = Number(row.revision) > 0 ? Number(row.revision) : 1;
+    let isCurrent = Number(row.is_current) === 0 ? 0 : 1;
+    let status = ANSWER_STATUSES.has(String(row.answer_status || '').trim()) ? String(row.answer_status).trim() : '';
+    let fingerprint = String(row.fingerprint || '').trim();
+    try {
+      const normalized = normalizeCustomQuestion({
+        prompt: row.prompt,
+        material: row.material,
+        options: JSON.parse(row.options || '[]'),
+        answer: row.answer,
+        answer_index: row.answer_index,
+        analysis: row.analysis,
+        category: row.category,
+        images: JSON.parse(row.images || '[]'),
+        material_id: row.material_id,
+        question_uid: questionUid,
+        answer_status: status,
+      }).question;
+      status ||= normalized.answer_status;
+      fingerprint ||= normalized.fingerprint;
+    } catch {
+      fingerprint ||= `legacy-${row.id}`;
+      status ||= 'unconfirmed';
+    }
+    backfill.run(questionUid, revision, isCurrent, status, fingerprint, row.id);
+  }
+}
 // 申论材料缓存表（从真题 PDF OCR 提取）
 pdb.exec(`
   CREATE TABLE IF NOT EXISTS materials (
@@ -323,6 +390,132 @@ function withTx(fn) {
   pdb.exec('BEGIN');
   try { const r = fn(); pdb.exec('COMMIT'); return r; }
   catch (e) { try { pdb.exec('ROLLBACK'); } catch {} throw e; }
+}
+
+function customQuestionApiRow(row) {
+  return {
+    id: Number(row.id),
+    batch_id: Number(row.batch_id),
+    prompt: row.prompt || '',
+    material: row.material || '',
+    options: (() => { try { return JSON.parse(row.options || '[]'); } catch { return []; } })(),
+    answer: row.answer || '',
+    answer_index: row.answer_index == null ? -1 : Number(row.answer_index),
+    answer_status: ANSWER_STATUSES.has(String(row.answer_status || '').trim()) ? String(row.answer_status).trim() : 'unconfirmed',
+    analysis: row.analysis || '',
+    category: row.category || '',
+    images: parseImages(row.images),
+    material_id: row.material_id || '',
+    question_uid: row.question_uid || '',
+    external_id: row.external_id || '',
+    revision: Number(row.revision) > 0 ? Number(row.revision) : 1,
+    is_current: Number(row.is_current) === 0 ? 0 : 1,
+    fingerprint: row.fingerprint || '',
+  };
+}
+
+function customImportExisting(q) {
+  if (q._external_id_explicit && q.external_id) {
+    return pdb.prepare(`
+      SELECT * FROM custom_questions
+      WHERE external_id = ?
+      ORDER BY is_current DESC, revision DESC, id DESC
+      LIMIT 1
+    `).get(q.external_id);
+  }
+  if (q._question_uid_explicit && q.question_uid) {
+    return pdb.prepare(`
+      SELECT * FROM custom_questions
+      WHERE question_uid = ?
+      ORDER BY is_current DESC, revision DESC, id DESC
+      LIMIT 1
+    `).get(q.question_uid);
+  }
+  return null;
+}
+
+/**
+ * 只读计算一次导入计划：校验已在 normalizeCustomQuestions 完成，
+ * 此处只处理跨请求幂等、同批指纹去重和显式版本冲突。
+ */
+function planCustomImport(questions, { batchId = 0, conflictMode = 'reject' } = {}) {
+  const items = [];
+  const unchanged = [];
+  const conflicts = [];
+  const seen = new Map();
+  const target = Number(batchId || 0);
+  if (target) {
+    const exists = pdb.prepare('SELECT id FROM custom_batches WHERE id = ?').get(target);
+    if (!exists) return { items, unchanged, conflicts: [{ code: 'batch_not_found', message: '目标批次不存在', batch_id: target }], targetBatch: null };
+  }
+  for (let index = 0; index < questions.length; index++) {
+    const q = questions[index];
+    const identity = q._external_id_explicit && q.external_id
+      ? `external:${q.external_id}`
+      : (q._question_uid_explicit && q.question_uid ? `uid:${q.question_uid}` : '');
+    if (identity && seen.has(identity)) {
+      const previous = seen.get(identity);
+      if (previous.fingerprint === q.fingerprint) {
+        unchanged.push({ index, reason: 'duplicate_in_request', duplicate_of: previous.index, question: q });
+      } else {
+        conflicts.push({
+          code: 'duplicate_identity',
+          index,
+          duplicate_of: previous.index,
+          identity,
+          message: '同一次导入中，同一逻辑题身份对应了不同内容',
+        });
+      }
+      continue;
+    }
+    if (identity) seen.set(identity, { index, fingerprint: q.fingerprint });
+
+    let existing = customImportExisting(q);
+    if (!existing && target && !identity) {
+      existing = pdb.prepare(`
+        SELECT * FROM custom_questions
+        WHERE batch_id = ? AND fingerprint = ? AND is_current = 1
+        ORDER BY id DESC LIMIT 1
+      `).get(target, q.fingerprint);
+    }
+    if (!existing) {
+      items.push({ kind: 'create', index, question: q, existing: null });
+      continue;
+    }
+    if (String(existing.fingerprint || '') === q.fingerprint) {
+      unchanged.push({ index, reason: 'same_fingerprint', existing: customQuestionApiRow(existing), question: q });
+      continue;
+    }
+    if (conflictMode !== 'new_revision') {
+      conflicts.push({
+        code: 'content_conflict',
+        index,
+        external_id: q.external_id || null,
+        question_uid: q.question_uid || existing.question_uid || null,
+        message: '同一逻辑题身份的内容已发生变化；默认拒绝覆盖，请明确选择 new_revision',
+        existing: {
+          id: Number(existing.id),
+          batch_id: Number(existing.batch_id),
+          revision: Number(existing.revision) || 1,
+          fingerprint: existing.fingerprint || '',
+          question_uid: existing.question_uid || '',
+          external_id: existing.external_id || '',
+        },
+        incoming: { fingerprint: q.fingerprint },
+      });
+      continue;
+    }
+    // 显式生成新版本：沿用原逻辑身份和批次，旧版本保留但不再出题。
+    const revised = {
+      ...q,
+      question_uid: existing.question_uid || q.question_uid,
+      external_id: existing.external_id || q.external_id,
+      revision: Math.max(1, Number(existing.revision) || 1) + 1,
+      is_current: 1,
+    };
+    items.push({ kind: 'revision', index, question: revised, existing });
+  }
+  return { items, unchanged, conflicts, targetBatch: target || null };
 }
 
 function checkAnswer(q, selected) {
@@ -1849,39 +2042,129 @@ const server = http.createServer(async (req, res) => {
         return json(res, 200, checkAnswer(q, selected));
       }
       // ---- 自定义题库（2026-08-15）：批次=一次导入的文件；题目字段与粉笔 questions 同构 ----
-      // 导入：建批次 + 批量插题（前端已解析成结构化字段）
+      // WP2 预览：只校验和计算重复/冲突，不写入数据库。
+      if (pathname === '/api/custom/import/preview' && req.method === 'POST') {
+        let body = '';
+        for await (const chunk of req) body += chunk;
+        const parsed = JSON.parse(body || '{}');
+        const normalized = normalizeCustomQuestions(parsed.questions);
+        if (normalized.errors.length) return json(res, 400, { valid: false, errors: normalized.errors });
+        const plan = planCustomImport(normalized.questions, {
+          batchId: parsed.batch_id,
+          conflictMode: String(parsed.conflict_mode || 'reject'),
+        });
+        return json(res, plan.conflicts.length ? 409 : 200, {
+          valid: plan.conflicts.length === 0,
+          total: normalized.questions.length,
+          create: plan.items.filter((item) => item.kind === 'create').length,
+          revisions: plan.items.filter((item) => item.kind === 'revision').length,
+          unchanged: plan.unchanged.length,
+          conflicts: plan.conflicts,
+          questions: normalized.questions.map(({ _question_uid_explicit, _external_id_explicit, ...q }) => q),
+        });
+      }
+      // WP2 导入：规范化、幂等去重；同一逻辑题内容变化时默认 409，显式 new_revision 才建立新版本。
       if (pathname === '/api/custom/import' && req.method === 'POST') {
         let body = '';
         for await (const chunk of req) body += chunk;
-        const { name, questions, subject } = JSON.parse(body || '{}');
-        if (!name || !Array.isArray(questions) || questions.length === 0) return err(res, 400, '缺少批次名或题目');
-        const subj = String(subject || '').trim() || '自定义';
-        const ins = pdb.prepare('INSERT INTO custom_questions (batch_id, prompt, material, options, answer, answer_index, analysis, images, material_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
-        let batchId;
+        const parsed = JSON.parse(body || '{}');
+        const name = String(parsed.name || '').trim();
+        const normalized = normalizeCustomQuestions(parsed.questions);
+        if (!name && !Number(parsed.batch_id)) return json(res, 400, { error: '缺少批次名', code: 'missing_batch_name' });
+        if (normalized.errors.length) return json(res, 400, { error: '题目校验失败', code: 'custom_import_validation', errors: normalized.errors });
+        const conflictMode = String(parsed.conflict_mode || 'reject');
+        if (!['reject', 'new_revision'].includes(conflictMode)) return json(res, 400, { error: '不支持的 conflict_mode', code: 'invalid_conflict_mode' });
+        const plan = planCustomImport(normalized.questions, { batchId: parsed.batch_id, conflictMode });
+        if (plan.conflicts.length) {
+          return json(res, 409, {
+            error: '导入存在冲突',
+            code: 'custom_import_conflict',
+            conflicts: plan.conflicts,
+            unchanged: plan.unchanged.length,
+          });
+        }
+        if (!plan.items.length) {
+          const ids = [...new Set(plan.unchanged.map((item) => Number(item.existing?.batch_id)).filter(Boolean))];
+          const existingBatch = ids.length === 1 ? pdb.prepare('SELECT id, name, subject FROM custom_batches WHERE id = ?').get(ids[0]) : null;
+          return json(res, 200, {
+            id: existingBatch ? Number(existingBatch.id) : (Number(parsed.batch_id) || null),
+            name: existingBatch?.name || name,
+            subject: existingBatch?.subject || String(parsed.subject || '').trim() || '自定义',
+            count: normalized.questions.length,
+            created: 0,
+            revisions: 0,
+            unchanged: plan.unchanged.length,
+            idempotent: true,
+          });
+        }
+        const subject = String(parsed.subject || '').trim() || '自定义';
+        const requestedBatchId = Number(parsed.batch_id || 0);
+        const insert = pdb.prepare(`
+          INSERT INTO custom_questions
+            (batch_id, prompt, material, options, answer, answer_index, analysis, category, images, material_id,
+             question_uid, external_id, revision, is_current, answer_status, fingerprint)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+        let createdBatchId = requestedBatchId || null;
+        let created = 0;
+        let revisions = 0;
+        const itemBatchIds = [];
         withTx(() => {
-          const tb = pdb.prepare('INSERT INTO custom_batches (name, subject) VALUES (?, ?)').run(String(name).trim(), subj);
-          batchId = tb.lastInsertRowid;
-          for (const q of questions) {
-            ins.run(
-              batchId,
-              String(q.prompt ?? '').trim(),
-              String(q.material ?? ''),
-              JSON.stringify(Array.isArray(q.options) ? q.options : []),
-              String(q.answer ?? ''),
-              q.answer_index == null ? -1 : Number(q.answer_index),
-              String(q.analysis ?? ''),
-              JSON.stringify(Array.isArray(q.images) ? q.images : []),
-              String(q.material_id ?? ''),
-            );
+          if (!createdBatchId && plan.items.some((item) => item.kind === 'create')) {
+            const tb = pdb.prepare('INSERT INTO custom_batches (name, subject) VALUES (?, ?)').run(name, subject);
+            createdBatchId = Number(tb.lastInsertRowid);
           }
+          for (const item of plan.items) {
+            const q = item.question;
+            const batchId = item.kind === 'revision' ? Number(item.existing.batch_id) : (createdBatchId || requestedBatchId);
+            if (!batchId) throw new Error('无法确定题目所属批次');
+            if (item.kind === 'revision') {
+              pdb.prepare('UPDATE custom_questions SET is_current = 0 WHERE question_uid = ? AND is_current = 1').run(q.question_uid);
+              revisions++;
+            } else {
+              created++;
+            }
+            insert.run(
+              batchId,
+              q.prompt,
+              q.material,
+              JSON.stringify(q.options),
+              q.answer,
+              q.answer_index,
+              q.analysis,
+              q.category,
+              JSON.stringify(q.images),
+              q.material_id,
+              q.question_uid,
+              q.external_id,
+              q.revision,
+              q.is_current,
+              q.answer_status,
+              q.fingerprint,
+            );
+            itemBatchIds.push(batchId);
+          }
+          const touched = [...new Set(itemBatchIds)];
+          for (const bid of touched) pdb.prepare("UPDATE custom_batches SET updated_at = datetime('now','localtime') WHERE id = ?").run(bid);
         });
-        return json(res, 200, { id: Number(batchId), name: String(name).trim(), subject: subj, count: questions.length });
+        const primaryBatchId = createdBatchId || itemBatchIds[0] || requestedBatchId || null;
+        const batch = primaryBatchId ? pdb.prepare('SELECT id, name, subject FROM custom_batches WHERE id = ?').get(primaryBatchId) : null;
+        return json(res, 200, {
+          id: primaryBatchId,
+          name: batch?.name || name,
+          subject: batch?.subject || subject,
+          count: normalized.questions.length,
+          created,
+          revisions,
+          unchanged: plan.unchanged.length,
+          idempotent: created === 0 && revisions === 0,
+        });
       }
       // 批次列表（含题数）
       if (pathname === '/api/custom/batches' && req.method === 'GET') {
         const rows = pdb.prepare(`
           SELECT b.id, b.name, b.subject, b.created_at,
-                 (SELECT COUNT(*) FROM custom_questions c WHERE c.batch_id = b.id) AS count
+                 (SELECT COUNT(*) FROM custom_questions c WHERE c.batch_id = b.id AND c.is_current = 1) AS count
           FROM custom_batches b ORDER BY b.id DESC
         `).all();
         return json(res, 200, { batches: rows.map((r) => ({ ...r, count: Number(r.count) })) });
@@ -1890,8 +2173,13 @@ const server = http.createServer(async (req, res) => {
       if (pathname === '/api/custom/questions' && req.method === 'GET') {
         const batchId = Number(url.searchParams.get('batch_id') || 0);
         if (!batchId) return err(res, 400, '缺少 batch_id');
-        const rows = pdb.prepare('SELECT id, batch_id, prompt, material, options, answer, answer_index, analysis, images, material_id FROM custom_questions WHERE batch_id = ? ORDER BY id ASC').all(batchId);
-        return json(res, 200, { questions: rows.map((r) => ({ ...r, images: parseImages(r.images), options: JSON.parse(r.options || '[]') })) });
+        const includeHistory = url.searchParams.get('include_history') === '1';
+        const rows = pdb.prepare(`
+          SELECT * FROM custom_questions
+          WHERE batch_id = ? ${includeHistory ? '' : 'AND is_current = 1'}
+          ORDER BY id ASC
+        `).all(batchId);
+        return json(res, 200, { questions: rows.map(customQuestionApiRow), history: includeHistory });
       }
       // 批改名（可同时改科目）
       if (pathname === '/api/custom/batch' && req.method === 'PUT') {
@@ -1968,38 +2256,61 @@ const server = http.createServer(async (req, res) => {
         let raw = '';
         for await (const chunk of req) raw += chunk;
         const parsed = JSON.parse(raw || '{}');
-        const { id, prompt, material, options, answer, answer_index, analysis, images } = parsed;
-        const qid = Number(id);
+        const qid = Number(parsed.id);
         if (!qid) return err(res, 400, '缺少 id');
+        const old = pdb.prepare('SELECT * FROM custom_questions WHERE id = ?').get(qid);
+        if (!old) return err(res, 404, '题目不存在');
+        const normalized = normalizeCustomQuestion({
+          prompt: parsed.prompt ?? old.prompt,
+          material: parsed.material ?? old.material,
+          options: parsed.options ?? (() => { try { return JSON.parse(old.options || '[]'); } catch { return []; } })(),
+          answer: parsed.answer ?? old.answer,
+          answer_index: parsed.answer_index ?? old.answer_index,
+          analysis: parsed.analysis ?? old.analysis,
+          images: parsed.images ?? parseImages(old.images),
+          material_id: Object.prototype.hasOwnProperty.call(parsed, 'material_id') ? parsed.material_id : old.material_id,
+          category: parsed.category ?? old.category,
+          question_uid: old.question_uid,
+          external_id: old.external_id,
+          answer_status: parsed.answer_status ?? old.answer_status,
+        });
+        if (normalized.errors.length) return json(res, 400, { error: '题目校验失败', code: 'custom_question_validation', errors: normalized.errors });
+        const q = normalized.question;
         if (Object.prototype.hasOwnProperty.call(parsed, 'material_id')) {
           // 材料分组接口显式传 material_id：更新之（含清空 = ''）
           pdb.prepare(`
-            UPDATE custom_questions SET prompt = ?, material = ?, options = ?, answer = ?, answer_index = ?, analysis = ?, images = ?, material_id = ?
+            UPDATE custom_questions SET prompt = ?, material = ?, options = ?, answer = ?, answer_index = ?, answer_status = ?, analysis = ?, category = ?, images = ?, material_id = ?, fingerprint = ?
             WHERE id = ?
           `).run(
-            String(prompt ?? '').trim(),
-            String(material ?? ''),
-            JSON.stringify(Array.isArray(options) ? options : []),
-            String(answer ?? ''),
-            answer_index == null ? -1 : Number(answer_index),
-            String(analysis ?? ''),
-            JSON.stringify(Array.isArray(images) ? images : []),
-            String(parsed.material_id ?? ''),
+            q.prompt,
+            q.material,
+            JSON.stringify(q.options),
+            q.answer,
+            q.answer_index,
+            q.answer_status,
+            q.analysis,
+            q.category,
+            JSON.stringify(q.images),
+            q.material_id,
+            q.fingerprint,
             qid,
           );
         } else {
           // 普通编辑弹窗未传 material_id：保留原分组
           pdb.prepare(`
-            UPDATE custom_questions SET prompt = ?, material = ?, options = ?, answer = ?, answer_index = ?, analysis = ?, images = ?
+            UPDATE custom_questions SET prompt = ?, material = ?, options = ?, answer = ?, answer_index = ?, answer_status = ?, analysis = ?, category = ?, images = ?, fingerprint = ?
             WHERE id = ?
           `).run(
-            String(prompt ?? '').trim(),
-            String(material ?? ''),
-            JSON.stringify(Array.isArray(options) ? options : []),
-            String(answer ?? ''),
-            answer_index == null ? -1 : Number(answer_index),
-            String(analysis ?? ''),
-            JSON.stringify(Array.isArray(images) ? images : []),
+            q.prompt,
+            q.material,
+            JSON.stringify(q.options),
+            q.answer,
+            q.answer_index,
+            q.answer_status,
+            q.analysis,
+            q.category,
+            JSON.stringify(q.images),
+            q.fingerprint,
             qid,
           );
         }
@@ -2038,7 +2349,7 @@ const server = http.createServer(async (req, res) => {
         const bSubj = (b.subject || '自定义').trim() || '自定义';
         // 题量截断（0=全部，max 100）；保护材料组完整：若截断位置处于组中间，向后延伸到组末
         const count = Math.max(0, Math.min(Number(url.searchParams.get('count') || 0), 100));
-        const rows = pdb.prepare('SELECT * FROM custom_questions WHERE batch_id = ? ORDER BY id ASC').all(bid);
+        const rows = pdb.prepare('SELECT * FROM custom_questions WHERE batch_id = ? AND is_current = 1 ORDER BY id ASC').all(bid);
         const questions = groupCustomPracticeRows(rows, (r) => {
           const { contentHtml, materialHtml } = customQuestionHtml({ ...r, images: parseImages(r.images) });
           return {
@@ -2051,7 +2362,10 @@ const server = http.createServer(async (req, res) => {
             options: JSON.parse(r.options || '[]'),
             answer: r.answer || '',
             answerIndex: r.answer_index == null ? -1 : Number(r.answer_index),
+            answerStatus: r.answer_status || 'unconfirmed',
             analysis: r.analysis || '',
+            questionUid: r.question_uid || '',
+            revision: Number(r.revision) > 0 ? Number(r.revision) : 1,
             type: 'custom',
             subjectName: bSubj,
             batchId: bid,

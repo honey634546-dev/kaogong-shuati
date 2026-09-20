@@ -500,6 +500,9 @@ export function parseExcel(jsonRows) {
       else if (/^选项[A-H]$/.test(k)) cols[`opt${k.slice(2)}`] = j;
       else if (/^答案$/.test(k)) cols.answer = j;
       else if (/^解析$/.test(k)) cols.analysis = j;
+      else if (/^(?:外部ID|来源ID|external_id|externalId)$/i.test(k)) cols.external_id = j;
+      else if (/^(?:题目ID|题目UID|question_uid|questionUid)$/i.test(k)) cols.question_uid = j;
+      else if (/^(?:答案状态|answer_status)$/i.test(k)) cols.answer_status = j;
     });
     if (cols.prompt != null || cols.options != null) { headerIdx = i; Object.assign(headerCols, cols); break; }
   }
@@ -527,9 +530,12 @@ export function parseExcel(jsonRows) {
       }
       const answer = headerCols.answer != null ? (r[headerCols.answer] || '') : '';
       const analysis = headerCols.analysis != null ? (r[headerCols.analysis] || '') : '';
+      const external_id = headerCols.external_id != null ? (r[headerCols.external_id] || '') : '';
+      const question_uid = headerCols.question_uid != null ? (r[headerCols.question_uid] || '') : '';
+      const answer_status = headerCols.answer_status != null ? (r[headerCols.answer_status] || '') : '';
       if (!prompt && options.length === 0) continue;
       const { answer: na, answer_index, options: no } = normalizeAnswer(answer, options);
-      questions.push({ prompt, material, options: no, answer: na, answer_index, analysis });
+      questions.push({ prompt, material, options: no, answer: na, answer_index, analysis, external_id, question_uid, answer_status });
     }
     return { questions, fixedCols: true };
   }

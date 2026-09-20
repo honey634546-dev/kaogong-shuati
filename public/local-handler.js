@@ -5,6 +5,7 @@
 
 import { checkAnswer } from './lib/local-queries.js';
 import { customQuestionHtml, parseImages } from './lib/custom-parser.js';
+import { normalizeCustomQuestions } from './lib/custom-bank.js';
 
 /**
  * 自定义题材料分组组装（与 server.mjs groupCustomPracticeRows 同构，双端同步维护）：
@@ -272,42 +273,103 @@ export function createLocalHandler({ query, records, store, ai }) {
     if (skillDel) return ai.deleteSkill(decodeURIComponent(skillDel[1]));
 
     // ---------- 自定义题库（2026-08-15，IndexedDB：custom_batches / custom_questions） ----------
-    // 导入：建批次 + 批量插题。本地 IndexedDB 逐题串行写，大题库慢：
+    // WP2 导入：与 server 同一份输入规范；本地 IndexedDB 也保留逻辑身份和版本字段。
     // 预分配自增 id（只扫一次全表，逐题 nextId 是 O(N²)），按批回调进度并让出事件循环，进度条才能重绘。
     if (route === 'POST /custom/import') {
-      if (!body.name || !Array.isArray(body.questions) || body.questions.length === 0) throw new Error('缺少批次名或题目');
-      const bid = await store.nextId('custom_batches');
+      const normalized = normalizeCustomQuestions(body.questions);
+      if (!String(body.name || '').trim() && !Number(body.batch_id)) throw new Error('缺少批次名');
+      if (normalized.errors.length) throw new Error(`题目校验失败：${normalized.errors[0].message}`);
+      const conflictMode = String(body.conflict_mode || 'reject');
+      if (!['reject', 'new_revision'].includes(conflictMode)) throw new Error('不支持的 conflict_mode');
+      const allBefore = await store.getAll('custom_questions');
+      const requestedBatchId = Number(body.batch_id || 0);
+      if (requestedBatchId) {
+        const batches = await store.getAll('custom_batches');
+        if (!batches.some((b) => Number(b.id) === requestedBatchId)) throw new Error('目标批次不存在');
+      }
+      const seen = new Map();
+      const items = [];
+      const unchanged = [];
+      for (let i = 0; i < normalized.questions.length; i++) {
+        const q = normalized.questions[i];
+        const identity = q._external_id_explicit && q.external_id
+          ? `external:${q.external_id}`
+          : (q._question_uid_explicit && q.question_uid ? `uid:${q.question_uid}` : '');
+        if (identity && seen.has(identity)) {
+          const prev = seen.get(identity);
+          if (prev.fingerprint === q.fingerprint) unchanged.push({ question: q, reason: 'duplicate_in_request' });
+          else throw new Error('同一次导入中同一逻辑题身份对应了不同内容');
+          continue;
+        }
+        if (identity) seen.set(identity, { fingerprint: q.fingerprint });
+        let existing = identity
+          ? allBefore.find((x) => (q._external_id_explicit && q.external_id && String(x.external_id || '') === q.external_id)
+            || (q._question_uid_explicit && q.question_uid && String(x.question_uid || '') === q.question_uid))
+          : null;
+        if (!existing && requestedBatchId && !identity) {
+          existing = allBefore.find((x) => Number(x.batch_id) === requestedBatchId && Number(x.is_current ?? 1) !== 0 && String(x.fingerprint || '') === q.fingerprint);
+        }
+        if (!existing) { items.push({ kind: 'create', question: q }); continue; }
+        if (String(existing.fingerprint || '') === q.fingerprint) { unchanged.push({ question: q, reason: 'same_fingerprint', existing }); continue; }
+        if (conflictMode !== 'new_revision') throw new Error('导入存在内容冲突；请使用 conflict_mode=new_revision');
+        items.push({ kind: 'revision', existing, question: { ...q, question_uid: existing.question_uid || q.question_uid, external_id: existing.external_id || q.external_id, revision: Math.max(1, Number(existing.revision) || 1) + 1, is_current: 1 } });
+      }
       const subject = String(body.subject || '').trim() || '自定义';
-      await store.put('custom_batches', { id: bid, name: String(body.name).trim(), subject, created_at: new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-'), updated_at: '' });
+      let bid = requestedBatchId || null;
+      const needsNewBatch = !bid && items.some((item) => item.kind === 'create');
+      if (needsNewBatch) {
+        bid = await store.nextId('custom_batches');
+        await store.put('custom_batches', { id: bid, name: String(body.name).trim(), subject, created_at: new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-'), updated_at: '' });
+      }
       const onProgress = typeof opts.onProgress === 'function' ? opts.onProgress : null;
-      const qs = body.questions;
       let qid = await store.nextId('custom_questions'); // 顺序自增与逐题 nextId 结果一致
       const CHUNK = 40;
-      for (let i = 0; i < qs.length; i++) {
+      let created = 0;
+      let revisions = 0;
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        const q = item.question;
+        const rowBatchId = item.kind === 'revision' ? Number(item.existing.batch_id) : bid;
+        if (!rowBatchId) throw new Error('无法确定题目所属批次');
+        if (item.kind === 'revision') {
+          const old = { ...item.existing, is_current: 0 };
+          await store.put('custom_questions', old);
+          revisions++;
+        } else {
+          created++;
+        }
         await store.put('custom_questions', {
-          id: qid++, batch_id: bid,
-          prompt: String(qs[i].prompt ?? '').trim(),
-          material: String(qs[i].material ?? ''),
-          options: Array.isArray(qs[i].options) ? qs[i].options : [],
-          answer: String(qs[i].answer ?? ''),
-          answer_index: qs[i].answer_index == null ? -1 : Number(qs[i].answer_index),
-          analysis: String(qs[i].analysis ?? ''),
-          category: String(qs[i].category ?? '').trim(),
-          images: Array.isArray(qs[i].images) ? qs[i].images : [],
-          material_id: String(qs[i].material_id ?? ''),
+          id: qid++, batch_id: rowBatchId,
+          prompt: q.prompt,
+          material: q.material,
+          options: q.options,
+          answer: q.answer,
+          answer_index: q.answer_index,
+          answer_status: q.answer_status,
+          analysis: q.analysis,
+          category: q.category,
+          images: q.images,
+          material_id: q.material_id,
+          question_uid: q.question_uid,
+          external_id: q.external_id,
+          revision: q.revision,
+          is_current: q.is_current,
+          fingerprint: q.fingerprint,
         });
-        if (onProgress && ((i + 1) % CHUNK === 0 || i === qs.length - 1)) {
+        if (onProgress && ((i + 1) % CHUNK === 0 || i === items.length - 1)) {
           await new Promise((r) => setTimeout(r, 0)); // 让出事件循环，界面进度条才能重绘
-          onProgress(i + 1, qs.length);
+          onProgress(i + 1, items.length);
         }
       }
-      return { id: bid, name: String(body.name).trim(), subject, count: qs.length };
+      const batches = await store.getAll('custom_batches');
+      const existingBatch = batches.find((b) => Number(b.id) === Number(bid));
+      return { id: bid, name: existingBatch?.name || String(body.name).trim(), subject: existingBatch?.subject || subject, count: normalized.questions.length, created, revisions, unchanged: unchanged.length, idempotent: created === 0 && revisions === 0 };
     }
     // 批次列表（含题数）
     if (route === 'GET /custom/batches') {
       const batches = await store.getAll('custom_batches');
       const questions = await store.getAll('custom_questions');
-      const list = batches.map((b) => ({ ...b, count: questions.filter((q) => Number(q.batch_id) === Number(b.id)).length }));
+      const list = batches.map((b) => ({ ...b, count: questions.filter((q) => Number(q.batch_id) === Number(b.id) && Number(q.is_current ?? 1) !== 0).length }));
       list.sort((a, b) => Number(b.id) - Number(a.id));
       return { batches: list };
     }
@@ -315,7 +377,8 @@ export function createLocalHandler({ query, records, store, ai }) {
     if (route === 'GET /custom/questions') {
       const bid = Number(qs.get('batch_id') || 0);
       const all = await store.getAll('custom_questions');
-      const list = all.filter((q) => Number(q.batch_id) === bid).sort((a, b) => Number(a.id) - Number(b.id));
+      const includeHistory = qs.get('include_history') === '1';
+      const list = all.filter((q) => Number(q.batch_id) === bid && (includeHistory || Number(q.is_current ?? 1) !== 0)).sort((a, b) => Number(a.id) - Number(b.id));
       return { questions: list };
     }
     // 批改名（可同时改科目）
@@ -426,7 +489,7 @@ export function createLocalHandler({ query, records, store, ai }) {
       const bid = Number(body.batch_id);
       if (!bid) throw new Error('缺少 batch_id');
       const all = await store.getAll('custom_questions');
-      const rows = all.filter((q) => Number(q.batch_id) === bid).sort((a, b) => Number(a.id) - Number(b.id));
+      const rows = all.filter((q) => Number(q.batch_id) === bid && Number(q.is_current ?? 1) !== 0).sort((a, b) => Number(a.id) - Number(b.id));
       const norm = (s) => String(s || '').trim().replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
       const groups = new Map();
       for (const r of rows) {
@@ -471,7 +534,10 @@ export function createLocalHandler({ query, records, store, ai }) {
           options: r.options || [],
           answer: r.answer || '',
           answerIndex: r.answer_index ?? -1,
+          answerStatus: r.answer_status || 'unconfirmed',
           analysis: r.analysis || '',
+          questionUid: r.question_uid || '',
+          revision: Number(r.revision) > 0 ? Number(r.revision) : 1,
           type: 'custom',
           subjectName: bSubj,
           batchId: bid,

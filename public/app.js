@@ -93,8 +93,12 @@ const api = async (path, opts) => {
   const res = await fetch(path, opts);
   if (!res.ok) {
     let msg = `请求失败 (${res.status})`;
-    try { msg = (await res.json()).error || msg; } catch {}
-    throw new Error(msg);
+    let detail = {};
+    try { detail = await res.json(); msg = detail.error || msg; } catch {}
+    const error = new Error(msg);
+    error.status = res.status;
+    Object.assign(error, detail);
+    throw error;
   }
   return res.json();
 };
@@ -1061,7 +1065,7 @@ async function renderImport() {
         <b>${ico('upload', 26)} 点击选择或拖拽文件到此处</b>
         <span>可多选；图片/扫描版 PDF 由 AI 识图解析，约 5~20 秒/张</span>
       </label>
-      <input type="file" id="import-file" class="import-file-input" accept=".pdf,.xlsx,.xls,.txt,.docx,.json,.jpg,.jpeg,.png,.webp,.bmp,.gif" multiple>
+      <input type="file" id="import-file" class="import-file-input" accept=".pdf,.xlsx,.xls,.csv,.txt,.docx,.json,.jpg,.jpeg,.png,.webp,.bmp,.gif" multiple>
       <div id="import-progress" class="import-progress"></div>
     </div>
     <div class="card" style="margin-top:12px">
@@ -1173,7 +1177,7 @@ async function customParseFile(file, mode = 'ai') {
   if (ext === 'txt') { const text = await file.text(); return customAiStructureText(text, mode); }
   if (ext === 'docx') { const { docxToText } = await P(); const text = await docxToText(file); return customAiStructureText(text, mode); }
   if (ext === 'doc') throw new Error('旧版 .doc 请用 Word 另存为 .docx 或 TXT 后再导入');
-  if (ext === 'xlsx' || ext === 'xls') {
+  if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') {
     const { parseExcel, parseTxt } = await P();
     const XLSX = window.XLSX;
     if (!XLSX) throw new Error('Excel 解析库未加载，请刷新页面重试');
@@ -1263,6 +1267,9 @@ async function customParseJson(file) {
       answer_index: norm.answer_index,
       analysis: String(q.analysis ?? '').trim(),
       category: String(q.category ?? '').trim(),
+      external_id: String(q.external_id ?? q.externalId ?? q.source_id ?? '').trim(),
+      question_uid: String(q.question_uid ?? q.questionUid ?? q.uid ?? '').trim(),
+      answer_status: String(q.answer_status ?? '').trim(),
       images,
       failed: !!(q.failed || !answerOk),                     // 无法判分 → 红（需人工修正）
       image_missing: !!(q.image_missing || (isFigureQ && !images.length)) && answerOk, // 图形题无图 → 黄提示
@@ -1638,14 +1645,38 @@ function customRenderPreview(qs, defaultName) {
     btn.innerHTML = '<span class="btn-spinner"></span>正在导入…';
     if (local && pr) pr.hidden = false;
     try {
+      const payload = {
+        name,
+        subject: $('#import-subject').value,
+        questions: qs.map((q) => ({ prompt: q.prompt || '', material: q.material || '', options: q.options || [], answer: q.answer || '', answer_index: q.answer_index == null ? -1 : q.answer_index, analysis: q.analysis || '', category: q.category || '', external_id: q.external_id || '', question_uid: q.question_uid || '', answer_status: q.answer_status || '', images: q.images || [] })),
+      };
+      let conflictMode = '';
+      // Web 模式先走服务端预览，冲突必须由用户明确选择是否创建新版本；App 本地模式由 local-handler 在写入时执行同一校验。
+      if (!local) {
+        try {
+          await api('/api/custom/import/preview', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+        } catch (previewError) {
+          if (previewError.status !== 409 || previewError.code !== 'custom_import_conflict') throw previewError;
+          const n = Array.isArray(previewError.conflicts) ? previewError.conflicts.length : 1;
+          if (!window.confirm(`发现 ${n} 个逻辑题内容冲突。确定保留旧版本，并将本次内容导入为新版本吗？`)) {
+            throw new Error('已取消冲突版本导入');
+          }
+          conflictMode = 'new_revision';
+          await api('/api/custom/import/preview', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...payload, conflict_mode: conflictMode }),
+          });
+        }
+      }
       const r = await api('/api/custom/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name,
-          subject: $('#import-subject').value,
-          questions: qs.map((q) => ({ prompt: q.prompt || '', material: q.material || '', options: q.options || [], answer: q.answer || '', answer_index: q.answer_index == null ? -1 : q.answer_index, analysis: q.analysis || '', category: q.category || '', images: q.images || [] })),
-        }),
+        body: JSON.stringify(conflictMode ? { ...payload, conflict_mode: conflictMode } : payload),
         onProgress: setProgress,
       });
       toast(`已导入「${r.name}」${r.count} 题`);
@@ -5607,4 +5638,3 @@ async function runSelfTest() {
   } catch (e) { out.push('ERR=' + ((e && e.message) || e)); }
   console.log('[AUTOTEST] ' + out.join(' | '));
 }
-
