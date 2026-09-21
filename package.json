@@ -18,7 +18,8 @@
         "test:rich-text": "AUTH_DISABLED=1 node --test test-rich-text.mjs",
         "test:auth": "node --test test-auth-multitenancy.mjs",
         "import:public-datasets": "node scripts/import-public-datasets.mjs",
-        "test": "AUTH_DISABLED=1 node --test test-wp1-empty-start.mjs test-wp2-custom-bank.mjs test-wp2-legacy-migration.mjs test-wp3-attempts.mjs test-wp4-ai.mjs test-wp4-ai-local.mjs test-wp5-conversations.mjs test-key-storage.mjs test-custom-parser.mjs test-local-api.mjs test-local-queries.mjs test-random-practice-count.mjs test-local-ai.mjs test-local-handler.mjs test-local-fixes.mjs test-native-engine.mjs test-custom-practice.mjs test-custom-practice-e2e.mjs test-custom-bank-group.mjs test-user-skills.mjs test-rich-text.mjs test-public-datasets.mjs"
+        "import:gkzhenti": "node scripts/import-gkzhenti.mjs",
+        "test": "AUTH_DISABLED=1 node --test test-wp1-empty-start.mjs test-wp2-custom-bank.mjs test-wp2-legacy-migration.mjs test-wp3-attempts.mjs test-wp4-ai.mjs test-wp4-ai-local.mjs test-wp5-conversations.mjs test-key-storage.mjs test-custom-parser.mjs test-local-api.mjs test-local-queries.mjs test-random-practice-count.mjs test-local-ai.mjs test-local-handler.mjs test-local-fixes.mjs test-native-engine.mjs test-custom-practice.mjs test-custom-practice-e2e.mjs test-custom-bank-group.mjs test-user-skills.mjs test-rich-text.mjs test-public-datasets.mjs test-gkzhenti.mjs"
     },
     "dependencies": {
         "better-auth": "^1.7.5",
