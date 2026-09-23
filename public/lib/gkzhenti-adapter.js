@@ -13,6 +13,12 @@ const ENTITY_NAMES = {
   hellip: '…', middot: '·', ndash: '–', mdash: '—', laquo: '«', raquo: '»',
 };
 
+function removeNonContent(html) {
+  return String(html ?? '')
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<(?:script|style|noscript|template|svg)\b[^>]*>[\s\S]*?<\/(?:script|style|noscript|template|svg)>/gi, '');
+}
+
 function decodeEntities(value) {
   let output = String(value ?? '');
   // 处理一次转义（例如 &amp;nbsp;）不会无限递归，也足够覆盖网页导出的常见形式。
@@ -35,10 +41,11 @@ function decodeEntities(value) {
 
 /** 将站点 HTML 转为适合现有题目解析器的行文本。 */
 export function htmlToText(html) {
-  let source = String(html ?? '')
-    .replace(/<!--[\s\S]*?-->/g, '')
-    .replace(/<(?:script|style|noscript|template|svg)\b[^>]*>[\s\S]*?<\/(?:script|style|noscript|template|svg)>/gi, '');
+  let source = removeNonContent(html);
   source = source
+    // 公开真题库整卷页把题号放在独立的「left」栏，题干在相邻的「right」栏；
+    // 先把这个布局还原为通用解析器能识别的题号行，再剥除其他 HTML 标签。
+    .replace(/<div\b[^>]*class=["'][^"']*\bleft\b[^"']*["'][^>]*>\s*(\d{1,4})\s*<\/div>/gi, '\n$1、')
     .replace(/<(?:br|hr)\b[^>]*\/?>/gi, '\n')
     .replace(/<\/?(?:address|article|aside|blockquote|dd|div|dl|dt|figcaption|figure|footer|h[1-6]|header|li|main|nav|ol|p|section|table|tbody|td|tfoot|th|thead|tr|ul)\b[^>]*>/gi, '\n')
     .replace(/<[^>]+>/g, '');
@@ -48,6 +55,127 @@ export function htmlToText(html) {
     .replace(/\r\n?/g, '\n');
   const lines = source.split('\n').map((line) => line.replace(/[ \t]+/g, ' ').trim());
   return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+function extractPaperRows(html) {
+  const source = removeNonContent(html);
+  const tags = [...source.matchAll(/<div\b[^>]*>|<\/div\s*>/gi)];
+  const rows = [];
+  let depth = 0;
+  let rowStart = -1;
+  let rowDepth = 0;
+  for (const match of tags) {
+    if (/^<div\b/i.test(match[0])) {
+      const isRow = hasClassToken(match[0], 'row');
+      if (isRow && rowStart < 0) {
+        rowStart = match.index;
+        rowDepth = depth + 1;
+      }
+      depth++;
+    } else {
+      if (rowStart >= 0 && depth === rowDepth) {
+        rows.push(source.slice(rowStart, match.index + match[0].length));
+        rowStart = -1;
+        rowDepth = 0;
+      }
+      depth = Math.max(0, depth - 1);
+    }
+  }
+  return rows;
+}
+
+function hasClassToken(html, token) {
+  const classRe = /\bclass\s*=\s*(["'])(.*?)\1/gi;
+  for (const match of String(html ?? '').matchAll(classRe)) {
+    if (match[2].split(/\s+/).includes(token)) return true;
+  }
+  return false;
+}
+
+function questionNumberFromRow(row) {
+  const match = String(row ?? '').match(/<div\b(?=[^>]*\bclass\s*=\s*["'][^"']*\bleft\b[^"']*["'])[^>]*>\s*(\d{1,4})\s*<\/div>/i);
+  return match ? Number(match[1]) : null;
+}
+
+function structuredQuestionFromRow(row) {
+  const source = removeNonContent(row);
+  const tags = [...source.matchAll(/<div\b[^>]*>|<\/div\s*>/gi)];
+  const stack = [];
+  const candidates = [];
+  let order = 0;
+  for (const match of tags) {
+    if (/^<div\b/i.test(match[0])) {
+      stack.push({ open: match[0], contentStart: match.index + match[0].length, depth: stack.length });
+      continue;
+    }
+    const node = stack.pop();
+    if (!node || !/\bcol-xs-\d+\b/.test(node.open)) continue;
+    const inner = source.slice(node.contentStart, match.index);
+    const text = htmlToText(inner).replace(/\s+/g, ' ').trim();
+    const option = text.match(/^([A-H])\s*[、.．:：)）]\s*(.*)$/i);
+    const optionText = option?.[2].trim();
+    if (option && (optionText || /<img\b/i.test(inner))) {
+      candidates.push({
+        depth: node.depth,
+        order: order++,
+        label: option[1].toUpperCase(),
+        text: optionText || '（原卷图形选项，图片未随导入提供）',
+      });
+    }
+  }
+
+  // 选项位于独立的 col-xs-* 节点中。按相同 DOM 深度寻找连续的 A、B、C…，
+  // 避免题干材料里的「专辑 A、B」「选项 A、B」等文字被通用文本解析器误认成答案选项。
+  let optionBlocks = [];
+  const depths = [...new Set(candidates.map((candidate) => candidate.depth))].sort((a, b) => b - a);
+  for (const depth of depths) {
+    const sameDepth = candidates.filter((candidate) => candidate.depth === depth).sort((a, b) => a.order - b.order);
+    let sequence = [];
+    let best = [];
+    for (const candidate of sameDepth) {
+      const expected = String.fromCharCode(65 + sequence.length);
+      if (candidate.label === 'A') sequence = [candidate];
+      else if (sequence.length && candidate.label === expected) sequence.push(candidate);
+      else sequence = [];
+      if (sequence.length > best.length) best = sequence;
+    }
+    if (best.length >= 2) { optionBlocks = best; break; }
+  }
+  if (!optionBlocks.length) return null;
+
+  const paragraphs = [...source.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p\s*>/gi)]
+    .map((match) => htmlToText(match[1]).replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+  if (!paragraphs.length) return null;
+
+  let prompt = paragraphs.join('\n');
+  let material = '';
+  const lastParagraph = paragraphs.at(-1);
+  const earlierParagraphs = paragraphs.slice(0, -1);
+  // 仅当最后一段明显是问句、且前文没有已完成的问句时，才把前文拆成材料。
+  // 其他多段题干（如「有几项？」后接①②③陈述）整体保留，避免误拆。
+  if (earlierParagraphs.length && /[？?：:]$/.test(lastParagraph) && !earlierParagraphs.some((paragraph) => /[？?]$/.test(paragraph))) {
+    material = earlierParagraphs.join('\n');
+    prompt = lastParagraph;
+  }
+  return {
+    prompt,
+    material,
+    options: optionBlocks.map((option) => `${option.label}. ${option.text}`),
+  };
+}
+
+function sectionName(row) {
+  const text = htmlToText(row).replace(/\s+/g, ' ').trim();
+  const match = text.match(/^[一二三四五六七八九十\d]+、\s*([^。．]+)/);
+  return match ? match[1].trim() : text;
+}
+
+function sharedMaterialFromRow(row) {
+  const lines = htmlToText(row).split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const materialLines = lines.filter((line) => !/^[（(][一二三四五六七八九十\d]+[）)]$/.test(line));
+  const imageCount = [...String(row ?? '').matchAll(/<img\b/gi)].length;
+  return { text: materialLines.join('\n').trim(), imageCount };
 }
 
 export function isBlockedPage(body) {
@@ -170,36 +298,88 @@ function safeId(value) {
 
 /** 合并题目页与答案页，输出现有自定义题库导入协议。 */
 export function parseGkzhentiPaper({ paperHtml, answerHtml = '', paperId, title = '', cls = '', province = '', source = '' } = {}) {
-  const parsed = parseTxt(extractQuestionText(paperHtml));
   const answers = parseAnswerPage(answerHtml);
   const paperKey = safeId(paperId);
-  const seenNumbers = new Map();
-  const category = [cls, province].filter(Boolean).join('/') || '公开真题库';
-  const questions = parsed.map((item, index) => {
-    const number = Number.isInteger(item.num) && item.num > 0 ? item.num : index + 1;
-    const occurrence = (seenNumbers.get(number) || 0) + 1;
-    seenNumbers.set(number, occurrence);
-    const suffix = occurrence > 1 ? `-${occurrence}` : '';
-    const externalId = `gkzhenti:${paperKey}:${number}${suffix}`;
-    const answerRaw = answers.get(number) || item.answer || '';
-    const normalized = normalizeAnswer(answerRaw, item.options);
-    const hasAnswer = normalized.answer_index >= 0 || Boolean(normalized.answer);
-    return {
-      prompt: item.prompt,
-      material: item.material,
-      options: normalized.options,
-      answer: normalized.answer,
-      answer_index: normalized.answer_index,
-      answer_status: hasAnswer ? 'unconfirmed' : 'missing',
-      analysis: item.analysis || '',
-      category,
-      external_id: externalId,
-      question_uid: externalId,
-      source_url: buildPaperUrl(paperId),
-      source_label: source,
-      number,
-    };
-  });
+  const rows = extractPaperRows(paperHtml);
+  const hasStructuredRows = rows.some((row) => questionNumberFromRow(row) != null);
+  let pendingMaterial = '';
+  let pendingMaterialImages = 0;
+  let currentSection = '';
+  let questions;
+
+  if (hasStructuredRows) {
+    questions = [];
+    for (const row of rows) {
+      const number = questionNumberFromRow(row);
+      if (number != null) {
+        const structured = structuredQuestionFromRow(row);
+        const rowQuestions = structured ? [] : parseTxt(htmlToText(row));
+        const item = structured || rowQuestions.find((candidate) => candidate.num === number) || rowQuestions[0];
+        if (!item || !item.prompt) continue;
+        const answerRaw = answers.get(number) || '';
+        const normalized = normalizeAnswer(answerRaw, item.options);
+        const externalId = `gkzhenti:${paperKey}:${number}`;
+        const ownImageCount = [...row.matchAll(/<img\b/gi)].length;
+        const imageNote = ownImageCount
+          ? '\n\n【本题原卷含题目图片，当前导入文件未包含图片】'
+          : '';
+        const material = [pendingMaterial, item.material, pendingMaterialImages ? '【共享材料含图片，当前导入文件未包含图片】' : '']
+          .filter(Boolean).join('\n\n');
+        questions.push({
+          prompt: `${item.prompt}${imageNote}`,
+          material,
+          options: normalized.options,
+          answer: normalized.answer,
+          answer_index: normalized.answer_index,
+          answer_status: normalized.answer_index >= 0 || normalized.answer ? 'unconfirmed' : 'missing',
+          // 来源站的本试卷页没有逐题解析，不将章节标题或阅读材料伪装成解析。
+          analysis: '',
+          category: [cls, province, currentSection].filter(Boolean).join('/').slice(0, 100) || '公开真题库',
+          external_id: externalId,
+          question_uid: externalId,
+          source_url: buildPaperUrl(paperId),
+          source_label: source,
+          number,
+          image_missing: Boolean(ownImageCount || pendingMaterialImages),
+        });
+        continue;
+      }
+
+      if (hasClassToken(row, 'subtitle')) {
+        currentSection = sectionName(row);
+        pendingMaterial = '';
+        pendingMaterialImages = 0;
+      } else if (hasClassToken(row, 'sub2title')) {
+        const material = sharedMaterialFromRow(row);
+        pendingMaterial = material.text;
+        pendingMaterialImages = material.imageCount;
+      }
+    }
+  } else {
+    const parsed = parseTxt(extractQuestionText(paperHtml));
+    questions = parsed.map((item, index) => {
+      const number = Number.isInteger(item.num) && item.num > 0 ? item.num : index + 1;
+      const answerRaw = answers.get(number) || '';
+      const normalized = normalizeAnswer(answerRaw, item.options);
+      const externalId = `gkzhenti:${paperKey}:${number}`;
+      return {
+        prompt: item.prompt,
+        material: item.material,
+        options: normalized.options,
+        answer: normalized.answer,
+        answer_index: normalized.answer_index,
+        answer_status: normalized.answer_index >= 0 || normalized.answer ? 'unconfirmed' : 'missing',
+        analysis: '',
+        category: [cls, province].filter(Boolean).join('/') || '公开真题库',
+        external_id: externalId,
+        question_uid: externalId,
+        source_url: buildPaperUrl(paperId),
+        source_label: source,
+        number,
+        image_missing: false,
+      };
+    });
+  }
   return {
     paperId: String(paperId ?? ''),
     title: String(title || '').trim(),
@@ -207,7 +387,8 @@ export function parseGkzhentiPaper({ paperHtml, answerHtml = '', paperId, title 
     province: String(province || '').trim(),
     source: String(source || '').trim(),
     subject: subjectForClass(cls),
-    answerCount: answers.size,
+    answerCount: questions.filter((question) => question.answer_status !== 'missing').length,
+    imageMissingCount: questions.filter((question) => question.image_missing).length,
     questions,
   };
 }

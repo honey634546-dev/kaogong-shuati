@@ -36,6 +36,7 @@ const DRY_RUN = process.argv.includes('--dry-run');
 const NO_IMPORT = DRY_RUN || process.argv.includes('--no-import');
 const AUTH_DISABLED = process.env.AUTH_DISABLED === '1';
 const MIN_DELAY_MS = Math.max(61_000, Number(value('--min-delay-ms', process.env.GKZHENTI_MIN_DELAY_MS || 61_000)) || 61_000);
+const RATE_LIMIT_STATE_PATH = join(DATA_DIR, '.last-network-request-at');
 
 let lastNetworkRequestAt = 0;
 
@@ -67,11 +68,19 @@ async function readCached(path) {
 }
 
 async function waitForSiteRateLimit() {
+  const persistedValue = Number((await readCached(RATE_LIMIT_STATE_PATH) || '').trim()) || 0;
+  lastNetworkRequestAt = Math.max(lastNetworkRequestAt, persistedValue);
   const remaining = MIN_DELAY_MS - (Date.now() - lastNetworkRequestAt);
   if (remaining > 0) {
     console.log(`遵守站点限频：等待 ${Math.ceil(remaining / 1000)} 秒`);
     await sleep(remaining);
   }
+}
+
+async function recordNetworkRequestStart() {
+  lastNetworkRequestAt = Date.now();
+  // 跨进程持久化冷却时间，避免脚本重启后立即发出下一条请求。
+  await writeFile(RATE_LIMIT_STATE_PATH, `${lastNetworkRequestAt}\n`, { mode: 0o600 });
 }
 
 async function fetchText(url, cachePath, label, { validate } = {}) {
@@ -81,12 +90,13 @@ async function fetchText(url, cachePath, label, { validate } = {}) {
   }
   await mkdir(dirname(cachePath), { recursive: true });
   await waitForSiteRateLimit();
-  lastNetworkRequestAt = Date.now();
+  await recordNetworkRequestStart();
   const response = await fetch(url, {
     redirect: 'follow',
     headers: {
       accept: 'text/html,application/json;q=0.9,*/*;q=0.8',
-      'user-agent': '刷题个人学习导入器/1.0',
+      // Fetch Headers 只接受 ByteString；使用 ASCII 标识避免 Node 在发请求前报错。
+      'user-agent': 'StudyQuizImporter/1.0 (+personal-study)',
     },
   });
   const body = await response.text();
@@ -231,6 +241,7 @@ async function main() {
       questions: questions.length,
       answerable: questions.filter((question) => question.answer_index >= 0 || question.answer).length,
       withAnalysis: questions.filter((question) => question.analysis).length,
+      imageMissing: questions.filter((question) => question.image_missing).length,
       normalizedPath,
     };
     if (!NO_IMPORT) {
