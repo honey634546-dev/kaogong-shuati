@@ -5433,7 +5433,9 @@ async function renderAiSettings() {
     return;
   }
   view.innerHTML = '';
+  const defaultKeyStorageMode = window.__LOCAL_MODE__ ? 'browser' : 'server';
   const endpointAgent = agents.find((a) => Number(a.id) === 1) || agents[0] || {};
+  const endpointKeyStorageMode = endpointAgent.key_storage_mode || defaultKeyStorageMode;
   const endpointKeyStore = window.__AI_BROWSER_KEYS__ || window.__LOCAL_AI_KEYS__;
   const endpointCard = el('div', 'card');
   endpointCard.innerHTML = `
@@ -5446,13 +5448,13 @@ async function renderAiSettings() {
     <input class="field" data-unified="model" value="${esc(endpointAgent.model || '')}" placeholder="例如 deepseek-chat、gpt-4o-mini">
     <label class="field-label">Key 保存位置</label>
     <select class="field" data-unified="key_storage_mode">
-      <option value="browser" ${(endpointAgent.key_storage_mode || 'browser') === 'browser' ? 'selected' : ''}>仅浏览器保存（默认，刷新即清除）</option>
-      ${window.__LOCAL_MODE__ ? '' : `<option value="server" ${(endpointAgent.key_storage_mode || 'browser') === 'server' ? 'selected' : ''}>存服务端（写入本机 ai-config.db）</option>`}
+      <option value="browser" ${endpointKeyStorageMode === 'browser' ? 'selected' : ''}>仅当前浏览器保存（不跨访问保留）</option>
+      ${window.__LOCAL_MODE__ ? '' : `<option value="server" ${endpointKeyStorageMode === 'server' ? 'selected' : ''}>按账号保存在服务端（默认，加密）</option>`}
     </select>
     <div class="li-sub" data-unified-hint style="margin-top:4px"></div>
     <label class="field-label">API Key</label>
     <div style="display:flex;gap:8px;align-items:center">
-      <input class="field" data-unified="api_key" type="password" value="" placeholder="${(endpointAgent.key_storage_mode || 'browser') === 'browser' && endpointKeyStore?.has?.(endpointAgent.id) ? '本次页面已设置' : (endpointAgent.api_key_masked || '输入后保存') }" autocomplete="off" spellcheck="false">
+      <input class="field" data-unified="api_key" type="password" value="" placeholder="${endpointKeyStorageMode === 'browser' && endpointKeyStore?.has?.(endpointAgent.id) ? '本次页面已设置' : (endpointAgent.api_key_masked || '输入后保存') }" autocomplete="off" spellcheck="false">
       <button class="btn btn-ghost" type="button" data-unified-clear-key style="white-space:nowrap">清除本页 Key</button>
     </div>
     <div class="action-row" style="margin-top:12px">
@@ -5473,16 +5475,24 @@ async function renderAiSettings() {
   view.appendChild(advanced);
   const advancedBody = advanced.querySelector('[data-advanced-body]');
   const syncEndpointHint = () => {
-    const mode = endpointCard.querySelector('[data-unified="key_storage_mode"]')?.value || 'browser';
+    const mode = endpointCard.querySelector('[data-unified="key_storage_mode"]')?.value || defaultKeyStorageMode;
     const hint = endpointCard.querySelector('[data-unified-hint]');
     if (hint) {
       hint.textContent = mode === 'browser'
-        ? '安全默认：Key 只在当前页面内存中保存，浏览器直接请求网关；网关需要允许 CORS。'
-        : '注意：Key 会写入本机 ai-config.db，并由本机服务代为请求模型。';
-      hint.style.color = mode === 'browser' ? 'var(--muted)' : 'var(--red)';
+        ? 'Key 仅保存在当前页面内存，刷新或下次访问需重新填写；浏览器直连要求网关支持 CORS。'
+        : '端点和 Key 按当前登录账号保存；Key 加密存储，由服务端代为请求模型。';
+      hint.style.color = 'var(--muted)';
     }
   };
-  endpointCard.querySelector('[data-unified="key_storage_mode"]').onchange = syncEndpointHint;
+  endpointCard.querySelector('[data-unified="key_storage_mode"]').onchange = () => {
+    const mode = endpointCard.querySelector('[data-unified="key_storage_mode"]').value;
+    const input = endpointCard.querySelector('[data-unified="api_key"]');
+    // Selecting account storage explicitly can promote the current page-only key on save.
+    if (mode === 'server' && input && !input.value) {
+      input.value = endpointKeyStore?.keyFor?.(endpointAgent.id) || '';
+    }
+    syncEndpointHint();
+  };
   syncEndpointHint();
   endpointCard.querySelector('[data-unified-clear-key]').onclick = () => {
     for (const agent of agents) endpointKeyStore?.clear?.(agent.id);
@@ -5503,7 +5513,7 @@ async function renderAiSettings() {
     if (!fields.model) throw new Error('请先填写模型名称');
     if (fields.key_storage_mode === 'server' && !fields.api_key
       && !agents.some((agent) => agent.key_storage_mode === 'server' && agent.api_key_masked)) {
-      throw new Error('选择“存服务端”时请填写 API Key；浏览器模式的 Key 不会自动转存到服务端');
+      throw new Error('首次保存到账号时请填写 API Key；之后修改端点可留空以保留已保存的 Key。浏览器模式的 Key 不会自动转存');
     }
     for (const agent of agents) {
       await saveAgent(agent.id, {
@@ -5632,18 +5642,18 @@ async function renderAiSettings() {
       `}
       <label class="field-label">Key 保存位置</label>
       <select class="field" data-f="key_storage_mode" data-key-storage-mode>
-        <option value="browser" ${(a.key_storage_mode || 'browser') === 'browser' ? 'selected' : ''}>仅浏览器保存（默认，刷新即清除）</option>
-        ${window.__LOCAL_MODE__ ? '' : `<option value="server" ${(a.key_storage_mode || 'browser') === 'server' ? 'selected' : ''}>存服务端（写入本机 ai-config.db）</option>`}
+        <option value="browser" ${(a.key_storage_mode || defaultKeyStorageMode) === 'browser' ? 'selected' : ''}>仅当前浏览器保存（不跨访问保留）</option>
+        ${window.__LOCAL_MODE__ ? '' : `<option value="server" ${(a.key_storage_mode || defaultKeyStorageMode) === 'server' ? 'selected' : ''}>按账号保存在服务端（默认，加密）</option>`}
       </select>
-      <div class="li-sub" data-key-storage-hint style="margin-top:5px;color:${(a.key_storage_mode || 'browser') === 'server' ? 'var(--red)' : 'var(--muted)'}">
-        ${(a.key_storage_mode || 'browser') === 'server'
-          ? '注意：服务端会持久化 Key，并代为请求模型服务。'
-          : '安全默认：Key 不进入服务端配置库；浏览器会直接请求模型网关，网关需允许 CORS。'}
+      <div class="li-sub" data-key-storage-hint style="margin-top:5px;color:var(--muted)">
+        ${(a.key_storage_mode || defaultKeyStorageMode) === 'server'
+          ? '此配置与其他账号隔离；Key 加密存储，由服务端代为请求模型。'
+          : 'Key 仅在当前页面内存保存；浏览器直连模型网关需要 CORS。'}
       </div>
       <label class="field-label">API Key</label>
       <div style="display:flex;gap:8px;align-items:center">
-        <input class="field" data-f="api_key" type="password" value="${esc(a.api_key)}" placeholder="${(a.key_storage_mode || 'browser') === 'browser' && (window.__AI_BROWSER_KEYS__ || window.__LOCAL_AI_KEYS__)?.has(a.id) ? '本次页面已设置' : (a.api_key_masked || ((a.key_storage_mode || 'browser') === 'browser' ? '仅本次页面保存' : '未配置'))}" autocomplete="off" spellcheck="false">
-        <button class="btn btn-ghost" type="button" data-ai-clear-browser-key style="white-space:nowrap;${(a.key_storage_mode || 'browser') === 'browser' ? '' : 'display:none'}">清除本页 Key</button>
+        <input class="field" data-f="api_key" type="password" value="${esc(a.api_key)}" placeholder="${(a.key_storage_mode || defaultKeyStorageMode) === 'browser' && (window.__AI_BROWSER_KEYS__ || window.__LOCAL_AI_KEYS__)?.has(a.id) ? '本次页面已设置' : (a.api_key_masked || ((a.key_storage_mode || defaultKeyStorageMode) === 'browser' ? '仅本次页面保存' : '输入后保存'))}" autocomplete="off" spellcheck="false">
+        <button class="btn btn-ghost" type="button" data-ai-clear-browser-key style="white-space:nowrap;${(a.key_storage_mode || defaultKeyStorageMode) === 'browser' ? '' : 'display:none'}">清除本页 Key</button>
       </div>
       <label class="field-label">模型</label>
       <input class="field" data-f="model" value="${esc(a.model)}" placeholder="deepseek-chat">
@@ -5727,13 +5737,20 @@ async function renderAiSettings() {
       const isBrowser = storagePick?.value !== 'server';
       if (storageHint) {
         storageHint.textContent = isBrowser
-          ? '安全默认：Key 不进入服务端配置库；浏览器会直接请求模型网关，网关需允许 CORS。'
-          : '注意：服务端会持久化 Key，并代为请求模型服务。';
-        storageHint.style.color = isBrowser ? 'var(--muted)' : 'var(--red)';
+          ? 'Key 仅在当前页面内存保存；浏览器直连模型网关需要 CORS。'
+          : '此配置与其他账号隔离；Key 加密存储，由服务端代为请求模型。';
+        storageHint.style.color = 'var(--muted)';
       }
       if (clearBrowserKey) clearBrowserKey.style.display = isBrowser ? '' : 'none';
     };
-    if (storagePick) storagePick.onchange = syncStorageHint;
+    if (storagePick) storagePick.onchange = () => {
+      const input = card.querySelector('[data-f="api_key"]');
+      if (storagePick.value === 'server' && input && !input.value) {
+        const keyStore = window.__AI_BROWSER_KEYS__ || window.__LOCAL_AI_KEYS__;
+        input.value = keyStore?.keyFor?.(agentId) || '';
+      }
+      syncStorageHint();
+    };
     if (clearBrowserKey) clearBrowserKey.onclick = async () => {
       const keyStore = window.__AI_BROWSER_KEYS__ || window.__LOCAL_AI_KEYS__;
       if (keyStore?.clear) keyStore.clear(agentId);
@@ -5797,7 +5814,7 @@ async function renderAiSettings() {
       const baseUrl = ((baseEl && baseEl.value === '__custom__')
         ? (card.querySelector('[data-f="base_url-custom"]') || { value: '' }).value
         : (baseEl ? baseEl.value : '')).trim();
-      const storageMode = card.querySelector('[data-f="key_storage_mode"]')?.value || a.key_storage_mode || 'browser';
+      const storageMode = card.querySelector('[data-f="key_storage_mode"]')?.value || a.key_storage_mode || defaultKeyStorageMode;
       const typedKey = card.querySelector('[data-f="api_key"]').value.trim();
       const keyStore = window.__AI_BROWSER_KEYS__ || window.__LOCAL_AI_KEYS__;
       const apiKey = typedKey || (storageMode === 'browser' ? (keyStore?.keyFor?.(agentId) || '') : '');

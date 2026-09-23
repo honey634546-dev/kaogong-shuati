@@ -105,10 +105,34 @@ test('题库、AI 配置和随题会话按账号隔离', async () => {
   assert.equal(savedA.response.status, 200, JSON.stringify(savedA.payload));
   assert.equal(savedA.payload.agent.api_key, '');
 
+  const agentsB = await request('/api/ai/agents', { cookie: userB.cookie });
+  assert.equal(agentsB.response.status, 200);
+  assert.ok(agentsB.payload.length > 0);
+  assert.ok(agentsB.payload.every((agent) => agent.key_storage_mode === 'server'));
+  assert.ok(agentsB.payload.every((agent) => !agent.api_key));
+
   const agentB = await request('/api/ai/agents/1', { cookie: userB.cookie });
   assert.equal(agentB.response.status, 200);
-  assert.equal(agentB.payload.key_storage_mode, 'browser');
+  assert.equal(agentB.payload.key_storage_mode, 'server');
   assert.equal(agentB.payload.api_key, '');
+  assert.equal(agentB.payload.api_key_masked || '', '');
+
+  const agentAAgain = await request('/api/ai/agents/1', { cookie: userA.cookie });
+  assert.equal(agentAAgain.payload.key_storage_mode, 'server');
+  assert.equal(agentAAgain.payload.api_key, '');
+  assert.equal(agentAAgain.payload.api_key_masked, 'acco…cret');
+
+  const savedB = await request('/api/ai/agents/1', {
+    method: 'PUT', cookie: userB.cookie,
+    body: { key_storage_mode: 'server', api_key: 'b-key-unique-007', base_url: 'https://other.example/v1' },
+  });
+  assert.equal(savedB.response.status, 200, JSON.stringify(savedB.payload));
+  assert.equal(savedB.payload.agent.api_key, '');
+  const agentAAfterBSave = await request('/api/ai/agents/1', { cookie: userA.cookie });
+  assert.equal(agentAAfterBSave.payload.api_key_masked, 'acco…cret');
+  const agentBAfterSave = await request('/api/ai/agents/1', { cookie: userB.cookie });
+  assert.equal(agentBAfterSave.payload.api_key_masked, 'b-ke…-007');
+  assert.equal(agentBAfterSave.payload.base_url, 'https://other.example/v1');
 
   const conversationA = await request('/api/ai/conversations', {
     method: 'POST', cookie: userA.cookie,
@@ -123,7 +147,9 @@ test('题库、AI 配置和随题会话按账号隔离', async () => {
   const rowA = db.prepare('SELECT api_key_encrypted FROM user_ai_agents WHERE user_id = ? AND agent_id = 1').get(userA.user.id);
   const rowB = db.prepare('SELECT api_key_encrypted FROM user_ai_agents WHERE user_id = ? AND agent_id = 1').get(userB.user.id);
   assert.ok(rowA?.api_key_encrypted);
+  assert.ok(rowB?.api_key_encrypted);
   assert.equal(rowA.api_key_encrypted.includes('account-a-secret'), false);
-  assert.equal(rowB?.api_key_encrypted || '', '');
+  assert.equal(rowB.api_key_encrypted.includes('b-key-unique-007'), false);
+  assert.notEqual(rowA.api_key_encrypted, rowB.api_key_encrypted);
   db.close();
 });
