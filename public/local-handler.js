@@ -348,28 +348,108 @@ export function createLocalHandler({ query, records, store, ai }) {
         let q = null;
         let questionUid = '';
         let questionRevision = 1;
-        let questionSnapshot = '';
         if (String(body.questionId).startsWith('custom-')) {
           const cid = Number(String(body.questionId).replace(/^custom-/, ''));
           const all = await store.getAll('custom_questions');
           const r = all.find((x) => Number(x.id) === cid);
           if (r) {
-            q = { content: r.prompt, material: r.material || '', options: r.options || [], answer: r.answer || '', answerIndex: r.answer_index ?? -1, analysis: r.analysis || '', type: 'custom' };
+            const images = parseImages(r.images);
+            const html = customQuestionHtml({ ...r, images });
+            q = { content: r.prompt, contentHtml: html.contentHtml, material: r.material || '', materialHtml: html.materialHtml, options: r.options || [], answer: r.answer || '', answerIndex: r.answer_index ?? -1, analysis: r.analysis || '', type: 'custom', images };
             questionUid = r.question_uid || '';
             questionRevision = Number(r.revision) > 0 ? Number(r.revision) : 1;
-            questionSnapshot = JSON.stringify({ questionId: body.questionId, questionUid, revision: questionRevision, type: 'custom', prompt: r.prompt || '', material: r.material || '', options: r.options || [], answer: r.answer || '', answerIndex: r.answer_index ?? -1, analysis: r.analysis || '' });
           }
         } else {
           q = query.questionById(body.questionId);
+          questionUid = q?.questionUid || String(body.questionId);
+          questionRevision = Number(q?.revision) > 0 ? Number(q.revision) : 1;
         }
         if (q) {
           const judged = checkAnswer(q, body.selected);
-          body = { ...body, correct: judged.ok, questionUid, questionRevision, questionSnapshot };
+          let options = q.options || [];
+          if (typeof options === 'string') { try { options = JSON.parse(options); } catch { options = []; } }
+          const questionSnapshot = {
+            questionId: String(body.questionId), questionUid, revision: questionRevision, type: q.type ?? body.type ?? 0,
+            prompt: q.content || q.prompt || '', contentHtml: q.contentHtml || '', material: q.material || '', materialHtml: q.materialHtml || '',
+            options: Array.isArray(options) ? options : [], answer: q.answer || '', answerIndex: q.answerIndex ?? -1,
+            analysis: q.analysis || '', images: q.images || [],
+          };
+          body = {
+            ...body, correct: judged.ok, questionUid, questionRevision,
+            questionSnapshot: JSON.stringify(questionSnapshot),
+            answerSnapshot: JSON.stringify({ selected: judged.selected, correct: judged.correct, correctText: judged.correctText, ok: judged.ok }),
+          };
         }
       }
       return records.addRecord(body);
     }
-    if (route === 'POST /attempts/complete') return { ok: true };
+    if (route === 'POST /attempts/complete') {
+      const parsed = body || {};
+      const attemptId = String(parsed.attemptId || '').trim();
+      if (!attemptId) throw new Error('缺少 attemptId');
+      const all = await store.getAll('attempts');
+      const previous = all.find((item) => String(item.attempt_id) === attemptId) || {};
+      const now = Date.now();
+      await store.put('attempts', {
+        ...previous,
+        attempt_id: attemptId,
+        subject: parsed.subject || previous.subject || '',
+        mode: parsed.mode || previous.mode || '',
+        question_count: Number(parsed.questionCount) || Number(previous.question_count) || 0,
+        started_at_ms: Number(parsed.startedAtMs) || Number(previous.started_at_ms) || now,
+        duration_ms: Math.max(0, Number(parsed.durationMs) || 0),
+        explanation_ms: Math.max(0, Number(parsed.explanationMs) || 0),
+        completed: 1,
+        completed_at: now,
+      });
+      return { ok: true };
+    }
+    if (route === 'GET /attempts') {
+      const attempts = (await store.getAll('attempts')).filter((item) => item.completed === 1 || item.completed === true);
+      const records = await store.getAll('records');
+      return {
+        attempts: attempts.map((item) => {
+          const rows = records.filter((record) => String(record.attempt_id || '') === String(item.attempt_id));
+          return {
+            attemptId: item.attempt_id, subject: item.subject || '', mode: item.mode || '',
+            questionCount: Number(item.question_count) || rows.length, recordCount: rows.length,
+            correctCount: rows.filter((record) => record.is_correct === 1).length,
+            wrongCount: rows.filter((record) => record.is_correct === 0).length,
+            startedAt: Number(item.started_at_ms) || 0, startedAtMs: Number(item.started_at_ms) || 0,
+            completedAt: Number(item.completed_at) || 0, durationMs: Number(item.duration_ms) || 0,
+            explanationMs: Number(item.explanation_ms) || 0,
+          };
+        }).sort((a, b) => b.startedAtMs - a.startedAtMs).slice(0, Math.min(100, Number(qs.get('limit') || 30))),
+      };
+    }
+    const attemptDetailMatch = route.match(/^GET \/attempts\/([^/]+)$/);
+    if (attemptDetailMatch) {
+      const attemptId = decodeURIComponent(attemptDetailMatch[1]);
+      const attempt = (await store.getAll('attempts')).find((item) => String(item.attempt_id) === attemptId && (item.completed === 1 || item.completed === true));
+      if (!attempt) throw new Error('练习记录不存在');
+      const records = (await store.getAll('records')).filter((record) => String(record.attempt_id || '') === attemptId).sort((a, b) => Number(a.created_at || 0) - Number(b.created_at || 0));
+      return {
+        attempt: {
+          attemptId, subject: attempt.subject || '', mode: attempt.mode || '',
+          questionCount: Number(attempt.question_count) || records.length,
+          startedAt: Number(attempt.started_at_ms) || 0, startedAtMs: Number(attempt.started_at_ms) || 0,
+          completedAt: Number(attempt.completed_at) || 0, durationMs: Number(attempt.duration_ms) || 0,
+          explanationMs: Number(attempt.explanation_ms) || 0,
+        },
+        records: records.map((record) => {
+          const question = localSnapshot(record.question_snapshot);
+          const answer = localSnapshot(record.answer_snapshot);
+          return {
+            questionId: String(record.question_id), subject: record.subject || '', chapter: record.chapter || '',
+            type: record.question_type, selected: answer.selected ?? record.selected ?? null,
+            correct: record.is_correct == null ? null : Boolean(record.is_correct),
+            solveMs: Number(record.cost_ms) || 0, explanationMs: Number(record.explanation_ms) || 0,
+            questionUid: record.question_uid || '', revision: Number(record.question_revision) || 1, question,
+            createdAt: Number(record.created_at) || 0,
+          };
+        }),
+      };
+    }
     if (route === 'GET /records/stats') {
       return statsWithParams({
         subject: qs.get('subject') || undefined,
@@ -510,7 +590,9 @@ export function createLocalHandler({ query, records, store, ai }) {
     // 预分配自增 id（只扫一次全表，逐题 nextId 是 O(N²)），按批回调进度并让出事件循环，进度条才能重绘。
     if (route === 'POST /custom/import') {
       const normalized = normalizeCustomQuestions(body.questions);
+      const visibility = String(body.visibility || 'public').trim().toLowerCase();
       if (!String(body.name || '').trim() && !Number(body.batch_id)) throw new Error('缺少批次名');
+      if (!['public', 'private'].includes(visibility)) throw new Error('可见范围只能是 public 或 private');
       if (normalized.errors.length) throw new Error(`题目校验失败：${normalized.errors[0].message}`);
       const conflictMode = String(body.conflict_mode || 'reject');
       if (!['reject', 'new_revision'].includes(conflictMode)) throw new Error('不支持的 conflict_mode');
@@ -552,7 +634,7 @@ export function createLocalHandler({ query, records, store, ai }) {
       const needsNewBatch = !bid && items.some((item) => item.kind === 'create');
       if (needsNewBatch) {
         bid = await store.nextId('custom_batches');
-        await store.put('custom_batches', { id: bid, name: String(body.name).trim(), subject, created_at: new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-'), updated_at: '' });
+        await store.put('custom_batches', { id: bid, name: String(body.name).trim(), subject, visibility, created_at: new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-'), updated_at: '' });
       }
       const onProgress = typeof opts.onProgress === 'function' ? opts.onProgress : null;
       let qid = await store.nextId('custom_questions'); // 顺序自增与逐题 nextId 结果一致
@@ -596,34 +678,41 @@ export function createLocalHandler({ query, records, store, ai }) {
       }
       const batches = await store.getAll('custom_batches');
       const existingBatch = batches.find((b) => Number(b.id) === Number(bid));
-      return { id: bid, name: existingBatch?.name || String(body.name).trim(), subject: existingBatch?.subject || subject, count: normalized.questions.length, created, revisions, unchanged: unchanged.length, idempotent: created === 0 && revisions === 0 };
+      return { id: bid, name: existingBatch?.name || String(body.name).trim(), subject: existingBatch?.subject || subject, visibility: existingBatch?.visibility || visibility, count: normalized.questions.length, created, revisions, unchanged: unchanged.length, idempotent: created === 0 && revisions === 0 };
     }
     // 批次列表（含题数）
     if (route === 'GET /custom/batches') {
       const batches = await store.getAll('custom_batches');
       const questions = await store.getAll('custom_questions');
-      const list = batches.map((b) => ({ ...b, count: questions.filter((q) => Number(q.batch_id) === Number(b.id) && Number(q.is_current ?? 1) !== 0).length }));
+      const list = batches.map((b) => ({ ...b, visibility: b.visibility === 'private' ? 'private' : 'public', is_owner: true, count: questions.filter((q) => Number(q.batch_id) === Number(b.id) && Number(q.is_current ?? 1) !== 0).length }));
       list.sort((a, b) => Number(b.id) - Number(a.id));
       return { batches: list };
     }
     // 批次内题目列表
     if (route === 'GET /custom/questions') {
       const bid = Number(qs.get('batch_id') || 0);
+      const batches = await store.getAll('custom_batches');
+      const batch = batches.find((b) => Number(b.id) === bid);
+      if (!batch) throw new Error('批次不存在');
       const all = await store.getAll('custom_questions');
       const includeHistory = qs.get('include_history') === '1';
       const list = all.filter((q) => Number(q.batch_id) === bid && (includeHistory || Number(q.is_current ?? 1) !== 0)).sort((a, b) => Number(a.id) - Number(b.id));
-      return { questions: list };
+      return { questions: list, batch: { ...batch, visibility: batch.visibility === 'private' ? 'private' : 'public', is_owner: true } };
     }
     // 批改名（可同时改科目）
     if (route === 'PUT /custom/batch') {
       const bid = Number(body.id);
-      if (!bid || !String(body.name || '').trim()) throw new Error('缺少 id 或批次名');
+      if (!bid) throw new Error('缺少 id');
       const batches = await store.getAll('custom_batches');
       const b = batches.find((x) => Number(x.id) === bid);
       if (!b) throw new Error('批次不存在');
-      const subject = String(body.subject || '').trim();
-      await store.put('custom_batches', { ...b, name: String(body.name).trim(), ...(subject ? { subject } : {}) });
-      return { ok: true };
+      const name = body.name === undefined ? b.name : String(body.name || '').trim();
+      if (!name) throw new Error('批次名不能为空');
+      const subject = body.subject === undefined ? b.subject : (String(body.subject || '').trim() || '自定义');
+      const visibility = body.visibility === undefined ? (b.visibility === 'private' ? 'private' : 'public') : String(body.visibility).trim().toLowerCase();
+      if (!['public', 'private'].includes(visibility)) throw new Error('可见范围只能是 public 或 private');
+      await store.put('custom_batches', { ...b, name, subject, visibility });
+      return { ok: true, visibility };
     }
     // 合并批次：题目并入最小 id 批次，删其余
     if (route === 'POST /custom/batch/merge') {
@@ -637,7 +726,10 @@ export function createLocalHandler({ query, records, store, ai }) {
         if (others.includes(Number(q.batch_id))) await store.put('custom_questions', { ...q, batch_id: target });
       }
       const tb = batches.find((x) => Number(x.id) === target);
-      if (body.name && String(body.name).trim() && tb) await store.put('custom_batches', { ...tb, name: String(body.name).trim() });
+      if (tb) {
+        const visibility = idList.every((id) => batches.find((x) => Number(x.id) === id)?.visibility !== 'private') ? 'public' : 'private';
+        await store.put('custom_batches', { ...tb, visibility, ...(body.name && String(body.name).trim() ? { name: String(body.name).trim() } : {}) });
+      }
       for (const o of others) {
         const ob = batches.find((x) => Number(x.id) === o);
         if (ob) await store.deleteBy('custom_batches', 'id', Number(ob.id));
@@ -657,7 +749,7 @@ export function createLocalHandler({ query, records, store, ai }) {
       const splitN = batches.filter((x) => String(x.name || '').startsWith(String(src.name || '') + '-拆分')).length;
       const newName = String(body.name || '').trim() || `${src.name}-拆分${splitN + 1}`;
       const nb = await store.nextId('custom_batches');
-      await store.put('custom_batches', { id: nb, name: newName, subject: String(src.subject || '').trim() || '自定义', created_at: new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-'), updated_at: '' });
+      await store.put('custom_batches', { id: nb, name: newName, subject: String(src.subject || '').trim() || '自定义', visibility: src.visibility === 'private' ? 'private' : 'public', created_at: new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-'), updated_at: '' });
       const questions = await store.getAll('custom_questions');
       let cnt = 0;
       for (const q of questions) {
@@ -789,7 +881,7 @@ export function createLocalHandler({ query, records, store, ai }) {
         }
         out = questions.slice(0, endIdx);
       }
-      return { questions: out, batch: { id: bid, name: b.name, subject: bSubj } };
+      return { questions: out, batch: { id: bid, name: b.name, subject: bSubj, visibility: b.visibility === 'private' ? 'private' : 'public', is_owner: true } };
     }
     // 判分（自定义）：复用 checkAnswer，写 records（subject=自定义，chapter=批次名）
     if (route === 'POST /custom/check') {

@@ -73,12 +73,14 @@ const ROUTES = [
   ['GET', '/api/ai/agents/1'],
   ['GET', '/api/ai/agents/1/history'],
   ['GET', '/api/records/recent?limit=20'],
+  ['GET', '/api/attempts?limit=20'],
   ['GET', '/api/records/wrong?limit=50&offset=0'],
   ['GET', '/api/favorites?limit=50&offset=0'],
   ['GET', '/api/favorites'],
   // POST
   ['POST', '/api/check', { questionId: 123456, selected: 'A' }],
   ['POST', '/api/records', { question_id: 1, subject: '公务员·行测', chapter: '判断推理', selected: 'B', is_correct: 1 }],
+  ['POST', '/api/attempts/complete', { attemptId: 'local-complete-smoke', subject: '公务员·行测', mode: 'chapter', questionCount: 0 }],
   ['POST', '/api/favorites', { questionId: 123456, subject: '公务员·行测', chapter: '判断推理' }],
   ['POST', '/api/paper/generate', { subject: '公务员·行测', count: 20, difficulty: 'balanced' }],
   ['POST', '/api/paper/generate', { subject: '事业编·职测', count: 20 }],
@@ -145,6 +147,93 @@ test('本地路由：POST /check 传 body.questionId', async () => {
   const hit = mocks.calls.find((c) => c[0] === 'query.questionById');
   assert.equal(hit[1], 777, 'questionById 收到 questionId');
   assert.ok(r, 'check 返回结果');
+});
+
+test('本地题库保存可见范围，新建时默认公开', async () => {
+  const { createLocalHandler } = await import('./public/local-handler.js');
+  const data = { custom_batches: [], custom_questions: [] };
+  const counters = { custom_batches: 0, custom_questions: 0 };
+  const store = {
+    async getAll(kind) { return (data[kind] || []).map((row) => ({ ...row })); },
+    async nextId(kind) { counters[kind] = (counters[kind] || 0) + 1; return counters[kind]; },
+    async put(kind, row) {
+      const rows = data[kind] || (data[kind] = []);
+      const index = rows.findIndex((entry) => Number(entry.id) === Number(row.id));
+      if (index >= 0) rows[index] = { ...row }; else rows.push({ ...row });
+    },
+  };
+  const handler = createLocalHandler({ ...makeMocks(), store });
+  const imported = await handler('/api/custom/import', {
+    method: 'POST',
+    body: JSON.stringify({ name: '本地题库', questions: [{ prompt: '测试题', options: ['A. 甲'], answer: 'A', answer_index: 0 }] }),
+  });
+  assert.equal(imported.visibility, 'public');
+  const listed = await handler('/api/custom/batches', { method: 'GET' });
+  assert.equal(listed.batches[0].visibility, 'public');
+  assert.equal(listed.batches[0].is_owner, true);
+
+  await handler('/api/custom/batch', {
+    method: 'PUT',
+    body: JSON.stringify({ id: imported.id, visibility: 'private' }),
+  });
+  const updated = await handler('/api/custom/batches', { method: 'GET' });
+  assert.equal(updated.batches[0].visibility, 'private');
+});
+
+test('本地练习历史保留题目快照、逐题计时并可回顾', async () => {
+  const { createLocalHandler } = await import('./public/local-handler.js');
+  const data = { attempts: [], records: [], custom_questions: [], custom_batches: [] };
+  const store = {
+    async getAll(kind) { return (data[kind] || []).map((row) => ({ ...row })); },
+    async put(kind, row) {
+      const rows = data[kind] || (data[kind] = []);
+      const key = kind === 'attempts' ? 'attempt_id' : 'id';
+      const index = rows.findIndex((entry) => String(entry[key]) === String(row[key]));
+      if (index >= 0) rows[index] = { ...row }; else rows.push({ ...row });
+    },
+  };
+  const mocks = makeMocks();
+  mocks.query.questionById = (id) => ({
+    questionId: id, type: 0, content: '快照题面', contentHtml: '', material: '', options: ['A. 甲', 'B. 乙'],
+    answer: '0', answerIndex: 0, analysis: '答案解析',
+  });
+  mocks.records.addRecord = async (body) => {
+    const row = {
+      id: 'record-1', question_id: body.questionId, subject: body.subject, chapter: body.chapter,
+      question_type: body.type, selected: body.selected, is_correct: body.correct == null ? null : (body.correct ? 1 : 0),
+      cost_ms: body.costMs, explanation_ms: body.explanationMs, attempt_id: body.attemptId,
+      question_snapshot: body.questionSnapshot, answer_snapshot: body.answerSnapshot,
+    };
+    data.records.push(row);
+    return { ok: true };
+  };
+  const handler = createLocalHandler({ ...mocks, store });
+  const startedAtMs = Date.now() - 5000;
+  await handler('/api/records', {
+    method: 'POST',
+    body: JSON.stringify({
+      questionId: 9123, subject: '公务员·行测', chapter: '判断推理', type: 0, selected: [1], correct: true,
+      costMs: 4200, explanationMs: 800, attemptId: 'local-history-1', attemptMode: 'chapter',
+      attemptQuestionCount: 1, startedAtMs,
+    }),
+  });
+  await handler('/api/attempts/complete', {
+    method: 'POST',
+    body: JSON.stringify({
+      attemptId: 'local-history-1', subject: '公务员·行测', mode: 'chapter', questionCount: 1,
+      startedAtMs, durationMs: 6500, explanationMs: 800,
+    }),
+  });
+  const listed = await handler('/api/attempts?limit=10', { method: 'GET' });
+  assert.equal(listed.attempts.length, 1);
+  assert.equal(listed.attempts[0].wrongCount, 1, '本地仍应按题库答案权威判分');
+  assert.equal(listed.attempts[0].durationMs, 6500);
+  const detail = await handler('/api/attempts/local-history-1', { method: 'GET' });
+  assert.equal(detail.records.length, 1);
+  assert.equal(detail.records[0].question.prompt, '快照题面');
+  assert.equal(detail.records[0].correct, false);
+  assert.equal(detail.records[0].solveMs, 4200);
+  assert.equal(detail.records[0].explanationMs, 800);
 });
 
 test('本地路由：非 /api 路径抛错提示', async () => {

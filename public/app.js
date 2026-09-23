@@ -342,7 +342,7 @@ const modTint = (i) => MOD_TINTS[Math.abs(i) % MOD_TINTS.length];
 
 const store = {
   subjects: [],
-  state: { view: 'home', subject: null, chapter: null, mode: null, questions: [], idx: 0, results: [], answers: [], timing: null, attemptId: null, attemptStartedAt: null },
+  state: { view: 'home', subject: null, chapter: null, mode: null, questions: [], idx: 0, results: [], answers: [], timing: null, attemptId: null, attemptStartedAt: null, historicalReview: false },
   wrong: JSON.parse(localStorage.getItem('wrong_questions') || '[]'), // [{id, content, answer, myAnswer, subject, chapter, time}]
   fav: new Set(), // 收藏题 id（服务端跨设备同步）
   notes: new Set(), // 笔记题 id（服务端跨设备同步；做题页「查看笔记/添加笔记」状态切换）
@@ -396,31 +396,65 @@ function fmtTime(sec) {
   if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
   return `${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
 }
+function monotonicNow() {
+  return globalThis.performance?.now ? performance.now() : Date.now();
+}
+function ensureAnswer(idx) {
+  const s = store.state;
+  if (!s.answers[idx]) s.answers[idx] = { selected: null, correct: null, costMs: 0, explanationMs: 0, solveStopped: false };
+  const answer = s.answers[idx];
+  answer.costMs = Number(answer.costMs) || 0;
+  answer.explanationMs = Number(answer.explanationMs) || 0;
+  answer.solveStopped = Boolean(answer.solveStopped);
+  return answer;
+}
+function syncTimer(t = store.state.timing) {
+  if (!t) return;
+  if (t.running && t.activeSince != null) {
+    const now = monotonicNow();
+    t.elapsedMs += Math.max(0, now - t.activeSince);
+    t.activeSince = now;
+    if (t.limit) t.remainingMs = Math.max(0, t.limit * 1000 - t.elapsedMs);
+  }
+  t.elapsed = Math.floor(t.elapsedMs / 1000);
+  t.remaining = t.limit ? Math.ceil(t.remainingMs / 1000) : 0;
+}
+function startQuestionSolve(idx) {
+  const s = store.state;
+  const q = s.questions[idx];
+  const a = ensureAnswer(idx);
+  if (!q || !s.timing?.running || a.solveStopped || q._solveStartedAt != null) return;
+  q._solveStartedAt = monotonicNow();
+}
+function startExplanationTimer(idx) {
+  const s = store.state;
+  const q = s.questions[idx];
+  if (!q || !s.timing?.running || !q._explanationOpen || q._explanationStartedAt != null) return;
+  q._explanationStartedAt = monotonicNow();
+}
 function startTimer(limitSec) {
   const s = store.state;
   if (s.timing && s.timing.timerId) clearInterval(s.timing.timerId);
   // limitSec > 0 → 考试倒计时模式（组卷）：剩余时间递减，到 0 自动交卷；否则为正计时（普通练习）
-  s.timing = { elapsed: 0, running: true, timerId: null, limit: limitSec > 0 ? limitSec : null, remaining: limitSec > 0 ? limitSec : 0 };
+  s.timing = { elapsed: 0, elapsedMs: 0, running: true, activeSince: monotonicNow(), timerId: null, limit: limitSec > 0 ? limitSec : null, remaining: limitSec > 0 ? limitSec : 0, remainingMs: limitSec > 0 ? limitSec * 1000 : 0 };
   const tick = () => {
     const t = s.timing;
     if (!t || !t.running) return;
-    t.elapsed++;
-    if (t.limit) {
-      t.remaining--;
-      if (t.remaining <= 0) {
-        t.remaining = 0;
-        t.running = false;
-        clearInterval(t.timerId);
-        t.timerId = null;
-        renderTimerText();
-        toast('考试时间到，已自动交卷');
-        submitExam(true);
-        return;
-      }
+    syncTimer(t);
+    if (t.limit && t.remainingMs <= 0) {
+      t.remaining = 0;
+      t.running = false;
+      t.activeSince = null;
+      clearInterval(t.timerId);
+      t.timerId = null;
+      renderTimerText();
+      toast('考试时间到，已自动交卷');
+      submitExam(true);
+      return;
     }
     renderTimerText();
   };
-  s.timing.timerId = setInterval(tick, 1000);
+  s.timing.timerId = setInterval(tick, 250);
   renderTimerText();
 }
 /** 计时条文本：倒计时模式显示剩余时间，正计时模式显示已用时间 */
@@ -433,7 +467,18 @@ function renderTimerText() {
 function pauseToggle() {
   const s = store.state;
   if (!s.timing) return;
-  s.timing.running = !s.timing.running;
+  if (s.timing.running) {
+    syncTimer();
+    stampCost(s.idx);
+    stampExplanation(s.idx);
+    s.timing.running = false;
+    s.timing.activeSince = null;
+  } else {
+    s.timing.running = true;
+    s.timing.activeSince = monotonicNow();
+    startQuestionSolve(s.idx);
+    startExplanationTimer(s.idx);
+  }
   const btn = $('#btn-pause');
   if (btn) btn.innerHTML = s.timing.running ? ico('pause', 14) : ico('play', 14);
   renderTimerText();
@@ -447,18 +492,21 @@ function paused() {
 function prevQuestion() {
   const s = store.state;
   if (paused()) { toast('已暂停，先点继续再操作'); return; }
+  if (s.idx <= 0) { toast('已是第一题'); return; }
   confirmPendingMulti();   // 多选已选未确认 → 切题时自动判分（不点确认也算已作答）
-  stampCost(s.idx);
-  if (s.idx > 0) { s.idx--; renderQuestion(); } else toast('已是第一题');
+  closeQuestionTimers(s.idx);
+  s.idx--;
+  renderQuestion();
 }
 /** 下一题（按钮与滑动共用；暂停时冻结） */
 function nextQuestion() {
   const s = store.state;
   if (paused()) { toast('已暂停，先点继续再操作'); return; }
+  if (s.idx >= s.questions.length - 1) { toast('已是最后一题，可交卷'); return; }
   confirmPendingMulti();
-  stampCost(s.idx);
-  const total = s.questions.length;
-  if (s.idx < total - 1) { s.idx++; renderQuestion(); } else toast('已是最后一题，可交卷');
+  closeQuestionTimers(s.idx);
+  s.idx++;
+  renderQuestion();
 }
 /** 多选已选未确认时自动判分（滑动切题 = 隐含确认；单选本就在 recordAnswer 判分，此处只处理多选） */
 function confirmPendingMulti() {
@@ -473,32 +521,54 @@ function confirmPendingMulti() {
   if (a.correct != null) return; // 已确认过
   const j = judge(q, a.selected);
   a.correct = j.valid ? j.ok : null;
+  a.solveStopped = true;
 }
 function stopTimer() {
   const s = store.state;
-  if (s.timing && s.timing.timerId) clearInterval(s.timing.timerId);
+  if (!s.timing) return;
+  syncTimer();
+  if (s.timing.timerId) clearInterval(s.timing.timerId);
+  s.timing.timerId = null;
+  s.timing.running = false;
+  s.timing.activeSince = null;
 }
 /** 累计当前题用时 */
 function stampCost(idx) {
   const s = store.state;
   const q = s.questions[idx];
-  if (!q || !q._t0) return;
-  const cost = Date.now() - q._t0;
-  if (!s.answers[idx]) s.answers[idx] = { selected: null, correct: null, costMs: 0 };
-  s.answers[idx].costMs = (s.answers[idx].costMs || 0) + cost;
-  delete q._t0;
+  if (!q || q._solveStartedAt == null) return;
+  const a = ensureAnswer(idx);
+  a.costMs += Math.max(0, monotonicNow() - q._solveStartedAt);
+  delete q._solveStartedAt;
+}
+function stampExplanation(idx) {
+  const s = store.state;
+  const q = s.questions[idx];
+  if (!q || q._explanationStartedAt == null) return;
+  const a = ensureAnswer(idx);
+  a.explanationMs = (a.explanationMs || 0) + Math.max(0, monotonicNow() - q._explanationStartedAt);
+  delete q._explanationStartedAt;
+}
+function closeQuestionTimers(idx) {
+  stampCost(idx);
+  stampExplanation(idx);
+  const q = store.state.questions[idx];
+  if (q) q._explanationOpen = false;
 }
 /** 记录答案并（客观题）自动下一题；背题模式（backMode）判分展示反馈后不跳题 */
 function recordAnswer(q, sel) {
   const s = store.state;
   stampCost(s.idx);
+  stampExplanation(s.idx);
   const j = judge(q, sel);
-  if (!s.answers[s.idx]) s.answers[s.idx] = { selected: null, correct: null, costMs: 0 };
-  s.answers[s.idx].selected = (Array.isArray(sel) ? sel : [sel]).map(Number).sort((a, b) => a - b);
-  s.answers[s.idx].correct = j.valid ? j.ok : null; // 无答案题 correct=null
+  const answer = ensureAnswer(s.idx);
+  answer.solveStopped = true;
+  q._explanationOpen = false;
+  answer.selected = (Array.isArray(sel) ? sel : [sel]).map(Number).sort((a, b) => a - b);
+  answer.correct = j.valid ? j.ok : null; // 无答案题 correct=null
   // 背题模式：展示对错 + 解析，选项锁定，不自动跳题、不自动交卷
   if (s.backMode) {
-    showAnswerFeedback(q, j, s.answers[s.idx].selected);
+    showAnswerFeedback(q, j, answer.selected);
     return;
   }
   // 最后一题：无漏答自动交卷
@@ -579,6 +649,8 @@ function goBack() {
   else if (top.name === 'category') renderCategory(top.subject, top.category, true);
   else if (top.name === 'paper-detail') renderPaperDetail(top.subject, top.paperId, true);
   else if (top.name === 'practice') renderPractice(top.subject, top.chapter || null, null, top.mock ?? '0', true);
+  else if (top.name === 'attempt-history') renderAttemptHistory(true);
+  else if (top.name === 'attempt-detail') renderAttemptHistory(true);
   else if (top.name === 'wrong') renderWrong();
   else if (top.name === 'wrong-list') renderWrongList(top.groupKey, top.subKey, top.subName, true);
   else if (top.name === 'fav') renderFavorites();
@@ -777,6 +849,7 @@ async function renderHome() {
         <div class="quick-item" id="quick-wrong"><span class="qi-ico qg-coral">${fico('book', 22)}</span><span class="qi-label" id="quick-wrong-label">错题本</span></div>
         <div class="quick-item" id="quick-fav"><span class="qi-ico qg-amber">${fico('star', 22)}</span><span class="qi-label" id="quick-fav-label">收藏</span></div>
         <div class="quick-item" id="quick-note"><span class="qi-ico qg-green">${fico('note', 22)}</span><span class="qi-label" id="quick-note-label">笔记</span></div>
+        <div class="quick-item" id="quick-attempts"><span class="qi-ico qg-cyan">${ico('clock', 22)}</span><span class="qi-label">练习记录</span></div>
         <div class="quick-item" id="quick-ai"><span class="qi-ico qg-blue">${fico('sparkles', 22)}</span><span class="qi-label">AI 设置</span></div>
         <div class="quick-item" id="quick-paper"><span class="qi-ico qg-orange">${fico('target', 22)}</span><span class="qi-label">智能组卷</span></div>
       </div>
@@ -786,6 +859,7 @@ async function renderHome() {
     $('#quick-wrong').onclick = () => renderWrong();
     $('#quick-fav').onclick = () => renderFavorites();
     $('#quick-note').onclick = () => renderNotes();
+    $('#quick-attempts').onclick = () => renderAttemptHistory();
     $('#quick-ai').onclick = () => renderAiSettings();
     $('#quick-paper').onclick = () => openPaperConfig();
     // 服务端错题/收藏/笔记计数（异步刷新）
@@ -897,10 +971,12 @@ async function renderCustomBank(skipNav) {
   view.innerHTML = '<div class="spinner"></div>';
   try {
     const { batches } = await api('/api/custom/batches');
+    const ownedBatches = batches.filter((b) => Boolean(Number(b.is_owner ?? 1)));
+    if (customMergeMode && ownedBatches.length < 2) customMergeMode = false;
     view.innerHTML = '';
     const head = el('div', 'custom-head', `
       <button class="btn btn-primary" id="cb-import" style="flex:0 0 auto">${ico('plus', 15)} 导入题目</button>
-      ${batches.length > 1 ? `<button class="btn btn-ghost" id="cb-merge" style="flex:0 0 auto">${ico('merge', 15)} 合并批次</button>` : ''}
+      ${ownedBatches.length > 1 ? `<button class="btn btn-ghost" id="cb-merge" style="flex:0 0 auto">${ico('merge', 15)} 合并批次</button>` : ''}
       <button class="btn btn-ghost" id="cb-refresh" style="flex:0 0 auto">${ico('refresh', 15)} 刷新</button>
     `);
     view.appendChild(head);
@@ -939,18 +1015,20 @@ async function renderCustomBank(skipNav) {
     for (const b of batches) {
       const card = el('div', 'custom-batch', `
         <div class="cb-top" data-go="${b.id}">
-          ${customMergeMode ? `<label class="cb-check-wrap"><input type="checkbox" class="cb-check" data-id="${b.id}"><span></span></label>` : ''}
+          ${customMergeMode && Boolean(Number(b.is_owner ?? 1)) ? `<label class="cb-check-wrap"><input type="checkbox" class="cb-check" data-id="${b.id}"><span></span></label>` : ''}
           <span class="cb-ico ${CB_TINTS[b.id % 4]}">${ico('folderTree', 24)}</span>
           <div class="cb-main">
-            <div class="cb-name">${esc(b.name)}${(b.subject && b.subject !== '自定义') ? `<span class="cb-subject">${esc(b.subject)}</span>` : ''}</div>
+            <div class="cb-name">${esc(b.name)} <span class="tag ${b.visibility === 'private' ? '' : 'ok'}">${b.visibility === 'private' ? '私有' : '公开'}</span>${(b.subject && b.subject !== '自定义') ? `<span class="cb-subject">${esc(b.subject)}</span>` : ''}</div>
             <div class="cb-meta">${b.count} 题 · ${esc(b.created_at || '')}</div>
           </div>
         </div>
         <div class="cb-actions">
           <button class="mini primary" data-act="practice">${ico('play', 13)} 刷题</button>
-          <button class="mini" data-act="split">${ico('scissors', 13)} 拆分</button>
-          <button class="mini" data-act="rename">${ico('pen', 13)} 改名</button>
-          <button class="mini danger" data-act="del">${ico('trash', 13)} 删除</button>
+          ${Boolean(Number(b.is_owner ?? 1)) ? `
+            <button class="mini" data-act="split">${ico('scissors', 13)} 拆分</button>
+            <button class="mini" data-act="rename">${ico('pen', 13)} 管理</button>
+            <button class="mini danger" data-act="del">${ico('trash', 13)} 删除</button>
+          ` : ''}
         </div>
       `);
       const check = card.querySelector('.cb-check');
@@ -965,9 +1043,12 @@ async function renderCustomBank(skipNav) {
       }
       card.querySelector('[data-go]').onclick = () => renderCustomBatch(b.id);
       card.querySelector('[data-act="practice"]').onclick = (e) => { e.stopPropagation(); customPractice(b.id, b.name); };
-      card.querySelector('[data-act="split"]').onclick = (e) => { e.stopPropagation(); customSplitMode = true; customSel.clear(); renderCustomBatch(b.id, true); };
-      card.querySelector('[data-act="rename"]').onclick = (e) => { e.stopPropagation(); customRenameBatch(b); };
-      card.querySelector('[data-act="del"]').onclick = (e) => { e.stopPropagation(); customDeleteBatch(b); };
+      const split = card.querySelector('[data-act="split"]');
+      if (split) split.onclick = (e) => { e.stopPropagation(); customSplitMode = true; customSel.clear(); renderCustomBatch(b.id, true); };
+      const manage = card.querySelector('[data-act="rename"]');
+      if (manage) manage.onclick = (e) => { e.stopPropagation(); customRenameBatch(b); };
+      const del = card.querySelector('[data-act="del"]');
+      if (del) del.onclick = (e) => { e.stopPropagation(); customDeleteBatch(b); };
       list.appendChild(card);
     }
     view.appendChild(list);
@@ -984,23 +1065,27 @@ async function renderCustomBatch(id, skipNav) {
   const view = $('#view');
   view.innerHTML = '<div class="spinner"></div>';
   try {
-    const [{ batches }, { questions }] = await Promise.all([
+    const [{ batches }, questionData] = await Promise.all([
       api('/api/custom/batches'),
       api('/api/custom/questions?batch_id=' + id),
     ]);
-    const batch = batches.find((b) => b.id === id) || { id, name: '批次' };
+    const questions = questionData.questions || [];
+    const batch = batches.find((b) => Number(b.id) === Number(id)) || questionData.batch || { id, name: '批次' };
+    const canManage = Boolean(Number(batch.is_owner ?? 1));
+    if (!canManage) { customSplitMode = false; customGroupMode = false; customSel.clear(); }
     view.innerHTML = '';
     const head = el('div', 'custom-head', `
       <div class="cb-title-row">
-        <div class="cb-name big">${esc(batch.name)} <span class="cb-meta">${questions.length} 题</span></div>
+        <div class="cb-name big">${esc(batch.name)} <span class="tag ${batch.visibility === 'private' ? '' : 'ok'}">${batch.visibility === 'private' ? '私有' : '公开'}</span> <span class="cb-meta">${questions.length} 题</span></div>
       </div>
       <div class="custom-toolbar-btns">
         <button class="btn btn-primary" id="cbq-practice" style="flex:0 0 auto">${ico('play', 15)} 开始刷题</button>
-        ${questions.length > 1 ? `<button class="btn btn-ghost" id="cbq-split" style="flex:0 0 auto">${ico('scissors', 15)} 拆分题目</button>` : ''}
-        ${questions.length > 1 ? `<button class="btn btn-ghost" id="cbq-group" style="flex:0 0 auto">${ico('layers', 15)} 材料分组</button>` : ''}
+        ${canManage && questions.length > 1 ? `<button class="btn btn-ghost" id="cbq-split" style="flex:0 0 auto">${ico('scissors', 15)} 拆分题目</button>` : ''}
+        ${canManage && questions.length > 1 ? `<button class="btn btn-ghost" id="cbq-group" style="flex:0 0 auto">${ico('layers', 15)} 材料分组</button>` : ''}
       </div>
     `);
     view.appendChild(head);
+    if (!canManage) view.appendChild(el('div', 'custom-hint', '这是其他用户公开的题库，你可以浏览和刷题，但不能修改题目。'));
     $('#cbq-practice').onclick = () => customPractice(batch.id, batch.name);
     const splitBtn = $('#cbq-split');
     if (splitBtn) splitBtn.onclick = () => { customSplitMode = true; customSel.clear(); renderCustomBatch(id, true); };
@@ -1082,7 +1167,7 @@ async function renderCustomBatch(id, skipNav) {
     questions.forEach((q, i) => {
       const row = el('div', 'custom-q', `
         <div class="cq-body" data-go="detail">
-          ${(customSplitMode || customGroupMode) ? `<label class="cb-check-wrap"><input type="checkbox" class="cq-check" data-id="${q.id}"><span></span></label>` : ''}
+          ${canManage && (customSplitMode || customGroupMode) ? `<label class="cb-check-wrap"><input type="checkbox" class="cq-check" data-id="${q.id}"><span></span></label>` : ''}
           <div class="cq-no">${i + 1}</div>
           <div class="cq-main">
             <div class="cq-prompt">${renderStudyInline(q.prompt || '（空题干）')}${(q.images || []).length ? ' <span class="tag">图</span>' : ''}</div>
@@ -1097,9 +1182,8 @@ async function renderCustomBatch(id, skipNav) {
           </div>
         </div>
         <div class="cq-actions">
-          ${q.material_id && !customSplitMode && !customGroupMode ? `<button class="mini" data-a="ungroup" title="取消该题的材料分组">${ico('layers', 13)} 移出组</button>` : ''}
-          <button class="mini" data-a="edit">${ico('pen', 13)} 编辑</button>
-          <button class="mini danger" data-a="del">${ico('trash', 13)} 删除</button>
+          ${canManage && q.material_id && !customSplitMode && !customGroupMode ? `<button class="mini" data-a="ungroup" title="取消该题的材料分组">${ico('layers', 13)} 移出组</button>` : ''}
+          ${canManage ? `<button class="mini" data-a="edit">${ico('pen', 13)} 编辑</button><button class="mini danger" data-a="del">${ico('trash', 13)} 删除</button>` : ''}
         </div>
       `);
       const check = row.querySelector('.cq-check');
@@ -1112,9 +1196,11 @@ async function renderCustomBatch(id, skipNav) {
           if (b) b.disabled = customSel.size === 0;
         };
       }
-      row.querySelector('[data-go="detail"]').onclick = () => customQuestionDetail(q, batch.name);
-      row.querySelector('[data-a="edit"]').onclick = () => customEditQuestion(q, batch.name);
-      row.querySelector('[data-a="del"]').onclick = () => customDeleteQuestion(q);
+      row.querySelector('[data-go="detail"]').onclick = () => customQuestionDetail(q, batch.name, canManage);
+      const edit = row.querySelector('[data-a="edit"]');
+      if (edit) edit.onclick = () => customEditQuestion(q, batch.name);
+      const del = row.querySelector('[data-a="del"]');
+      if (del) del.onclick = () => customDeleteQuestion(q);
       const ug = row.querySelector('[data-a="ungroup"]');
       if (ug) ug.onclick = async (e) => {
         e.stopPropagation();
@@ -1761,9 +1847,11 @@ async function customParsePdf(file, mode = 'ai') {
 function customRenderPreview(qs, defaultName) {
   const box = $('#import-preview');
   if (!box) return;
+  const localMode = !!window.__LOCAL_API_PROMISE__;
   if (!qs.length) { box.innerHTML = '<div class="card"><h3>解析结果</h3><div class="empty">未解析出题目，请检查文件内容或格式。</div></div>'; return; }
   const failedCount = qs.filter((q) => q.failed).length;
   const nameNow = ((($('#import-name') || {}).value || '').trim()) || defaultName || '';
+  const visibilityNow = (($('#import-visibility') || {}).value || 'public');
   box.innerHTML = `
     <div class="card">
       <div class="pv-head">
@@ -1784,8 +1872,13 @@ function customRenderPreview(qs, defaultName) {
             <option value="综应">综应</option>
             <option value="申论">申论</option>
           </select>
+          <select id="import-visibility" title="${localMode ? '本机模式下仅保存此可见范围标记，不会上传或共享' : '公开题库可被其他已登录用户浏览和刷题'}">
+            <option value="public"${visibilityNow === 'public' ? ' selected' : ''}>可见范围：公开</option>
+            <option value="private"${visibilityNow === 'private' ? ' selected' : ''}>可见范围：私有</option>
+          </select>
           <button class="btn btn-primary" id="import-ok" style="flex:0 0 auto">${ico('checkCircle', 15)} 确认导入 ${qs.length} 题</button>
         </div>
+        <p class="muted">${localMode ? '本机模式下题库只保存在此浏览器，公开设置不会上传或共享。' : '新题库默认公开，所有已登录用户可浏览和刷题；请确认题目内容可以分享。也可设为私有，仅自己可见。'}</p>
         <div class="import-ok-progress" id="import-ok-progress" hidden>
           <div class="import-ok-bar"><div class="fill" id="import-ok-fill"></div></div>
           <span class="import-ok-status" id="import-ok-status"></span>
@@ -1818,6 +1911,7 @@ function customRenderPreview(qs, defaultName) {
       const payload = {
         name,
         subject: $('#import-subject').value,
+        visibility: $('#import-visibility').value,
         questions: qs.map((q) => ({ prompt: q.prompt || '', material: q.material || '', options: q.options || [], answer: q.answer || '', answer_index: q.answer_index == null ? -1 : q.answer_index, analysis: q.analysis || '', category: q.category || '', external_id: q.external_id || '', question_uid: q.question_uid || '', answer_status: q.answer_status || '', images: q.images || [] })),
       };
       let conflictMode = '';
@@ -2079,8 +2173,9 @@ qs[i] = {
 	}
 
 function customRenameBatch(b) {
+  const localMode = !!window.__LOCAL_API_PROMISE__;
   const sheet = customSheet(`
-    <h3>模块改名</h3>
+    <h3>题库设置</h3>
     <label>名称</label>
     <input type="text" class="field-input" id="rn-name" value="${esc(b.name)}">
     <label>科目 <span class="muted">（影响刷题统计与错题本归属）</span></label>
@@ -2091,6 +2186,12 @@ function customRenameBatch(b) {
       <option value="综应"${b.subject === '综应' ? ' selected' : ''}>综应</option>
       <option value="申论"${b.subject === '申论' ? ' selected' : ''}>申论</option>
     </select>
+    <label>可见范围</label>
+    <select id="rn-visibility" class="field-input">
+      <option value="public"${b.visibility !== 'private' ? ' selected' : ''}>${localMode ? '公开（本机模式仅保存标记）' : '公开（所有已登录用户可浏览和刷题）'}</option>
+      <option value="private"${b.visibility === 'private' ? ' selected' : ''}>私有（仅自己可见）</option>
+    </select>
+    ${localMode ? '<p class="muted">本机模式下题库只保存在此浏览器，切换可见范围不会上传或共享。</p>' : ''}
     <div class="sheet-actions">
       <button class="btn btn-primary" id="rn-ok" style="flex:0 0 auto">${ico('save', 15)} 保存</button>
       <button class="btn btn-ghost" id="rn-cancel" style="flex:0 0 auto">取消</button>
@@ -2101,7 +2202,7 @@ function customRenameBatch(b) {
     const name = $('#rn-name').value.trim();
     if (!name) { toast('名称不能为空'); return; }
     try {
-      await api('/api/custom/batch?id=' + b.id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: b.id, name, subject: $('#rn-subject').value }) });
+      await api('/api/custom/batch?id=' + b.id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: b.id, name, subject: $('#rn-subject').value, visibility: $('#rn-visibility').value }) });
       sheet.remove();
       toast('已保存');
       renderCustomBank(true);
@@ -2110,7 +2211,7 @@ function customRenameBatch(b) {
 }
 
 /** 题目详情弹窗：完整展示题干/材料/选项/答案/解析 + 编辑/删除入口 */
-function customQuestionDetail(q, batchName) {
+function customQuestionDetail(q, batchName, canManage = true) {
   const opts = Array.isArray(q.options) ? q.options : [];
   const ansText = q.answer ? customAnswerDisplay(q.answer, opts) : '';
   const ansLetters = customAnswerLetters(q);
@@ -2136,14 +2237,15 @@ function customQuestionDetail(q, batchName) {
       <div class="qd-content">${q.analysis ? renderStudyText(q.analysis) : '<span class="muted">无解析</span>'}</div>
     </div>
     <div class="sheet-actions">
-      <button class="btn btn-primary" id="qd-edit" style="flex:0 0 auto">${ico('pen', 15)} 编辑</button>
-      <button class="btn btn-danger" id="qd-del" style="flex:0 0 auto">${ico('trash', 15)} 删除</button>
+      ${canManage ? `<button class="btn btn-primary" id="qd-edit" style="flex:0 0 auto">${ico('pen', 15)} 编辑</button><button class="btn btn-danger" id="qd-del" style="flex:0 0 auto">${ico('trash', 15)} 删除</button>` : ''}
       <button class="btn btn-ghost" id="qd-close" style="flex:0 0 auto">关闭</button>
     </div>
   `, true);
   $('#qd-close').onclick = () => sheet.remove();
-  $('#qd-edit').onclick = () => { sheet.remove(); customEditQuestion(q, batchName); };
-  $('#qd-del').onclick = () => { sheet.remove(); customDeleteQuestion(q); };
+  const edit = $('#qd-edit');
+  if (edit) edit.onclick = () => { sheet.remove(); customEditQuestion(q, batchName); };
+  const del = $('#qd-del');
+  if (del) del.onclick = () => { sheet.remove(); customDeleteQuestion(q); };
 }
 
 function customDeleteBatch(b) {
@@ -2482,6 +2584,7 @@ function enterQuiz(questions, subject, mode, chapter, mock, limitSec, backMode) 
   store.state.attemptId = newAttemptId();
   store.state.attemptStartedAt = Date.now();
   store.state.attemptCompleted = false;
+  store.state.historicalReview = false;
   stopTimer();
   startTimer(limitSec); // 组卷（mode='quiz'）传 durationMinutes×60 → 倒计时；其余正计时
   renderQuestion();
@@ -3311,6 +3414,7 @@ function renderQuestion() {
   store.aiTutor = { token: tutorToken, controller: null, loading: false, conversationId: null, messages: [] };
   const q = s.questions[s.idx];
   if (!q) { renderResult(); return; }
+  startQuestionSolve(s.idx);
   const view = $('#view');
   view.dataset.exam = '1'; // 做题态标记：滑动切题/长按排除在此生效
   const isEssay = q.type === 21 || q.type >= 20;
@@ -3324,16 +3428,14 @@ function renderQuestion() {
     : ((q.type === 3 || q.type === 5) ? ['正确', '错误'] : []);
 
   view.innerHTML = '';
-  // 计时条（客观题模式显示）+ 答题进度条
-  if (!isEssay) {
-    view.appendChild(el('div', 'timer-bar', `
+  // 全题型显示有效用时；显式暂停时间不计入本次时长。
+  view.appendChild(el('div', 'timer-bar', `
       <span class="timer-ico">${s.timing?.limit ? ico('hourglass', 15) : ico('clock', 15)}</span>
       <span id="timer-text">${s.timing?.limit ? fmtTime(s.timing.remaining) : fmtTime(s.timing?.elapsed ?? 0)}</span>
       <button class="btn btn-ghost btn-sm" id="btn-pause" title="${s.timing?.running === false ? '继续' : '暂停'}">${s.timing?.running === false ? ico('play', 14) : ico('pause', 14)}</button>
-      <span class="timer-tip">${s.backMode ? '背题模式：点选即看答案，不自动跳题' : (s.timing?.limit ? '倒计时结束自动交卷' : '交卷后查看解析与成绩')}</span>
-    `));
-    $('#btn-pause').onclick = pauseToggle;
-  }
+      <span class="timer-tip">${s.backMode ? '背题模式：点选即看答案，不自动跳题' : (s.timing?.limit ? '倒计时结束自动交卷' : '暂停时间不计入总用时')}</span>
+  `));
+  $('#btn-pause').onclick = pauseToggle;
   // 答题进度条
   view.appendChild(el('div', 'q-progress-bar', `<div class="fill" style="width:${total ? Math.round(((s.idx) / total) * 100) : 0}%"></div>`));
   const meta = el('div', 'q-meta', `
@@ -3383,7 +3485,7 @@ function renderQuestion() {
     overlay.querySelector('.sheet-close').onclick = () => overlay.remove();
     overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
     overlay.querySelectorAll('.sheet-cell').forEach((cell, i) => {
-      cell.onclick = () => { s.idx = i; overlay.remove(); renderQuestion(); };
+      cell.onclick = () => { closeQuestionTimers(s.idx); s.idx = i; overlay.remove(); renderQuestion(); };
     });
     view.appendChild(overlay);
   };
@@ -3590,7 +3692,10 @@ function renderQuestion() {
     subExplain.onclick = () => {
       if (paused()) { toast('已暂停，先点继续再操作'); return; }
       const existing = $('#inline-explain');
-      if (existing) { existing.remove(); return; }
+      if (existing) { stampExplanation(s.idx); q._explanationOpen = false; existing.remove(); return; }
+      stampCost(s.idx);
+      ensureAnswer(s.idx).solveStopped = true;
+      q._explanationOpen = true;
       const box = el('div', 'answer-box');
       box.id = 'inline-explain';
       box.innerHTML = `
@@ -3600,6 +3705,7 @@ function renderQuestion() {
         <div id="ai-explain-result" style="display:none"></div>
       `;
       view.appendChild(box);
+      startExplanationTimer(s.idx);
       $('#btn-ai-explain').onclick = () => explainQuestion(q, s.answers[s.idx]?.selected, s.answers[s.idx]?.correct ?? null, box);
     };
     const subSubmit = el('button', 'btn btn-primary', '交卷');
@@ -3612,7 +3718,6 @@ function renderQuestion() {
   }
 
   // 客观题：点选即记、自动下一题；顶部计时 + 底部操作条
-  q._t0 = q._t0 || Date.now(); // 进入本题时间（累计用时用）
   const prevAnswer = s.answers[s.idx]?.selected || null; // 已答回看
   const optWrap = el('div');
   opts.forEach((opt, i) => {
@@ -3724,10 +3829,12 @@ function renderQuestion() {
   const explainBtn = el('button', 'btn btn-ghost', `${ico('book', 15)} 查看解析`);
   explainBtn.onclick = () => {
     if (paused()) { toast('已暂停，先点继续再操作'); return; }
-    stampCost(s.idx);
     // 当前题展开解析（不自动判分，仅展示答案对照 + AI 解析入口）
     const existing = $('#inline-explain');
-    if (existing) { existing.remove(); return; }
+    if (existing) { stampExplanation(s.idx); q._explanationOpen = false; existing.remove(); return; }
+    stampCost(s.idx);
+    ensureAnswer(s.idx).solveStopped = true;
+    q._explanationOpen = true;
     const j = s.answers[s.idx] ? judge(q, s.answers[s.idx].selected) : null;
     const rightSel = j ? j.correct.map((x) => LETTERS[x]).join('') : '见解析';
     const mySel = [...(s.answers[s.idx]?.selected || [])].sort((x, y) => x - y).map((x) => LETTERS[x]).join('') || '未答';
@@ -3744,6 +3851,7 @@ function renderQuestion() {
       <div id="ai-explain-result" style="display:none"></div>
     `;
     view.appendChild(box);
+    startExplanationTimer(s.idx);
     $('#btn-ai-explain').onclick = () => explainQuestion(q, s.answers[s.idx]?.selected, s.answers[s.idx]?.correct ?? null, box);
   };
   const submitBtn = el('button', 'btn btn-primary', '交卷');
@@ -3841,7 +3949,7 @@ function submitAnswer(q, selected, optWrap, opts, isMulti) {
         type: q.type,
         selected: Array.isArray(selected) ? selected : [selected],
         correct: r.ok,
-        costMs: (Date.now() - (q._t0 || Date.now())),
+        costMs: store.state.answers[store.state.idx]?.costMs || 0,
       }),
     }).catch(() => {});
     if (r.ok === false) {
@@ -3854,13 +3962,13 @@ function submitAnswer(q, selected, optWrap, opts, isMulti) {
 // ---------- 交卷：漏答提示 + 批量落库 + 解析界面 ----------
 async function submitExam(force) {
   const s = store.state;
-  stampCost(s.idx);
-  stopTimer();
   const unanswered = s.questions.map((_, i) => i).filter((i) => !s.answers[i] || s.answers[i].selected == null);
   if (unanswered.length && !force) { showUnanswered(unanswered); return; }
+  closeQuestionTimers(s.idx);
+  stopTimer();
   // 强制交卷：未答的题按错误处理
   for (const i of unanswered) {
-    if (!s.answers[i]) s.answers[i] = { selected: null, correct: false, costMs: 0 };
+    if (!s.answers[i]) s.answers[i] = { selected: null, correct: false, costMs: 0, explanationMs: 0, solveStopped: true };
     else s.answers[i].selected = null, s.answers[i].correct = false;
   }
   // 批量落库 + 错题本；submissionKey 使网络重试/重复点击不会生成第二条相同作答记录。
@@ -3877,7 +3985,9 @@ async function submitExam(force) {
       body: JSON.stringify({
         questionId: q.id, subject: q.subject || s.subject, chapter: q.chapter, type: q.type,
         selected: selSorted || [], correct: finalCorrect, costMs: a.costMs,
+        explanationMs: a.explanationMs || 0,
         attemptId: s.attemptId, attemptMode: s.mode, attemptQuestionCount: s.questions.length,
+        startedAtMs: s.attemptStartedAt,
         submissionKey: `${s.attemptId}:final:${i}:${q.id}`,
         questionUid: q.questionUid || '', questionRevision: q.revision || 1,
       }),
@@ -3891,9 +4001,14 @@ async function submitExam(force) {
   if (results.some((r) => r.status === 'rejected')) toast('部分作答记录未能保存，可保持当前页面后重试');
   await api('/api/attempts/complete', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ attemptId: s.attemptId }),
+    body: JSON.stringify({
+      attemptId: s.attemptId, subject: s.subject, mode: s.mode, questionCount: s.questions.length,
+      startedAtMs: s.attemptStartedAt, durationMs: s.timing?.elapsedMs || 0,
+      explanationMs: s.answers.reduce((sum, answer) => sum + (Number(answer?.explanationMs) || 0), 0),
+    }),
   }).catch(() => {});
   s.attemptCompleted = true;
+  s.historicalReview = false;
   renderReview();
 }
 /** 漏答提示弹层：未答题号 + 继续作答 / 直接交卷 */
@@ -3917,12 +4032,112 @@ function showUnanswered(list) {
   overlay.querySelectorAll('.sheet-cell').forEach((cell) => {
     cell.onclick = () => {
       const i = Number(cell.dataset.i);
+      closeQuestionTimers(store.state.idx);
       store.state.idx = i;
       overlay.remove();
       renderQuestion();
     };
   });
   view.appendChild(overlay);
+}
+function attemptDateLabel(attempt) {
+  const raw = Number(attempt.startedAtMs) || (typeof attempt.startedAt === 'number' ? attempt.startedAt : Date.parse(attempt.startedAt || ''));
+  if (!raw || !Number.isFinite(raw)) return '时间未知';
+  return new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(raw));
+}
+async function renderAttemptHistory(skipNav = false) {
+  if (!skipNav) store.navStack.push({ name: 'attempt-history' });
+  setView('attempt-history');
+  $('#app-title').textContent = '练习记录';
+  const view = $('#view');
+  view.innerHTML = '<div class="spinner"></div>';
+  try {
+    const { attempts = [] } = await api('/api/attempts?limit=100');
+    view.innerHTML = '';
+    if (!attempts.length) {
+      view.innerHTML = '<div class="empty">完成一次练习后，这里会保留成绩、每题用时和题目快照，方便随时回顾。</div>';
+      return;
+    }
+    const list = el('div', 'attempt-history-list');
+    attempts.forEach((attempt) => {
+      const item = el('button', 'card attempt-history-item');
+      item.type = 'button';
+      const total = Number(attempt.recordCount) || Number(attempt.questionCount) || 0;
+      const graded = (Number(attempt.correctCount) || 0) + (Number(attempt.wrongCount) || 0);
+      const rate = graded ? Math.round((Number(attempt.correctCount || 0) / graded) * 100) : null;
+      item.innerHTML = `
+        <div class="attempt-history-head"><b>${esc(attempt.subject || '练习')} · ${total} 题</b><span>${esc(attemptDateLabel(attempt))}</span></div>
+        <div class="attempt-history-meta"><span>${rate == null ? '未评分' : `正确率 ${rate}%`}</span><span>做题 ${fmtTime(Math.floor((Number(attempt.durationMs) || 0) / 1000))}</span><span>解析 ${fmtTime(Math.floor((Number(attempt.explanationMs) || 0) / 1000))}</span></div>`;
+      item.onclick = () => {
+        store.navStack.push({ name: 'attempt-detail' });
+        openAttemptReview(attempt.attemptId).catch((e) => toast(e.message || '练习记录加载失败'));
+      };
+      list.appendChild(item);
+    });
+    view.appendChild(list);
+  } catch (e) {
+    view.innerHTML = `<div class="empty">练习记录加载失败：${esc(e.message)}</div>`;
+  }
+}
+async function openAttemptReview(attemptId) {
+  const data = await api(`/api/attempts/${encodeURIComponent(attemptId)}`);
+  const attempt = data.attempt || {};
+  const records = Array.isArray(data.records) ? data.records : [];
+  if (!records.length) throw new Error('这次练习没有可回顾的题目快照');
+  const questions = [];
+  const answers = [];
+  for (const record of records) {
+    const snap = record.question || {};
+    const options = Array.isArray(snap.options) ? snap.options : [];
+    const qid = snap.questionId || record.questionId;
+    const images = Array.isArray(snap.images) ? snap.images : [];
+    const prompt = snap.prompt || snap.content || '';
+    const materialText = snap.material || '';
+    const contentHtml = snap.contentHtml || (snap.type === 'custom'
+      ? `${renderStudyText(prompt)}${customImagesHtml(images, 'stem')}`
+      : '');
+    const materialHtml = snap.materialHtml || (snap.type === 'custom'
+      ? `${renderStudyText(materialText)}${customImagesHtml(images, 'material')}`
+      : '');
+    let selected = record.selected;
+    if (typeof selected === 'string') { try { selected = JSON.parse(selected); } catch { selected = selected ? [selected] : null; } }
+    questions.push({
+      id: qid,
+      questionId: qid,
+      questionUid: record.questionUid || snap.questionUid || '',
+      revision: record.revision || snap.revision || 1,
+      subject: record.subject || attempt.subject || '',
+      chapter: record.chapter || snap.category || '',
+      type: snap.type ?? record.type ?? 0,
+      content: prompt,
+      contentHtml,
+      material: materialText,
+      materialHtml,
+      options,
+      answer: snap.answer || '',
+      answerIndex: snap.answerIndex ?? -1,
+      analysis: snap.analysis || '',
+      images,
+    });
+    answers.push({
+      selected: Array.isArray(selected) ? selected : (selected == null ? null : [selected]).map(Number),
+      correct: record.correct,
+      costMs: Number(record.solveMs) || 0,
+      explanationMs: Number(record.explanationMs) || 0,
+      solveStopped: true,
+    });
+  }
+  const durationMs = Number(attempt.durationMs) || 0;
+  store.state.questions = questions;
+  store.state.answers = answers;
+  store.state.idx = 0;
+  store.state.subject = attempt.subject || '';
+  store.state.mode = 'history';
+  store.state.attemptId = attempt.attemptId;
+  store.state.attemptStartedAt = Number(attempt.startedAtMs) || Date.parse(attempt.startedAt || '') || null;
+  store.state.timing = { elapsed: Math.floor(durationMs / 1000), elapsedMs: durationMs, running: false, timerId: null, limit: null, remaining: 0, remainingMs: 0 };
+  store.state.historicalReview = true;
+  renderReview();
 }
 /** 交卷后解析界面：分数 / 每题解析 / 用时 / AI 解析（筛选 + 答题卡跳转 + 全部解析） */
 function renderReview() {
@@ -3940,10 +4155,10 @@ function renderReview() {
   view.innerHTML = '';
   view.appendChild(el('div', 'hero', `
     <div class="hero-eyebrow">EXAM ARCHIVE · 本次成绩</div>
-    <div class="hero-title">答对 ${correctN} / ${scored.length} 题</div>
+      <div class="hero-title">答对 ${correctN} / ${scored.length} 题</div>
     <div class="hero-stats">
       <div class="hero-stat"><div class="hs-num">${rate}%</div><div class="hs-label">正确率</div></div>
-      <div class="hero-stat"><div class="hs-num">${fmtTime(elapsed)}</div><div class="hs-label">总用时</div></div>
+      <div class="hero-stat"><div class="hs-num">${fmtTime(elapsed)}</div><div class="hs-label">有效用时（暂停不计）</div></div>
       <div class="hero-stat"><div class="hs-num">${wrongN}${noAns ? ` +${noAns}` : ''}</div><div class="hs-label">错题${noAns ? '/无答案' : ''}</div></div>
     </div>
   `));
@@ -3989,12 +4204,17 @@ function renderReview() {
     card.innerHTML = `
       <div class="review-head">
         <span class="badge ${badge}">${badgeText} · 第${i + 1}题</span>
-        <span class="review-time">⏱ ${((a.costMs || 0) / 1000).toFixed(1)}s</span>
+        <span class="review-time">做题 ${fmtTime(Math.floor((a.costMs || 0) / 1000))}${a.explanationMs ? ` · 解析 ${fmtTime(Math.floor(a.explanationMs / 1000))}` : ''}</span>
       </div>
       <div class="answer-cmp" style="margin:10px 0">
         <span class="cmp-item"><i class="cmp-dot mine"></i>我的答案 <b>${mySel || '—'}</b></span>
         <span class="cmp-item"><i class="cmp-dot right"></i>正确答案 <b>${rightSel || (j.valid ? '见解析' : '—')}</b></span>
       </div>`;
+    if (q.material || q.materialHtml) {
+      const material = el('div', 'material-box open');
+      material.innerHTML = `<div class="mat-head">${ico('fileText', 14)} 给定材料</div><div class="mat-body">${q.materialHtml ? fixImgLoading(sanitizeHtml(q.materialHtml)) : renderStudyText(q.material)}</div>`;
+      card.appendChild(material);
+    }
     const content = el('div', 'q-content');
     renderContent(content, q);
     card.appendChild(content);
@@ -4044,7 +4264,12 @@ function renderReview() {
   });
   const back = el('button', 'btn btn-primary btn-block', '完成，返回');
   back.style.marginTop = '6px';
-  back.onclick = () => (store.state.mode === 'single' ? exitSingle() : goBack());
+  back.textContent = s.historicalReview ? '回到练习记录' : '完成，返回';
+  back.onclick = () => {
+    if (s.historicalReview) { s.historicalReview = false; goBack(); }
+    else if (store.state.mode === 'single') exitSingle();
+    else goBack();
+  };
   view.appendChild(back);
 }
 

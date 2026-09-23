@@ -836,6 +836,14 @@ h1, h2, h3, .hs-num, .stat-card .num { font-family: inherit; font-variant-numeri
 .review-head { display: flex; align-items: center; gap: 10px; }
 .review-time { margin-left: auto; font-size: 12px; color: var(--text-2); font-weight: 600; font-variant-numeric: tabular-nums; }
 .review-card .option { cursor: default; }
+.attempt-history-list { display: flex; flex-direction: column; gap: 10px; }
+.attempt-history-item { width: 100%; text-align: left; cursor: pointer; padding: 16px; }
+.attempt-history-item:active { transform: scale(.99); }
+.attempt-history-head, .attempt-history-meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.attempt-history-head { font-size: 14px; }
+.attempt-history-head span, .attempt-history-meta { color: var(--text-3); font-size: 12px; }
+.attempt-history-meta { justify-content: flex-start; flex-wrap: wrap; margin-top: 9px; }
+.attempt-history-meta span + span::before { content: '·'; margin-right: 10px; color: var(--border); }
 
 /* 答题卡弹层（iOS sheet 风格） */
 .sheet-overlay {

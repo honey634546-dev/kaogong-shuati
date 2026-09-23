@@ -35,8 +35,10 @@ const REFRESH = process.argv.includes('--refresh');
 const DRY_RUN = process.argv.includes('--dry-run');
 const NO_IMPORT = DRY_RUN || process.argv.includes('--no-import');
 const AUTH_DISABLED = process.env.AUTH_DISABLED === '1';
+const ALLOW_EMPTY = process.argv.includes('--allow-empty');
 const MIN_DELAY_MS = Math.max(61_000, Number(value('--min-delay-ms', process.env.GKZHENTI_MIN_DELAY_MS || 61_000)) || 61_000);
 const RATE_LIMIT_STATE_PATH = join(DATA_DIR, '.last-network-request-at');
+const REQUEST_TIMEOUT_MS = 30_000;
 
 let lastNetworkRequestAt = 0;
 
@@ -55,7 +57,7 @@ function sleep(ms) {
 }
 
 function safeFilePart(valueToClean) {
-  return String(valueToClean ?? '').replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'unknown';
+  return String(valueToClean ?? '').replace(/[^\p{L}\p{N}._-]+/gu, '-').replace(/^-+|-+$/g, '') || 'unknown';
 }
 
 async function exists(path) {
@@ -93,6 +95,7 @@ async function fetchText(url, cachePath, label, { validate } = {}) {
   await recordNetworkRequestStart();
   const response = await fetch(url, {
     redirect: 'follow',
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     headers: {
       accept: 'text/html,application/json;q=0.9,*/*;q=0.8',
       // Fetch Headers 只接受 ByteString；使用 ASCII 标识避免 Node 在发请求前报错。
@@ -132,7 +135,9 @@ function selectEntries(entries) {
   const contains = value('--contains', '').trim();
   let selected = entries.filter((entry) => {
     const years = yearsInTitle(entry.title);
-    const yearOk = !years.length || years.some((year) => year >= yearFrom && year <= yearTo);
+    const yearOk = hasFlag('--require-year')
+      ? years.some((year) => year >= yearFrom && year <= yearTo)
+      : !years.length || years.some((year) => year >= yearFrom && year <= yearTo);
     const textOk = !contains || `${entry.title} ${entry.source}`.includes(contains);
     return yearOk && textOk;
   });
@@ -182,8 +187,10 @@ function usage() {
     '  --limit=1               默认只处理 1 份试卷；--all 才处理筛选后的全部',
     '  --year-from=2020        按标题年份筛选',
     '  --year-to=2026',
+    '  --require-year           必须在标题中识别到筛选范围内的年份',
     '  --contains=回忆版       按标题/来源筛选',
     '  --no-import              只抓取、解析并写入 data/gkzhenti，不调用本地导入 API',
+    '  --allow-empty            没有符合筛选条件的试卷时正常结束（批量地区扫描用）',
     '  --dry-run                同 --no-import',
     '  --refresh                忽略本地缓存；仍然遵守每次请求至少 61 秒',
     '  --min-delay-ms=61000     不能低于 61000',
@@ -202,7 +209,13 @@ async function main() {
   await mkdir(DATA_DIR, { recursive: true });
   const payload = await fetchJson(indexUrl, indexPath);
   const entries = selectEntries(parseIndexPayload(payload));
-  if (!entries.length) throw new Error('没有符合筛选条件的试卷。');
+  if (!entries.length) {
+    if (ALLOW_EMPTY) {
+      console.log(`跳过：${cls}/${province} 没有符合筛选条件的试卷`);
+      return;
+    }
+    throw new Error('没有符合筛选条件的试卷。');
+  }
   console.log(`索引得到 ${entries.length} 份待处理试卷（${cls}/${province}）`);
 
   const summaries = [];
@@ -263,4 +276,4 @@ if (import.meta.url === pathToFileURL(resolve(process.argv[1] || '')).href) {
   });
 }
 
-export { selectEntries };
+export { safeFilePart, selectEntries };

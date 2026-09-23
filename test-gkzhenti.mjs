@@ -13,7 +13,8 @@ import {
   subjectForClass,
   titleFromHtml,
 } from './public/lib/gkzhenti-adapter.js';
-import { selectEntries } from './scripts/import-gkzhenti.mjs';
+import { safeFilePart, selectEntries } from './scripts/import-gkzhenti.mjs';
+import { XINGCE_REGIONS } from './scripts/import-gkzhenti-recent-regions.mjs';
 
 test('公开真题库：索引 URL、试卷 ID 和科目映射稳定', () => {
   assert.equal(
@@ -171,9 +172,27 @@ test('公开真题库：筛选默认只取一份，--all 才允许全量', () =>
     assert.equal(selectEntries(entries).length, 1);
     process.argv = ['node', 'import-gkzhenti.mjs', '--all', '--year-from=2025'];
     assert.equal(selectEntries(entries).length, 2);
+    process.argv = ['node', 'import-gkzhenti.mjs', '--all', '--year-from=2025', '--require-year'];
+    assert.equal(selectEntries([
+      ...entries,
+      { paperId: '3', title: '未标年份的行测试卷', source: '网友上传' },
+    ]).length, 2);
   } finally {
     process.argv = original;
   }
+});
+
+test('公开真题库：近年行测地区扫描范围不重复且覆盖站点公布的 35 个入口', () => {
+  assert.equal(XINGCE_REGIONS.length, 35);
+  assert.equal(new Set(XINGCE_REGIONS).size, XINGCE_REGIONS.length);
+  assert.ok(XINGCE_REGIONS.includes('国考'));
+  assert.ok(XINGCE_REGIONS.includes('广州'));
+});
+
+test('公开真题库：缓存文件名保留中文地区名，地区索引不会碰撞', () => {
+  assert.equal(safeFilePart('行测-浙江'), '行测-浙江');
+  assert.equal(safeFilePart('行测/广州'), '行测-广州');
+  assert.equal(safeFilePart(''), 'unknown');
 });
 
 test('公开真题库：答案页解析支持判断题答案', () => {

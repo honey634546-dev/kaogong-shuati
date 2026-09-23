@@ -31,12 +31,23 @@ legacy.exec(`
     images TEXT DEFAULT '[]',
     material_id TEXT DEFAULT ''
   );
+  CREATE TABLE practice_attempts (
+    attempt_id TEXT PRIMARY KEY,
+    subject TEXT DEFAULT '',
+    mode TEXT DEFAULT '',
+    question_count INTEGER DEFAULT 0,
+    started_at TEXT DEFAULT (datetime('now','localtime')),
+    completed_at TEXT DEFAULT NULL,
+    completed INTEGER DEFAULT 0
+  );
 `);
 legacy.prepare('INSERT INTO custom_batches (name) VALUES (?)').run('旧版批次');
 legacy.prepare(`
   INSERT INTO custom_questions (batch_id, prompt, options, answer, answer_index, analysis)
   VALUES (1, ?, ?, ?, ?, ?)
 `).run('旧版题目', JSON.stringify(['A. 甲', 'B. 乙']), 'A', 0, '旧版解析');
+legacy.prepare('INSERT INTO practice_attempts (attempt_id, subject, mode, question_count, completed) VALUES (?, ?, ?, ?, ?)')
+  .run('legacy-attempt-1', '旧版科目', 'random', 3, 1);
 legacy.close();
 
 const base = `http://127.0.0.1:${port}`;
@@ -70,6 +81,12 @@ after(async () => {
 });
 
 test('WP2 旧版自定义题库回填逻辑身份且保留旧自增 id', async () => {
+  const batchesResponse = await fetch(`${base}/api/custom/batches`);
+  const batches = await batchesResponse.json();
+  assert.equal(batchesResponse.ok, true);
+  assert.equal(batches.batches.length, 1);
+  assert.equal(batches.batches[0].visibility, 'private');
+
   const listResponse = await fetch(`${base}/api/custom/questions?batch_id=1`);
   const list = await listResponse.json();
   assert.equal(listResponse.ok, true);
@@ -85,4 +102,30 @@ test('WP2 旧版自定义题库回填逻辑身份且保留旧自增 id', async (
   assert.equal(practiceResponse.ok, true);
   assert.equal(practice.questions.length, 1);
   assert.equal(practice.questions[0].id, 'custom-1');
+});
+
+test('WP2 新导入的题库默认为公开', async () => {
+  const response = await fetch(`${base}/api/custom/import`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name: '新批次', questions: [{ prompt: '新导入题目', options: ['A. 甲'], answer: 'A', answer_index: 0 }] }),
+  });
+  const imported = await response.json();
+  assert.equal(response.status, 200, JSON.stringify(imported));
+  assert.equal(imported.visibility, 'public');
+  const listResponse = await fetch(`${base}/api/custom/batches`);
+  const list = await listResponse.json();
+  assert.equal(list.batches.find((batch) => batch.id === imported.id).visibility, 'public');
+});
+
+test('旧版练习记录表迁移后保留会话并补齐计时字段', async () => {
+  const response = await fetch(`${base}/api/attempts?limit=10`);
+  const history = await response.json();
+  assert.equal(response.status, 200, JSON.stringify(history));
+  assert.equal(history.attempts.length, 1);
+  assert.equal(history.attempts[0].attemptId, 'legacy-attempt-1');
+  assert.equal(history.attempts[0].subject, '旧版科目');
+  assert.equal(history.attempts[0].questionCount, 3);
+  assert.equal(history.attempts[0].durationMs, 0);
+  assert.equal(history.attempts[0].explanationMs, 0);
 });

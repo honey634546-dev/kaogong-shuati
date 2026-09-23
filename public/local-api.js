@@ -247,7 +247,7 @@ export function createRecordsApi(store, tiku, onChanged) {
       return new Set(rows.map((r) => String(r.question_id)));
     },
     /** 提交做题记录（与 /api/records POST 同构；同卷同题同日去重，重复则更新；写入即按题目真实来源归档） */
-    async addRecord({ questionId, subject, chapter, type, selected, correct, costMs, paperId, submissionKey, attemptId, questionUid, questionRevision, questionSnapshot, answerSnapshot }) {
+    async addRecord({ questionId, subject, chapter, type, selected, correct, costMs, explanationMs, paperId, submissionKey, attemptId, questionUid, questionRevision, questionSnapshot, answerSnapshot }) {
       if (questionId == null) throw new Error('缺少 questionId');
       const now = Date.now();
       if (submissionKey) {
@@ -266,11 +266,11 @@ export function createRecordsApi(store, tiku, onChanged) {
       // 同日去重只针对非错题记录（正确/主观题记录）；错题记录不参与去重——错题保护：
       // 当天做对不覆盖错题记录（需累计 3 个日期做对才自动移除），做错记录始终保留
       const existing = (await store.getAll('records')).filter(
-        (r) => r.question_id === questionId && r.paper_id === (paperId ?? null) && r.created_at >= dayStart && r.is_correct !== 0
+        (r) => !attemptId && !r.attempt_id && r.question_id === questionId && r.paper_id === (paperId ?? null) && r.created_at >= dayStart && r.is_correct !== 0
       );
       // 主观题（申论/综应，correct=null）is_correct 存 NULL（与 server 同构）：不计入错题本
       const cls = classifyLocal(store, tiku, questionId);
-      const row = { question_id: questionId, paper_id: paperId ?? cls.paperId ?? null, subject: subject || '', chapter: chapter || '', question_type: type ?? null, selected: selected ?? null, is_correct: correct == null ? null : (correct ? 1 : 0), cost_ms: costMs ?? null, group_key: cls.groupKey, sub_key: cls.subKey, submission_key: submissionKey || '', attempt_id: attemptId || '', question_uid: questionUid || '', question_revision: Number(questionRevision) > 0 ? Number(questionRevision) : 1, question_snapshot: questionSnapshot || '', answer_snapshot: answerSnapshot || '', created_at: now };
+      const row = { question_id: questionId, paper_id: paperId ?? cls.paperId ?? null, subject: subject || '', chapter: chapter || '', question_type: type ?? null, selected: selected ?? null, is_correct: correct == null ? null : (correct ? 1 : 0), cost_ms: costMs ?? null, explanation_ms: Math.max(0, Number(explanationMs) || 0), group_key: cls.groupKey, sub_key: cls.subKey, submission_key: submissionKey || '', attempt_id: attemptId || '', question_uid: questionUid || '', question_revision: Number(questionRevision) > 0 ? Number(questionRevision) : 1, question_snapshot: questionSnapshot || '', answer_snapshot: answerSnapshot || '', created_at: now };
       if (existing.length) await store.deleteBy('records', 'id', existing[0].id);
       await store.put('records', row);
       // 错题自动移除：客观题累计做对 3 次（按不同日期计，与 server 口径一致）→ 删除该题错题记录，正确记录与统计保留

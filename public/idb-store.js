@@ -8,9 +8,10 @@
  *   store.clear(kind)                         → Promise<void>（清空一个 store，测试/重置用）
  *   store.close()                             → Promise<void>（关闭连接，测试用）
  *
- * kind ∈ 'records' | 'favorites'（单用户，无 user_id 列）
+ * kind ∈ 'records' | 'favorites' | 'attempts' 等（本地单用户，无 user_id 列）
  * - records  ：以自动生成 id 为 key 存储（addRecord 去重更新依赖 id 定位）
  * - favorites：以 question_id 为 key 存储（一题一收藏，天然覆盖更新）
+ * - attempts ：以 attempt_id 为 key 存储（会话计时与完成状态）
  *
  * 与 server 版差异：stats 不落库，由 local-api.mjs aggregateStats 实时聚合。
  * 数据库版本升级：新增 objectStore 或改结构时 version+1，onupgradeneeded 增量建表。
@@ -18,8 +19,8 @@
 'use strict';
 
 const DEFAULT_DB = 'kaogong-app';
-const DEFAULT_VERSION = 4; // 4：新增随题 AI 会话与消息
-const STORES = ['records', 'favorites', 'custom_batches', 'custom_questions', 'notes', 'ai_conversations', 'ai_messages'];
+const DEFAULT_VERSION = 5; // 5：新增练习历史会话索引
+const STORES = ['records', 'favorites', 'custom_batches', 'custom_questions', 'notes', 'ai_conversations', 'ai_messages', 'attempts'];
 
 function newId() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
@@ -35,7 +36,7 @@ async function nextNumericId(getAll, kind) {
 /**
  * @param {object} [opts]
  * @param {string} [opts.dbName]   IndexedDB 数据库名（默认 kaogong-app）
- * @param {number} [opts.version]  数据库版本（默认 1）
+ * @param {number} [opts.version]  数据库版本（默认 5）
  */
 export function createIdbStore(opts = {}) {
   const dbName = opts.dbName || DEFAULT_DB;
@@ -102,6 +103,10 @@ export function createIdbStore(opts = {}) {
     if (kind === 'ai_conversations') {
       if (!row.conversation_id) throw new Error('ai_conversations 行缺少 conversation_id');
       return String(row.conversation_id);
+    }
+    if (kind === 'attempts') {
+      if (!row.attempt_id) throw new Error('attempts 行缺少 attempt_id');
+      return String(row.attempt_id);
     }
     if (kind === 'custom_batches' || kind === 'custom_questions') {
       if (row.id == null) throw new Error(`${kind} 行缺少 id（应先分配数字自增 id）`);

@@ -65,6 +65,7 @@ test('WP3 服务端判分、提交幂等、作答快照和版本隔离', async (
   });
   assert.equal(imported.status, 200, JSON.stringify(imported.body));
   const questionId = 'custom-1';
+  const startedAtMs = Date.now() - 15_000;
 
   // 故意把 correct 传成 true；服务端必须依据题库答案判为 false。
   const first = await post('/api/records', {
@@ -77,6 +78,8 @@ test('WP3 服务端判分、提交幂等、作答快照和版本隔离', async (
     attemptId: 'wp3-attempt-1',
     attemptMode: 'custom',
     attemptQuestionCount: 1,
+    startedAtMs,
+    explanationMs: 2200,
     submissionKey: 'wp3-attempt-1:final:0:custom-1',
   });
   assert.equal(first.status, 200, JSON.stringify(first.body));
@@ -139,8 +142,26 @@ test('WP3 服务端判分、提交幂等、作答快照和版本隔离', async (
   assert.equal(second.body.correct, true);
   assert.equal(second.body.revision, 2);
 
-  const done = await post('/api/attempts/complete', { attemptId: 'wp3-attempt-1' });
+  const done = await post('/api/attempts/complete', {
+    attemptId: 'wp3-attempt-1', subject: '自定义', mode: 'custom', questionCount: 1,
+    startedAtMs, durationMs: 13_500, explanationMs: 2700,
+  });
   assert.equal(done.status, 200);
+  const historyResponse = await fetch(`${base}/api/attempts?limit=10`);
+  const history = await historyResponse.json();
+  assert.equal(history.attempts.length, 1);
+  assert.equal(history.attempts[0].attemptId, 'wp3-attempt-1');
+  assert.equal(history.attempts[0].startedAtMs, startedAtMs);
+  assert.equal(history.attempts[0].durationMs, 13_500);
+  assert.equal(history.attempts[0].explanationMs, 2700);
+  assert.equal(history.attempts[0].recordCount, 1);
+  const detailResponse = await fetch(`${base}/api/attempts/wp3-attempt-1`);
+  const detail = await detailResponse.json();
+  assert.equal(detail.records.length, 1);
+  assert.equal(detail.records[0].question.prompt, '旧版题面');
+  assert.equal(detail.records[0].selected[0], 0);
+  assert.equal(detail.records[0].correct, false);
+  assert.equal(detail.records[0].explanationMs, 2200);
   const statsResponse = await fetch(`${base}/api/records/stats`);
   const stats = await statsResponse.json();
   assert.equal(stats.total, 2);
@@ -153,7 +174,8 @@ test('WP3 服务端判分、提交幂等、作答快照和版本隔离', async (
   });
   const db = new DatabaseSync(path.join(dataDir, 'practice.db'), { readOnly: true });
   const rows = db.prepare('SELECT submission_key, attempt_id, question_uid, question_revision, question_snapshot, answer_snapshot FROM practice_records ORDER BY id').all();
-  const attempts = db.prepare('SELECT attempt_id, completed FROM practice_attempts ORDER BY attempt_id').all().map((row) => ({ attempt_id: row.attempt_id, completed: row.completed }));
+  const attempts = db.prepare('SELECT attempt_id, completed, started_at_ms, duration_ms, explanation_ms FROM practice_attempts ORDER BY attempt_id').all();
+  const explanationTimes = db.prepare('SELECT attempt_id, explanation_ms FROM practice_records ORDER BY id').all().map((row) => ({ attempt_id: row.attempt_id, explanation_ms: row.explanation_ms }));
   db.close();
   assert.equal(rows.length, 2);
   assert.equal(rows[0].question_revision, 1);
@@ -161,8 +183,15 @@ test('WP3 服务端判分、提交幂等、作答快照和版本隔离', async (
   assert.match(rows[0].answer_snapshot, /"ok":false/);
   assert.equal(rows[1].question_revision, 2);
   assert.match(rows[1].question_snapshot, /新版题面/);
-  assert.deepEqual(attempts, [
+  assert.deepEqual(attempts.map((row) => ({ attempt_id: row.attempt_id, completed: row.completed })), [
     { attempt_id: 'wp3-attempt-1', completed: 1 },
     { attempt_id: 'wp3-attempt-2', completed: 0 },
+  ]);
+  assert.equal(attempts[0].started_at_ms, startedAtMs);
+  assert.equal(attempts[0].duration_ms, 13_500);
+  assert.equal(attempts[0].explanation_ms, 2700);
+  assert.deepEqual(explanationTimes, [
+    { attempt_id: 'wp3-attempt-1', explanation_ms: 2200 },
+    { attempt_id: 'wp3-attempt-2', explanation_ms: 0 },
   ]);
 });

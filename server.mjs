@@ -114,6 +114,7 @@ pdb.exec(`
     selected TEXT DEFAULT '',
     is_correct INTEGER,             -- 客观题 0/1；主观题（申论/综应）为 NULL 待批改
     cost_ms INTEGER DEFAULT 0,
+    explanation_ms INTEGER DEFAULT 0,
     archived INTEGER DEFAULT 0,     -- 错题本移除标记（保留历史供统计/进度 AI）
     group_key TEXT DEFAULT '',      -- 错题本/收藏/笔记 来源归档：大模块（科目名 / 'custom' / ''=未分类）
     sub_key TEXT DEFAULT '',        -- 子模块（章节树大模块；自定义题不分子模块）
@@ -135,6 +136,9 @@ pdb.exec(`
     mode TEXT DEFAULT '',
     question_count INTEGER DEFAULT 0,
     started_at TEXT DEFAULT (datetime('now','localtime')),
+    started_at_ms INTEGER DEFAULT 0,
+    duration_ms INTEGER DEFAULT 0,
+    explanation_ms INTEGER DEFAULT 0,
     completed_at TEXT DEFAULT NULL,
     completed INTEGER DEFAULT 0,
     PRIMARY KEY (user_id, attempt_id)
@@ -173,6 +177,10 @@ try { pdb.exec("ALTER TABLE practice_records ADD COLUMN question_uid TEXT DEFAUL
 try { pdb.exec('ALTER TABLE practice_records ADD COLUMN question_revision INTEGER DEFAULT 1'); } catch {}
 try { pdb.exec("ALTER TABLE practice_records ADD COLUMN question_snapshot TEXT DEFAULT ''"); } catch {}
 try { pdb.exec("ALTER TABLE practice_records ADD COLUMN answer_snapshot TEXT DEFAULT ''"); } catch {}
+try { pdb.exec('ALTER TABLE practice_records ADD COLUMN explanation_ms INTEGER DEFAULT 0'); } catch {}
+try { pdb.exec('ALTER TABLE practice_attempts ADD COLUMN started_at_ms INTEGER DEFAULT 0'); } catch {}
+try { pdb.exec('ALTER TABLE practice_attempts ADD COLUMN duration_ms INTEGER DEFAULT 0'); } catch {}
+try { pdb.exec('ALTER TABLE practice_attempts ADD COLUMN explanation_ms INTEGER DEFAULT 0'); } catch {}
 // 来源归档索引（旧库补列后才可建，故单独执行）
 try { pdb.exec('CREATE INDEX IF NOT EXISTS idx_records_group ON practice_records(group_key, sub_key, archived, is_correct)'); } catch {}
 try { pdb.exec('CREATE INDEX IF NOT EXISTS idx_records_attempt ON practice_records(attempt_id, question_id)'); } catch {}
@@ -186,6 +194,7 @@ pdb.exec(`
     user_id TEXT NOT NULL DEFAULT 'legacy-user',
     name TEXT NOT NULL,
     subject TEXT DEFAULT '自定义',
+    visibility TEXT NOT NULL DEFAULT 'public' CHECK (visibility IN ('public', 'private')),
     created_at TEXT DEFAULT (datetime('now','localtime')),
     updated_at TEXT DEFAULT (datetime('now','localtime'))
   );
@@ -209,6 +218,9 @@ pdb.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_cq_batch ON custom_questions(batch_id);
 `);
+// 旧批次默认保持私有，避免升级时把已有个人题库意外公开；新建接口显式默认 public。
+try { pdb.exec("ALTER TABLE custom_batches ADD COLUMN visibility TEXT NOT NULL DEFAULT 'private' CHECK (visibility IN ('public', 'private'))"); } catch {}
+try { pdb.exec('CREATE INDEX IF NOT EXISTS idx_custom_batches_visibility ON custom_batches(visibility, id)'); } catch {}
 // 兼容已存在的库：自定义题补充 images 列（图片题：题干图/材料图，JSON [{role,dataUrl}]）
 try { pdb.exec("ALTER TABLE custom_questions ADD COLUMN images TEXT DEFAULT '[]'"); } catch {}
 // 兼容已存在的库：自定义题补充 material_id 列（材料分组：同 material_id 的题共用一份材料，刷题时显示 第 n/m 小问）
@@ -419,11 +431,13 @@ migrateUniquePersonalTable(
     user_id TEXT NOT NULL DEFAULT '${LEGACY_OWNER_ID}',
     attempt_id TEXT NOT NULL,
     subject TEXT DEFAULT '', mode TEXT DEFAULT '', question_count INTEGER DEFAULT 0,
-    started_at TEXT DEFAULT (datetime('now','localtime')), completed_at TEXT DEFAULT NULL, completed INTEGER DEFAULT 0,
+    started_at TEXT DEFAULT (datetime('now','localtime')), started_at_ms INTEGER DEFAULT 0,
+    duration_ms INTEGER DEFAULT 0, explanation_ms INTEGER DEFAULT 0,
+    completed_at TEXT DEFAULT NULL, completed INTEGER DEFAULT 0,
     PRIMARY KEY (user_id, attempt_id)
   );`,
-  `INSERT INTO practice_attempts_v2 (attempt_id, subject, mode, question_count, started_at, completed_at, completed)
-     SELECT attempt_id, subject, mode, question_count, started_at, completed_at, completed FROM practice_attempts;`,
+  `INSERT INTO practice_attempts_v2 (attempt_id, subject, mode, question_count, started_at, started_at_ms, duration_ms, explanation_ms, completed_at, completed)
+     SELECT attempt_id, subject, mode, question_count, started_at, started_at_ms, duration_ms, explanation_ms, completed_at, completed FROM practice_attempts;`,
 );
 
 for (const table of ['practice_records', 'custom_batches', 'custom_questions', 'ai_explains', 'ai_conversations']) {
@@ -799,6 +813,24 @@ function customQuestionApiRow(row) {
   };
 }
 
+function visibleCustomBatch(ownerId, batchId) {
+  return pdb.prepare(`
+    SELECT b.id, b.name, b.subject, b.visibility, b.created_at, b.updated_at,
+           CASE WHEN b.user_id = ? THEN 1 ELSE 0 END AS is_owner
+    FROM custom_batches b
+    WHERE b.id = ? AND (b.user_id = ? OR b.visibility = 'public')
+  `).get(ownerId, Number(batchId), ownerId) || null;
+}
+
+function visibleCustomQuestion(ownerId, questionId) {
+  return pdb.prepare(`
+    SELECT q.*, b.name AS batch_name, b.subject AS batch_subject, b.visibility AS batch_visibility
+    FROM custom_questions q
+    JOIN custom_batches b ON b.id = q.batch_id AND b.user_id = q.user_id
+    WHERE q.id = ? AND (q.user_id = ? OR b.visibility = 'public')
+  `).get(Number(questionId), ownerId) || null;
+}
+
 function customImportExisting(q, ownerId) {
   if (q._external_id_explicit && q.external_id) {
     return pdb.prepare(`
@@ -913,7 +945,7 @@ function resolveRecordQuestion(questionId, ownerId = LEGACY_OWNER_ID) {
   const id = String(questionId ?? '');
   if (id.startsWith('custom-')) {
     const cid = Number(id.replace(/^custom-/, ''));
-    const row = pdb.prepare('SELECT * FROM custom_questions WHERE user_id = ? AND id = ?').get(ownerId, cid);
+    const row = visibleCustomQuestion(ownerId, cid);
     if (!row) return null;
     const question = {
       content: row.prompt || '',
@@ -926,6 +958,9 @@ function resolveRecordQuestion(questionId, ownerId = LEGACY_OWNER_ID) {
     };
     return {
       question,
+      batchId: Number(row.batch_id),
+      batchName: row.batch_name || '',
+      batchSubject: row.batch_subject || '自定义',
       questionUid: row.question_uid || '',
       revision: Number(row.revision) > 0 ? Number(row.revision) : 1,
       snapshot: {
@@ -973,23 +1008,105 @@ function normalizeSubmissionKey(value) {
   return key.length > 0 && key.length <= 256 ? key : '';
 }
 
-function ensureAttempt(ownerId, attemptId, subject, mode, questionCount) {
+function ensureAttempt(ownerId, attemptId, subject, mode, questionCount, startedAtMs = 0) {
   const id = String(attemptId || '').trim();
   if (!id || id.length > 128) return;
+  const started = Number.isFinite(Number(startedAtMs)) && Number(startedAtMs) > 0 ? Math.floor(Number(startedAtMs)) : 0;
   pdb.prepare(`
-    INSERT INTO practice_attempts (user_id, attempt_id, subject, mode, question_count)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO practice_attempts (user_id, attempt_id, subject, mode, question_count, started_at, started_at_ms)
+    VALUES (?, ?, ?, ?, ?, CASE WHEN ? > 0 THEN datetime(? / 1000, 'unixepoch', 'localtime') ELSE datetime('now','localtime') END, ?)
     ON CONFLICT(user_id, attempt_id) DO UPDATE SET
       subject = CASE WHEN excluded.subject <> '' THEN excluded.subject ELSE practice_attempts.subject END,
       mode = CASE WHEN excluded.mode <> '' THEN excluded.mode ELSE practice_attempts.mode END,
-      question_count = CASE WHEN excluded.question_count > 0 THEN excluded.question_count ELSE practice_attempts.question_count END
-  `).run(String(ownerId || LEGACY_OWNER_ID), id, String(subject || ''), String(mode || ''), Number(questionCount || 0));
+      question_count = CASE WHEN excluded.question_count > 0 THEN excluded.question_count ELSE practice_attempts.question_count END,
+      started_at = CASE WHEN excluded.started_at_ms > 0 THEN excluded.started_at ELSE practice_attempts.started_at END,
+      started_at_ms = CASE WHEN excluded.started_at_ms > 0 THEN excluded.started_at_ms ELSE practice_attempts.started_at_ms END
+  `).run(String(ownerId || LEGACY_OWNER_ID), id, String(subject || ''), String(mode || ''), Number(questionCount || 0), started, started, started);
 }
 
-function finishAttempt(ownerId, attemptId) {
+function finishAttempt(ownerId, attemptId, metadata = {}) {
   const id = String(attemptId || '').trim();
   if (!id) return;
-  pdb.prepare("UPDATE practice_attempts SET completed = 1, completed_at = datetime('now','localtime') WHERE user_id = ? AND attempt_id = ?").run(String(ownerId || LEGACY_OWNER_ID), id);
+  ensureAttempt(ownerId, id, metadata.subject, metadata.mode, metadata.questionCount, metadata.startedAtMs);
+  const durationMs = Math.max(0, Math.floor(Number(metadata.durationMs) || 0));
+  const explanationMs = Math.max(0, Math.floor(Number(metadata.explanationMs) || 0));
+  pdb.prepare("UPDATE practice_attempts SET completed = 1, completed_at = datetime('now','localtime'), duration_ms = ?, explanation_ms = ? WHERE user_id = ? AND attempt_id = ?")
+    .run(durationMs, explanationMs, String(ownerId || LEGACY_OWNER_ID), id);
+}
+
+function listCompletedAttempts(ownerId, limit = 30) {
+  const boundedLimit = Math.min(100, Math.max(1, Number(limit) || 30));
+  return pdb.prepare(`
+    SELECT a.attempt_id, a.subject, a.mode, a.question_count, a.started_at, a.started_at_ms,
+      a.completed_at, a.duration_ms, a.explanation_ms,
+      COUNT(r.id) AS record_count,
+      SUM(CASE WHEN r.is_correct = 1 THEN 1 ELSE 0 END) AS correct_count,
+      SUM(CASE WHEN r.is_correct = 0 THEN 1 ELSE 0 END) AS wrong_count
+    FROM practice_attempts a
+    LEFT JOIN practice_records r ON r.user_id = a.user_id AND r.attempt_id = a.attempt_id
+    WHERE a.user_id = ? AND a.completed = 1
+    GROUP BY a.user_id, a.attempt_id
+    ORDER BY CASE WHEN a.started_at_ms > 0 THEN a.started_at_ms ELSE strftime('%s', a.started_at) * 1000 END DESC
+    LIMIT ?
+  `).all(String(ownerId || LEGACY_OWNER_ID), boundedLimit).map((row) => ({
+    attemptId: row.attempt_id,
+    subject: row.subject || '',
+    mode: row.mode || '',
+    questionCount: Number(row.question_count) || Number(row.record_count) || 0,
+    recordCount: Number(row.record_count) || 0,
+    correctCount: Number(row.correct_count) || 0,
+    wrongCount: Number(row.wrong_count) || 0,
+    startedAt: row.started_at || '',
+    startedAtMs: Number(row.started_at_ms) || 0,
+    completedAt: row.completed_at || '',
+    durationMs: Number(row.duration_ms) || 0,
+    explanationMs: Number(row.explanation_ms) || 0,
+  }));
+}
+
+function getCompletedAttempt(ownerId, attemptId) {
+  const id = String(attemptId || '').trim();
+  if (!id || id.length > 128) return null;
+  const row = pdb.prepare('SELECT * FROM practice_attempts WHERE user_id = ? AND attempt_id = ? AND completed = 1').get(String(ownerId || LEGACY_OWNER_ID), id);
+  if (!row) return null;
+  const records = pdb.prepare(`
+    SELECT question_id, subject, chapter, question_type, selected, is_correct, cost_ms, explanation_ms,
+      question_uid, question_revision, question_snapshot, answer_snapshot, created_at
+    FROM practice_records WHERE user_id = ? AND attempt_id = ? ORDER BY id
+  `).all(String(ownerId || LEGACY_OWNER_ID), id).map((record) => {
+    let selected = null, question = {}, answer = {};
+    try { selected = JSON.parse(record.selected || 'null'); } catch {}
+    try { question = JSON.parse(record.question_snapshot || '{}') || {}; } catch {}
+    try { answer = JSON.parse(record.answer_snapshot || '{}') || {}; } catch {}
+    return {
+      questionId: String(record.question_id),
+      subject: record.subject || '',
+      chapter: record.chapter || '',
+      type: record.question_type,
+      selected: answer.selected ?? selected,
+      correct: record.is_correct == null ? null : Boolean(record.is_correct),
+      solveMs: Number(record.cost_ms) || 0,
+      explanationMs: Number(record.explanation_ms) || 0,
+      questionUid: record.question_uid || '',
+      revision: Number(record.question_revision) || 1,
+      question,
+      createdAt: record.created_at || '',
+    };
+  });
+  return {
+    attempt: {
+      attemptId: row.attempt_id,
+      subject: row.subject || '',
+      mode: row.mode || '',
+      questionCount: Number(row.question_count) || records.length,
+      startedAt: row.started_at || '',
+      startedAtMs: Number(row.started_at_ms) || 0,
+      completedAt: row.completed_at || '',
+      durationMs: Number(row.duration_ms) || 0,
+      explanationMs: Number(row.explanation_ms) || 0,
+    },
+    records,
+  };
 }
 
 function checkAnswer(q, selected) {
@@ -2216,9 +2333,8 @@ const server = http.createServer(async (req, res) => {
         // 自定义题：custom- 前缀 → 从 custom_questions 取（错题/收藏重做入口）
         if (String(raw).startsWith('custom-')) {
           const cid = Number(String(raw).replace(/^custom-/, ''));
-          const cr = pdb.prepare('SELECT * FROM custom_questions WHERE user_id = ? AND id = ?').get(ownerId, cid);
+          const cr = visibleCustomQuestion(ownerId, cid);
           if (!cr) return err(res, 404, '题目不存在');
-          const b = pdb.prepare('SELECT name, subject FROM custom_batches WHERE user_id = ? AND id = ?').get(ownerId, cr.batch_id) || {};
           const { contentHtml, materialHtml } = customQuestionHtml({ ...cr, images: parseImages(cr.images) });
           return json(res, 200, {
             questionId: String(raw), id: String(raw), type: 'custom',
@@ -2226,7 +2342,7 @@ const server = http.createServer(async (req, res) => {
             content: cr.prompt, contentHtml, material: cr.material || '', materialHtml,
             options: JSON.parse(cr.options || '[]'), answer: cr.answer || '', answerIndex: cr.answer_index == null ? -1 : Number(cr.answer_index),
             analysis: cr.analysis || '',
-            subject: (b.subject || '自定义').trim() || '自定义', chapter: b.name || '',
+            subject: (cr.batch_subject || '自定义').trim() || '自定义', chapter: cr.batch_name || '',
           });
         }
         const id = Number(raw);
@@ -2441,7 +2557,7 @@ const server = http.createServer(async (req, res) => {
           let type = null;
           if (String(r.question_id).startsWith('custom-')) {
             const cid = Number(String(r.question_id).replace(/^custom-/, ''));
-            const cr = pdb.prepare('SELECT prompt, images FROM custom_questions WHERE user_id = ? AND id = ?').get(ownerId, cid);
+            const cr = visibleCustomQuestion(ownerId, cid);
             if (cr) { content = cr.prompt + (parseImages(cr.images).length ? ' [图]' : ''); type = 'custom'; }
           } else {
             const q = qQuestionById.get(r.question_id);
@@ -2507,7 +2623,7 @@ const server = http.createServer(async (req, res) => {
           let type = null;
           if (String(r.question_id).startsWith('custom-')) {
             const cid = Number(String(r.question_id).replace(/^custom-/, ''));
-            const cr = pdb.prepare('SELECT prompt, images FROM custom_questions WHERE user_id = ? AND id = ?').get(ownerId, cid);
+            const cr = visibleCustomQuestion(ownerId, cid);
             if (cr) { content = cr.prompt + (parseImages(cr.images).length ? ' [图]' : ''); type = 'custom'; }
           } else {
             const q = qQuestionById.get(r.question_id);
@@ -2585,8 +2701,10 @@ const server = http.createServer(async (req, res) => {
         for await (const chunk of req) body += chunk;
         const parsed = JSON.parse(body || '{}');
         const name = String(parsed.name || '').trim();
+        const visibility = String(parsed.visibility || 'public').trim().toLowerCase();
         const normalized = normalizeCustomQuestions(parsed.questions);
         if (!name && !Number(parsed.batch_id)) return json(res, 400, { error: '缺少批次名', code: 'missing_batch_name' });
+        if (!['public', 'private'].includes(visibility)) return json(res, 400, { error: '可见范围只能是 public 或 private', code: 'invalid_visibility' });
         if (normalized.errors.length) return json(res, 400, { error: '题目校验失败', code: 'custom_import_validation', errors: normalized.errors });
         const conflictMode = String(parsed.conflict_mode || 'reject');
         if (!['reject', 'new_revision'].includes(conflictMode)) return json(res, 400, { error: '不支持的 conflict_mode', code: 'invalid_conflict_mode' });
@@ -2601,11 +2719,12 @@ const server = http.createServer(async (req, res) => {
         }
         if (!plan.items.length) {
           const ids = [...new Set(plan.unchanged.map((item) => Number(item.existing?.batch_id)).filter(Boolean))];
-          const existingBatch = ids.length === 1 ? pdb.prepare('SELECT id, name, subject FROM custom_batches WHERE user_id = ? AND id = ?').get(ownerId, ids[0]) : null;
+          const existingBatch = ids.length === 1 ? pdb.prepare('SELECT id, name, subject, visibility FROM custom_batches WHERE user_id = ? AND id = ?').get(ownerId, ids[0]) : null;
           return json(res, 200, {
             id: existingBatch ? Number(existingBatch.id) : (Number(parsed.batch_id) || null),
             name: existingBatch?.name || name,
             subject: existingBatch?.subject || String(parsed.subject || '').trim() || '自定义',
+            visibility: existingBatch?.visibility || visibility,
             count: normalized.questions.length,
             created: 0,
             revisions: 0,
@@ -2627,7 +2746,7 @@ const server = http.createServer(async (req, res) => {
         const itemBatchIds = [];
         withTx(() => {
           if (!createdBatchId && plan.items.some((item) => item.kind === 'create')) {
-            const tb = pdb.prepare('INSERT INTO custom_batches (user_id, name, subject) VALUES (?, ?, ?)').run(ownerId, name, subject);
+            const tb = pdb.prepare('INSERT INTO custom_batches (user_id, name, subject, visibility) VALUES (?, ?, ?, ?)').run(ownerId, name, subject, visibility);
             createdBatchId = Number(tb.lastInsertRowid);
           }
           for (const item of plan.items) {
@@ -2665,11 +2784,12 @@ const server = http.createServer(async (req, res) => {
           for (const bid of touched) pdb.prepare("UPDATE custom_batches SET updated_at = datetime('now','localtime') WHERE user_id = ? AND id = ?").run(ownerId, bid);
         });
         const primaryBatchId = createdBatchId || itemBatchIds[0] || requestedBatchId || null;
-        const batch = primaryBatchId ? pdb.prepare('SELECT id, name, subject FROM custom_batches WHERE user_id = ? AND id = ?').get(ownerId, primaryBatchId) : null;
+        const batch = primaryBatchId ? pdb.prepare('SELECT id, name, subject, visibility FROM custom_batches WHERE user_id = ? AND id = ?').get(ownerId, primaryBatchId) : null;
         return json(res, 200, {
           id: primaryBatchId,
           name: batch?.name || name,
           subject: batch?.subject || subject,
+          visibility: batch?.visibility || visibility,
           count: normalized.questions.length,
           created,
           revisions,
@@ -2680,38 +2800,48 @@ const server = http.createServer(async (req, res) => {
       // 批次列表（含题数）
       if (pathname === '/api/custom/batches' && req.method === 'GET') {
         const rows = pdb.prepare(`
-          SELECT b.id, b.name, b.subject, b.created_at,
+          SELECT b.id, b.name, b.subject, b.visibility, b.created_at,
+                 CASE WHEN b.user_id = ? THEN 1 ELSE 0 END AS is_owner,
                  (SELECT COUNT(*) FROM custom_questions c WHERE c.user_id = b.user_id AND c.batch_id = b.id AND c.is_current = 1) AS count
-          FROM custom_batches b WHERE b.user_id = ? ORDER BY b.id DESC
-        `).all(ownerId);
+          FROM custom_batches b WHERE b.user_id = ? OR b.visibility = 'public' ORDER BY b.id DESC
+        `).all(ownerId, ownerId);
         return json(res, 200, { batches: rows.map((r) => ({ ...r, count: Number(r.count) })) });
       }
       // 批次内题目列表
       if (pathname === '/api/custom/questions' && req.method === 'GET') {
         const batchId = Number(url.searchParams.get('batch_id') || 0);
         if (!batchId) return err(res, 400, '缺少 batch_id');
+        const batch = visibleCustomBatch(ownerId, batchId);
+        if (!batch) return err(res, 404, '批次不存在');
         const includeHistory = url.searchParams.get('include_history') === '1';
         const rows = pdb.prepare(`
-          SELECT * FROM custom_questions
-          WHERE user_id = ? AND batch_id = ? ${includeHistory ? '' : 'AND is_current = 1'}
-          ORDER BY id ASC
-        `).all(ownerId, batchId);
-        return json(res, 200, { questions: rows.map(customQuestionApiRow), history: includeHistory });
+          SELECT q.* FROM custom_questions q
+          JOIN custom_batches b ON b.id = q.batch_id AND b.user_id = q.user_id
+          WHERE q.batch_id = ? AND (b.user_id = ? OR b.visibility = 'public') ${includeHistory ? '' : 'AND q.is_current = 1'}
+          ORDER BY q.id ASC
+        `).all(batchId, ownerId);
+        return json(res, 200, { questions: rows.map(customQuestionApiRow), history: includeHistory, batch });
       }
       // 批改名（可同时改科目）
       if (pathname === '/api/custom/batch' && req.method === 'PUT') {
         let body = '';
         for await (const chunk of req) body += chunk;
-        const { id, name, subject } = JSON.parse(body || '{}');
+        const parsed = JSON.parse(body || '{}');
+        const { id, name, subject } = parsed;
         const nid = Number(id);
-        if (!nid || !String(name || '').trim()) return err(res, 400, '缺少 id 或批次名');
-        const s = String(subject ?? '').trim();
-        if (s) {
-          pdb.prepare("UPDATE custom_batches SET name = ?, subject = ?, updated_at = datetime('now','localtime') WHERE user_id = ? AND id = ?").run(String(name).trim(), s, ownerId, nid);
-        } else {
-          pdb.prepare("UPDATE custom_batches SET name = ?, updated_at = datetime('now','localtime') WHERE user_id = ? AND id = ?").run(String(name).trim(), ownerId, nid);
-        }
-        return json(res, 200, { ok: true });
+        if (!nid) return err(res, 400, '缺少 id');
+        const current = pdb.prepare('SELECT * FROM custom_batches WHERE user_id = ? AND id = ?').get(ownerId, nid);
+        if (!current) return err(res, 404, '批次不存在或无权管理');
+        const nextName = name === undefined ? current.name : String(name || '').trim();
+        if (!nextName) return err(res, 400, '批次名不能为空');
+        const nextSubject = subject === undefined ? current.subject : (String(subject || '').trim() || '自定义');
+        const nextVisibility = parsed.visibility === undefined
+          ? current.visibility
+          : String(parsed.visibility).trim().toLowerCase();
+        if (!['public', 'private'].includes(nextVisibility)) return err(res, 400, '可见范围只能是 public 或 private');
+        pdb.prepare("UPDATE custom_batches SET name = ?, subject = ?, visibility = ?, updated_at = datetime('now','localtime') WHERE user_id = ? AND id = ?")
+          .run(nextName, nextSubject || '自定义', nextVisibility, ownerId, nid);
+        return json(res, 200, { ok: true, visibility: nextVisibility });
       }
       // 合并批次：把选中的批次题目并入第一个（id 最小）批次，删其余批次
       if (pathname === '/api/custom/batch/merge' && req.method === 'POST') {
@@ -2720,10 +2850,11 @@ const server = http.createServer(async (req, res) => {
         const { ids, name } = JSON.parse(body || '{}');
         const idList = (Array.isArray(ids) ? ids : []).map(Number).filter(Boolean);
         if (idList.length < 2) return err(res, 400, '至少选择两个批次');
-        const ownedBatches = pdb.prepare(`SELECT id FROM custom_batches WHERE user_id = ? AND id IN (${idList.map(() => '?').join(',')})`).all(ownerId, ...idList);
+        const ownedBatches = pdb.prepare(`SELECT id, visibility FROM custom_batches WHERE user_id = ? AND id IN (${idList.map(() => '?').join(',')})`).all(ownerId, ...idList);
         if (ownedBatches.length !== idList.length) return err(res, 404, '部分批次不存在');
         const target = Math.min(...idList);
         const others = idList.filter((x) => x !== target);
+        const mergedVisibility = ownedBatches.every((batch) => batch.visibility === 'public') ? 'public' : 'private';
         withTx(() => {
           for (const o of others) {
             pdb.prepare('UPDATE custom_questions SET batch_id = ? WHERE user_id = ? AND batch_id = ?').run(target, ownerId, o);
@@ -2731,6 +2862,7 @@ const server = http.createServer(async (req, res) => {
           for (const o of others) {
             pdb.prepare('DELETE FROM custom_batches WHERE user_id = ? AND id = ?').run(ownerId, o);
           }
+          pdb.prepare('UPDATE custom_batches SET visibility = ? WHERE user_id = ? AND id = ?').run(mergedVisibility, ownerId, target);
         });
         if (name && String(name).trim()) {
           pdb.prepare("UPDATE custom_batches SET name = ? WHERE user_id = ? AND id = ?").run(String(name).trim(), ownerId, target);
@@ -2746,11 +2878,11 @@ const server = http.createServer(async (req, res) => {
         const bid = Number(batch_id);
         const qids = (Array.isArray(question_ids) ? question_ids : []).map(Number).filter(Boolean);
         if (!bid || qids.length === 0) return err(res, 400, '缺少批次或题目');
-        const src = pdb.prepare('SELECT name, subject FROM custom_batches WHERE user_id = ? AND id = ?').get(ownerId, bid);
+        const src = pdb.prepare('SELECT name, subject, visibility FROM custom_batches WHERE user_id = ? AND id = ?').get(ownerId, bid);
         if (!src) return err(res, 404, '批次不存在');
         const splitN = pdb.prepare("SELECT COUNT(*) n FROM custom_batches WHERE user_id = ? AND name LIKE ?").get(ownerId, src.name + '-拆分%').n;
         const newName = String(name || '').trim() || `${src.name}-拆分${splitN + 1}`;
-        const tb = pdb.prepare('INSERT INTO custom_batches (user_id, name, subject) VALUES (?, ?, ?)').run(ownerId, newName, (src.subject || '自定义').trim() || '自定义');
+        const tb = pdb.prepare('INSERT INTO custom_batches (user_id, name, subject, visibility) VALUES (?, ?, ?, ?)').run(ownerId, newName, (src.subject || '自定义').trim() || '自定义', src.visibility || 'private');
         const nb = tb.lastInsertRowid;
         withTx(() => {
           for (const qid of qids) {
@@ -2764,6 +2896,8 @@ const server = http.createServer(async (req, res) => {
       if (pathname === '/api/custom/batch' && req.method === 'DELETE') {
         const bid = Number(url.searchParams.get('id') || 0);
         if (!bid) return err(res, 400, '缺少 id');
+        const owned = pdb.prepare('SELECT id FROM custom_batches WHERE user_id = ? AND id = ?').get(ownerId, bid);
+        if (!owned) return err(res, 404, '批次不存在或无权管理');
         withTx(() => {
           pdb.prepare('DELETE FROM custom_questions WHERE user_id = ? AND batch_id = ?').run(ownerId, bid);
           pdb.prepare('DELETE FROM custom_batches WHERE user_id = ? AND id = ?').run(ownerId, bid);
@@ -2865,12 +2999,17 @@ const server = http.createServer(async (req, res) => {
       if (pathname === '/api/custom/practice' && req.method === 'GET') {
         const bid = Number(url.searchParams.get('batch_id') || 0);
         if (!bid) return err(res, 400, '缺少 batch_id');
-        const b = pdb.prepare('SELECT id, name, subject FROM custom_batches WHERE user_id = ? AND id = ?').get(ownerId, bid);
+        const b = visibleCustomBatch(ownerId, bid);
         if (!b) return err(res, 404, '批次不存在');
         const bSubj = (b.subject || '自定义').trim() || '自定义';
         // 题量截断（0=全部，max 100）；保护材料组完整：若截断位置处于组中间，向后延伸到组末
         const count = Math.max(0, Math.min(Number(url.searchParams.get('count') || 0), 100));
-        const rows = pdb.prepare('SELECT * FROM custom_questions WHERE user_id = ? AND batch_id = ? AND is_current = 1 ORDER BY id ASC').all(ownerId, bid);
+        const rows = pdb.prepare(`
+          SELECT q.* FROM custom_questions q
+          JOIN custom_batches b ON b.id = q.batch_id AND b.user_id = q.user_id
+          WHERE q.batch_id = ? AND q.is_current = 1 AND (b.user_id = ? OR b.visibility = 'public')
+          ORDER BY q.id ASC
+        `).all(bid, ownerId);
         const questions = groupCustomPracticeRows(rows, (r) => {
           const { contentHtml, materialHtml } = customQuestionHtml({ ...r, images: parseImages(r.images) });
           return {
@@ -2906,7 +3045,7 @@ const server = http.createServer(async (req, res) => {
           }
           out = questions.slice(0, endIdx);
         }
-        return json(res, 200, { questions: out, batch: { id: bid, name: b.name, subject: bSubj } });
+        return json(res, 200, { questions: out, batch: { id: bid, name: b.name, subject: bSubj, visibility: b.visibility, is_owner: Boolean(b.is_owner) } });
       }
       // 按材料内容自动分组：相同材料文本归为一组（≥2 题才分组；空材料不参与）
       if (pathname === '/api/custom/questions/auto-group' && req.method === 'POST') {
@@ -2947,15 +3086,14 @@ const server = http.createServer(async (req, res) => {
         let body = '';
         for await (const chunk of req) body += chunk;
         const parsed = JSON.parse(body || '{}');
-        const { questionId, selected, batchId, chapter, attemptId } = parsed;
+        const { questionId, selected, attemptId } = parsed;
         const cid = Number(String(questionId || '').replace(/^custom-/, ''));
         if (!cid) return err(res, 400, '缺少 questionId');
         const resolved = resolveRecordQuestion(`custom-${cid}`, ownerId);
         if (!resolved) return err(res, 404, '题目不存在');
         const result = checkAnswer(resolved.question, selected);
-        const bm = pdb.prepare('SELECT name, subject FROM custom_batches WHERE user_id = ? AND id = ?').get(ownerId, Number(batchId || 0));
-        const ch = chapter || (bm && bm.name) || '';
-        const subj = (bm && (bm.subject || '').trim()) || '自定义';
+        const ch = resolved.batchName || '';
+        const subj = (resolved.batchSubject || '').trim() || '自定义';
         const submissionKey = normalizeSubmissionKey(parsed.submissionKey ?? parsed.submission_key);
         if (submissionKey) {
           const previous = pdb.prepare('SELECT id, question_id, selected, is_correct FROM practice_records WHERE user_id = ? AND submission_key = ?').get(ownerId, submissionKey);
@@ -2997,7 +3135,7 @@ const server = http.createServer(async (req, res) => {
         let body = '';
         for await (const chunk of req) body += chunk;
         const parsed = JSON.parse(body || '{}');
-        const { questionId, subject, chapter, type, selected, correct, costMs, paperId, attemptId, attemptMode, attemptQuestionCount } = parsed;
+        const { questionId, subject, chapter, type, selected, correct, costMs, explanationMs, paperId, attemptId, attemptMode, attemptQuestionCount, startedAtMs } = parsed;
         if (questionId == null) return err(res, 400, '缺少 questionId');
         const selectedJson = JSON.stringify(selected ?? null);
         const submissionKey = normalizeSubmissionKey(parsed.submissionKey ?? parsed.submission_key);
@@ -3027,14 +3165,14 @@ const server = http.createServer(async (req, res) => {
           correctText: judged.correctText,
           ok: judged.ok,
         }) : '';
-        ensureAttempt(ownerId, attemptId, subject, attemptMode, attemptQuestionCount);
+        ensureAttempt(ownerId, attemptId, subject, attemptMode, attemptQuestionCount, startedAtMs);
         // 来源归档：按题目真实来源算大模块/子模块（与错题本/收藏/笔记分组同口径），旧记录靠一键整理回填
         const cls = classifySource(questionId);
         const r = pdb.prepare(`
           INSERT INTO practice_records
-            (user_id, question_id, paper_id, subject, chapter, question_type, selected, is_correct, cost_ms, group_key, sub_key,
+            (user_id, question_id, paper_id, subject, chapter, question_type, selected, is_correct, cost_ms, explanation_ms, group_key, sub_key,
              submission_key, attempt_id, question_uid, question_revision, question_snapshot, answer_snapshot)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           ownerId,
           questionId,
@@ -3045,6 +3183,7 @@ const server = http.createServer(async (req, res) => {
           selectedJson,
           finalCorrect == null ? null : (finalCorrect ? 1 : 0),
           costMs ?? 0,
+          Math.max(0, Math.floor(Number(explanationMs) || 0)),
           cls.groupKey,
           cls.subKey,
           submissionKey,
@@ -3079,8 +3218,17 @@ const server = http.createServer(async (req, res) => {
         for await (const chunk of req) body += chunk;
         const parsed = JSON.parse(body || '{}');
         if (!String(parsed.attemptId || '').trim()) return err(res, 400, '缺少 attemptId');
-        finishAttempt(ownerId, parsed.attemptId);
+        finishAttempt(ownerId, parsed.attemptId, parsed);
         return json(res, 200, { ok: true });
+      }
+      if (pathname === '/api/attempts' && req.method === 'GET') {
+        return json(res, 200, { attempts: listCompletedAttempts(ownerId, url.searchParams.get('limit')) });
+      }
+      const attemptDetailMatch = pathname.match(/^\/api\/attempts\/([^/]+)$/);
+      if (attemptDetailMatch && req.method === 'GET') {
+        const attempt = getCompletedAttempt(ownerId, decodeURIComponent(attemptDetailMatch[1]));
+        if (!attempt) return err(res, 404, '练习记录不存在');
+        return json(res, 200, attempt);
       }
       // 统计（学习进度 AI 的数据源）：总数/正确率/按章节/近7天
       // 参数: subject=真实科目(经 question_id 关联 tiku 判定); days=30|180|365 或 from+to(YYYY-MM-DD); 缺省不过滤
@@ -3161,7 +3309,7 @@ const server = http.createServer(async (req, res) => {
           if (String(r.question_id).startsWith('custom-')) {
             // 自定义题：题面从 custom_questions 取
             const cid = Number(String(r.question_id).replace(/^custom-/, ''));
-            const cr = pdb.prepare('SELECT prompt, images FROM custom_questions WHERE user_id = ? AND id = ?').get(ownerId, cid);
+            const cr = visibleCustomQuestion(ownerId, cid);
             if (cr) q = { content: cr.prompt + (parseImages(cr.images).length ? ' [图]' : ''), type: 'custom' };
           } else {
             q = qQuestionById.get(r.question_id);
@@ -3679,7 +3827,7 @@ const server = http.createServer(async (req, res) => {
           };
         } else if (String(questionId).startsWith('custom-')) {
           const cid = Number(String(questionId).replace(/^custom-/, ''));
-            const cr = pdb.prepare('SELECT * FROM custom_questions WHERE user_id = ? AND id = ?').get(ownerId, cid);
+          const cr = visibleCustomQuestion(ownerId, cid);
           if (cr) {
             customMaterial = String(cr.material || '').trim();
             q = {

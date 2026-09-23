@@ -92,11 +92,90 @@ test('题库、AI 配置和随题会话按账号隔离', async () => {
     body: { name: 'A 的题库', questions: [{ prompt: 'A 的题', options: ['A. 对'], answer: 'A', answer_index: 0 }] },
   });
   assert.equal(importedA.response.status, 200, JSON.stringify(importedA.payload));
+  assert.equal(importedA.payload.visibility, 'public');
+  const publicBatchId = importedA.payload.id;
 
   const batchesB = await request('/api/custom/batches', { cookie: userB.cookie });
-  assert.deepEqual(batchesB.payload.batches, []);
+  assert.equal(batchesB.payload.batches.length, 1);
+  assert.equal(batchesB.payload.batches[0].id, publicBatchId);
+  assert.equal(batchesB.payload.batches[0].visibility, 'public');
+  assert.equal(batchesB.payload.batches[0].is_owner, 0);
+  const publicQuestionsB = await request(`/api/custom/questions?batch_id=${publicBatchId}`, { cookie: userB.cookie });
+  assert.equal(publicQuestionsB.response.status, 200);
+  assert.equal(publicQuestionsB.payload.questions[0].prompt, 'A 的题');
+  const publicPracticeB = await request(`/api/custom/practice?batch_id=${publicBatchId}`, { cookie: userB.cookie });
+  assert.equal(publicPracticeB.response.status, 200);
+  assert.equal(publicPracticeB.payload.questions.length, 1);
+  const publicQuestionB = await request(`/api/question?id=custom-${publicQuestionsB.payload.questions[0].id}`, { cookie: userB.cookie });
+  assert.equal(publicQuestionB.response.status, 200);
+  const publicCheckB = await request('/api/custom/check', {
+    method: 'POST', cookie: userB.cookie,
+    body: { questionId: `custom-${publicQuestionsB.payload.questions[0].id}`, selected: [0], batchId: publicBatchId },
+  });
+  assert.equal(publicCheckB.response.status, 200, JSON.stringify(publicCheckB.payload));
+  assert.equal(publicCheckB.payload.ok, true);
+  const attemptStartedAtMs = Date.now() - 3000;
+  const attemptRecordA = await request('/api/records', {
+    method: 'POST', cookie: userA.cookie,
+    body: {
+      questionId: `custom-${publicQuestionsB.payload.questions[0].id}`, subject: '自定义', chapter: 'A 的题库',
+      selected: [0], costMs: 1200, explanationMs: 400, attemptId: 'attempt-private-to-a',
+      attemptMode: 'custom', attemptQuestionCount: 1, startedAtMs: attemptStartedAtMs,
+      submissionKey: 'attempt-private-to-a:final:0:custom-1',
+    },
+  });
+  assert.equal(attemptRecordA.response.status, 200, JSON.stringify(attemptRecordA.payload));
+  const attemptCompleteA = await request('/api/attempts/complete', {
+    method: 'POST', cookie: userA.cookie,
+    body: { attemptId: 'attempt-private-to-a', subject: '自定义', mode: 'custom', questionCount: 1, startedAtMs: attemptStartedAtMs, durationMs: 1900, explanationMs: 400 },
+  });
+  assert.equal(attemptCompleteA.response.status, 200, JSON.stringify(attemptCompleteA.payload));
+  const historyA = await request('/api/attempts', { cookie: userA.cookie });
+  assert.equal(historyA.payload.attempts.length, 1);
+  const historyB = await request('/api/attempts', { cookie: userB.cookie });
+  assert.equal(historyB.payload.attempts.length, 0);
+  const historyDetailB = await request('/api/attempts/attempt-private-to-a', { cookie: userB.cookie });
+  assert.equal(historyDetailB.response.status, 404);
+  const publicEditB = await request('/api/custom/batch', {
+    method: 'PUT', cookie: userB.cookie,
+    body: { id: publicBatchId, visibility: 'private' },
+  });
+  assert.equal(publicEditB.response.status, 404);
+
+  const importedPrivateA = await request('/api/custom/import', {
+    method: 'POST', cookie: userA.cookie,
+    body: { name: 'A 的私有題庫', visibility: 'private', questions: [{ prompt: '私有题目', options: ['A. 不公开'], answer: 'A', answer_index: 0 }] },
+  });
+  assert.equal(importedPrivateA.response.status, 200, JSON.stringify(importedPrivateA.payload));
+  assert.equal(importedPrivateA.payload.visibility, 'private');
+  const batchesBAfterPrivate = await request('/api/custom/batches', { cookie: userB.cookie });
+  assert.deepEqual(batchesBAfterPrivate.payload.batches.map((batch) => batch.id), [publicBatchId]);
+  const privateQuestionsB = await request(`/api/custom/questions?batch_id=${importedPrivateA.payload.id}`, { cookie: userB.cookie });
+  assert.equal(privateQuestionsB.response.status, 404);
+  const privatePracticeB = await request(`/api/custom/practice?batch_id=${importedPrivateA.payload.id}`, { cookie: userB.cookie });
+  assert.equal(privatePracticeB.response.status, 404);
+  const privateQuestionsA = await request(`/api/custom/questions?batch_id=${importedPrivateA.payload.id}`, { cookie: userA.cookie });
+  assert.equal(privateQuestionsA.payload.questions.length, 1);
+  const privateQuestionB = await request(`/api/question?id=custom-${privateQuestionsA.payload.questions[0].id}`, { cookie: userB.cookie });
+  assert.equal(privateQuestionB.response.status, 404);
+
+  const makePrivateA = await request('/api/custom/batch', {
+    method: 'PUT', cookie: userA.cookie,
+    body: { id: publicBatchId, visibility: 'private' },
+  });
+  assert.equal(makePrivateA.response.status, 200);
+  const batchesBAfterVisibilityChange = await request('/api/custom/batches', { cookie: userB.cookie });
+  assert.equal(batchesBAfterVisibilityChange.payload.batches.length, 0);
+  const publicQuestionsAfterPrivate = await request(`/api/custom/questions?batch_id=${publicBatchId}`, { cookie: userB.cookie });
+  assert.equal(publicQuestionsAfterPrivate.response.status, 404);
+  const restorePublicA = await request('/api/custom/batch', {
+    method: 'PUT', cookie: userA.cookie,
+    body: { id: publicBatchId, visibility: 'public' },
+  });
+  assert.equal(restorePublicA.response.status, 200);
+
   const batchesA = await request('/api/custom/batches', { cookie: userA.cookie });
-  assert.equal(batchesA.payload.batches[0].name, 'A 的题库');
+  assert.equal(batchesA.payload.batches.find((batch) => batch.id === publicBatchId).name, 'A 的题库');
 
   const savedA = await request('/api/ai/agents/1', {
     method: 'PUT', cookie: userA.cookie,

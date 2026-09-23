@@ -81,6 +81,7 @@ after(async () => {
 test('WP2 导入校验、逻辑身份、幂等去重和冲突预览', async () => {
   const imported = await request('/api/custom/import', { name: 'WP2 题库', questions });
   assert.equal(imported.status, 200, JSON.stringify(imported.body));
+  assert.equal(imported.body.visibility, 'public');
   assert.equal(imported.body.created, 2);
   assert.equal(imported.body.revisions, 0);
 
@@ -103,6 +104,7 @@ test('WP2 导入校验、逻辑身份、幂等去重和冲突预览', async () =
   const batches = await get('/api/custom/batches');
   assert.equal(batches.body.batches.length, 1);
   assert.equal(batches.body.batches[0].count, 2);
+  assert.equal(batches.body.batches[0].visibility, 'public');
 
   const changed = { ...questions[0], prompt: '下列哪项是更新后的正确答案？' };
   const preview = await request('/api/custom/import/preview', { questions: [changed] });
