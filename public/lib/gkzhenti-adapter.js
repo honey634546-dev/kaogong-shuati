@@ -42,6 +42,17 @@ function decodeEntities(value) {
 /** 将站点 HTML 转为适合现有题目解析器的行文本。 */
 export function htmlToText(html) {
   let source = removeNonContent(html);
+  // 原卷常用 <u>&nbsp;…</u> 表示填空，而非字面下划线。必须在剥标签和
+  // 折叠空格之前保留这个语义；从内向外处理，兼容原卷重复嵌套的 <u>。
+  // 只忽略文字包装标签，避免把下划线中的图片等内容误认成空白。
+  let previous;
+  do {
+    previous = source;
+    source = source.replace(/<u\b[^>]*>((?:(?!<u\b)[\s\S])*?)<\/u\s*>/gi, (_, inner) => {
+      const text = decodeEntities(inner.replace(/<\/?(?:span|b|i|em|strong|font)\b[^>]*>/gi, ''));
+      return /^[\s\u200b\u200c\u200d\ufeff]*$/.test(text) ? '____' : inner;
+    });
+  } while (source !== previous);
   source = source
     // 公开真题库整卷页把题号放在独立的「left」栏，题干在相邻的「right」栏；
     // 先把这个布局还原为通用解析器能识别的题号行，再剥除其他 HTML 标签。

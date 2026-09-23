@@ -15,6 +15,12 @@ import {
 } from './public/lib/gkzhenti-adapter.js';
 import { safeFilePart, selectEntries } from './scripts/import-gkzhenti.mjs';
 import { XINGCE_REGIONS } from './scripts/import-gkzhenti-recent-regions.mjs';
+import { blankRepairsFromHtml, repairDatabase } from './scripts/repair-gkzhenti-blanks.mjs';
+import { customQuestionFingerprint } from './public/lib/custom-bank.js';
+import { DatabaseSync } from 'node:sqlite';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 test('公开真题库：索引 URL、试卷 ID 和科目映射稳定', () => {
   assert.equal(
@@ -48,6 +54,103 @@ test('公开真题库：HTML 转文本保留换行并解码实体，不接受黑
   assert.equal(titleFromHtml('<title>测试卷&nbsp;- 公开真题库</title>'), '测试卷 - 公开真题库');
   assert.equal(isBlockedPage('因监测到恶意爬虫行为被列入临时黑名单'), true);
   assert.equal(isBlockedPage('<html><body>1、正常题目</body></html>'), false);
+});
+
+test('公开真题库：空白下划线在去除 HTML 前转成填空线', () => {
+  for (const content of ['', '   ', '\u00a0\u00a0', '\u3000\u3000', '&nbsp;&#160;&#xA0;', '&amp;nbsp;', '<span> &nbsp; </span>', '<u>\u00a0\u00a0</u>']) {
+    assert.equal(htmlToText(`甲<u>${content}</u>乙`), '甲____乙', content);
+  }
+  assert.equal(htmlToText('第一空<u> </u>，第二空<u>&nbsp;</u>。'), '第一空____，第二空____。');
+  assert.equal(htmlToText('普通 空格，<u>画线文字</u>，<u>____</u>。'), '普通 空格，画线文字，____。');
+  assert.equal(htmlToText('<u><img src="formula.png"></u>'), '');
+});
+
+test('公开真题库：河南 2026 宋史题的材料填空线保留到富文本渲染', async () => {
+  const paperHtml = `<div class="row"><div class="col-xs-1 left">1</div><div class="col-xs-11 right">
+    <p>“比上有余，比下不足”这八个字大致概括了宋史史料的数量特征。由于“比上有余”，治宋史者无“巧妇无米”、“<u>\u00a0\u00a0\u00a0\u00a0</u>”之感；因为“比下不足”，治宋史者无“老虎吃天，无处下手”之叹。</p>
+    <p>填入画横线部分最恰当的一项是：</p>
+    <div class="col-xs-3">A、黔驴技穷</div><div class="col-xs-3">B、山穷水尽</div>
+    <div class="col-xs-3">C、顾此失彼</div><div class="col-xs-3">D、青黄不接</div>
+  </div></div>`;
+  const parsed = parseGkzhentiPaper({ paperHtml, answerHtml: '<div>1、B</div>', paperId: '1775360735848', cls: '行测', province: '河南' });
+  const question = parsed.questions[0];
+  assert.equal(question.prompt, '填入画横线部分最恰当的一项是：');
+  assert.match(question.material, /“巧妇无米”、“____”之感/);
+  assert.equal(question.external_id, 'gkzhenti:1775360735848:1');
+  assert.equal(question.answer_index, 1);
+  await import('./public/rich-text.js');
+  const html = globalThis.renderRichText(question.material);
+  assert.equal((html.match(/class="rt-blank"/g) || []).length, 1);
+});
+
+test('公开真题库：题干、选项、共享材料和文本回退路径均保留填空线', () => {
+  const paperHtml = `<div class="row"><div class="sub2title">（一）</div><p>材料<u> </u>。</p></div>
+    <div class="row"><div class="left">1</div><div class="right"><p>题干<u> </u>？</p>
+    <div class="col-xs-6">A、选项<u> </u></div><div class="col-xs-6">B、乙</div></div></div>`;
+  const question = parseGkzhentiPaper({ paperHtml, paperId: 'blank-fields' }).questions[0];
+  assert.equal(question.prompt, '题干____？');
+  assert.equal(question.material, '材料____。');
+  assert.equal(question.options[0], 'A. 选项____');
+  const fallback = parseGkzhentiPaper({ paperHtml: '<div>1、回退<u>&nbsp;</u>？</div><div>A. 甲</div><div>B. 乙</div>', paperId: 'blank-fallback' });
+  assert.equal(fallback.questions[0].prompt, '回退____？');
+});
+
+test('公开真题库：旧数据修复可预览、备份、幂等，并保留题目身份和学习记录', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'gkzhenti-blank-repair-'));
+  const dbPath = join(dir, 'practice.db');
+  const db = new DatabaseSync(dbPath);
+  try {
+    db.exec(`CREATE TABLE custom_questions (
+      id INTEGER PRIMARY KEY, user_id TEXT, batch_id INTEGER, external_id TEXT,
+      question_uid TEXT, revision INTEGER, is_current INTEGER, prompt TEXT, material TEXT,
+      options TEXT, answer TEXT, answer_index INTEGER, analysis TEXT, category TEXT,
+      images TEXT, fingerprint TEXT
+    );
+    CREATE TABLE practice_records (question_id INTEGER, question_snapshot TEXT);
+    CREATE TABLE notes (question_id INTEGER, content TEXT);`);
+    const html = '<div>1、第一空<u>&nbsp;</u>，第二空<u>&nbsp;</u>？</div><div>A. 甲</div><div>B. 乙</div>';
+    const repairs = blankRepairsFromHtml(html, 'repair-test');
+    const change = repairs.get('gkzhenti:repair-test:1').prompt;
+    const insert = db.prepare('INSERT INTO custom_questions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    for (const [id, prompt, current] of [[1, change.before, 1], [2, '用户自行修改的题干', 1], [3, change.after, 1], [4, change.before, 0]]) {
+      insert.run(id, 'owner-a', 9, 'gkzhenti:repair-test:1', `stable-${id}`, 2, current,
+        prompt, '', '["A. 甲","B. 乙"]', 'B', 1, '人工补充的解析', '自定义分类', '[]', `old-${id}`);
+    }
+    db.prepare('INSERT INTO practice_records VALUES (?, ?)').run(1, JSON.stringify({ prompt: change.before }));
+    db.prepare('INSERT INTO notes VALUES (?, ?)').run(1, '保留学习笔记');
+    const all = () => db.prepare('SELECT * FROM custom_questions ORDER BY id').all().map((row) => ({ ...row }));
+    const before = all();
+    const records = db.prepare('SELECT * FROM practice_records').all();
+    const notes = db.prepare('SELECT * FROM notes').all();
+
+    const preview = await repairDatabase(dbPath, repairs);
+    assert.equal(preview.mode, 'preview');
+    assert.equal(preview.affectedQuestions, 1);
+    assert.equal(preview.alreadyFixed, 1);
+    assert.deepEqual(preview.skipped.map((row) => row.id), [2]);
+    assert.deepEqual(all(), before, '预览不能改数据');
+
+    const applied = await repairDatabase(dbPath, repairs, { apply: true });
+    assert.equal(applied.affectedQuestions, 1);
+    const backup = JSON.parse(await readFile(applied.backupPath, 'utf8'));
+    assert.deepEqual(backup.changes[0].before, before[0]);
+    const after = all();
+    assert.equal(after[0].prompt, change.after);
+    const fingerprint = customQuestionFingerprint({ ...after[0], options: JSON.parse(after[0].options), images: [] });
+    assert.equal(after[0].fingerprint, fingerprint);
+    assert.deepEqual({ ...after[0], prompt: before[0].prompt, fingerprint: before[0].fingerprint }, before[0]);
+    assert.deepEqual(after.slice(1), before.slice(1), '跳过人工修改、已修复以及历史版本');
+    assert.deepEqual(db.prepare('SELECT * FROM practice_records').all(), records);
+    assert.deepEqual(db.prepare('SELECT * FROM notes').all(), notes);
+
+    const repeated = await repairDatabase(dbPath, repairs, { apply: true });
+    assert.equal(repeated.affectedQuestions, 0);
+    assert.equal(repeated.backupPath, '');
+    assert.equal(repeated.alreadyFixed, 2);
+  } finally {
+    db.close();
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test('公开真题库：独立答案页按题号回填题目', () => {
