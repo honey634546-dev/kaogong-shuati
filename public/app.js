@@ -920,7 +920,7 @@ function runTodayTask(task, customBatches = []) {
     if (subj) {
       renderPractice(subj, null, null, '0');
     } else if (customBatches && customBatches.length > 0) {
-      startCustomBatchPractice(customBatches[0].id, customBatches[0].name, 15, 'exam');
+      startCustomBatchPractice(customBatches[0].id, customBatches[0].name, 15, 'practice');
     } else {
       renderImport();
     }
@@ -1027,7 +1027,7 @@ async function renderToday() {
       const t = tasks[Number(node.dataset.task)];
       node.onclick = () => runTodayTask(t, customBatches);
     });
-    $('#today-cta').onclick = () => runTodayTask(nextTask || { kind: hasSubjects ? 'random' : 'import' }, customBatches);
+    $('#today-cta').onclick = () => runTodayTask(nextTask || { kind: hasSubjects || (customBatches && customBatches.length > 0) ? 'random' : 'import' }, customBatches);
 
     // ---- 继续上次 ----
     const resume = loadResumeSession();
@@ -1123,7 +1123,7 @@ async function renderToday() {
           <div class="bar today-subj-bar"><i class="brand" style="width:100%"></i></div>
           <div class="today-subj-pct">开始刷题 ›</div>
         `);
-        card.onclick = () => startCustomBatchPractice(b.id, b.name, 15, 'exam');
+        card.onclick = () => startCustomBatchPractice(b.id, b.name, 15, 'practice');
         rail.appendChild(card);
       }
       railWrap.appendChild(rail);
@@ -1253,6 +1253,17 @@ async function renderPracticeHub() {
     view.appendChild(body);
 
     const renderChapterMode = async () => {
+      if (!subjects.length) {
+        body.innerHTML = `
+          <div class="card" style="text-align:center;padding:28px 16px">
+            <div style="font-size:15px;font-weight:600;margin-bottom:6px">暂无预置科目章节</div>
+            <div class="muted" style="font-size:13px;margin-bottom:16px">你可以直接在下方进入「自定义题库」练习导入的题目，或导入新试卷。</div>
+            <button class="btn btn-primary btn-sm" id="hub-empty-custom">${ico('database', 14)} 进入自定义题库</button>
+          </div>
+        `;
+        body.querySelector('#hub-empty-custom').onclick = () => renderCustomBank();
+        return;
+      }
       body.innerHTML = '<div class="spinner"></div>';
       const results = await Promise.all(subjects.map(async (s) => {
         try {
@@ -1312,6 +1323,17 @@ async function renderPracticeHub() {
     };
 
     const renderPaperMode = async (mock) => {
+      if (!subjects.length) {
+        body.innerHTML = `
+          <div class="card" style="text-align:center;padding:28px 16px">
+            <div style="font-size:15px;font-weight:600;margin-bottom:6px">暂无预置套卷</div>
+            <div class="muted" style="font-size:13px;margin-bottom:16px">请在自定义题库中查看已导入的试卷套题。</div>
+            <button class="btn btn-primary btn-sm" id="hub-empty-paper-custom">${ico('database', 14)} 进入自定义题库</button>
+          </div>
+        `;
+        body.querySelector('#hub-empty-paper-custom').onclick = () => renderCustomBank();
+        return;
+      }
       body.innerHTML = '<div class="spinner"></div>';
       const results = await Promise.all(subjects.map(async (s) => {
         try {
@@ -1463,8 +1485,24 @@ async function renderMe() {
       </div>
     `);
     view.appendChild(quick);
-    $('#quick-random').onclick = () => { const s = store.subjects[0]?.subjectName; if (s) renderPractice(s, null, null, '0'); };
-    $('#quick-wrong').onclick = () => renderWrong();
+    $('#quick-random').onclick = async () => {
+      const s = store.subjects[0]?.subjectName;
+      if (s) {
+        renderPractice(s, null, null, '0');
+        return;
+      }
+      try {
+        const cdata = await api('/api/custom/batches');
+        const batches = Array.isArray(cdata?.batches) ? cdata.batches : [];
+        if (batches.length > 0) {
+          const b = batches[Math.floor(Math.random() * batches.length)];
+          startCustomBatchPractice(b.id, b.name, 15, 'practice');
+          return;
+        }
+      } catch {}
+      toast('当前暂无题目，请先导入试卷');
+      renderImport();
+    };
     $('#quick-fav').onclick = () => renderFavorites();
     $('#quick-note').onclick = () => renderNotes();
     $('#quick-attempts').onclick = () => renderAttemptHistory();
@@ -1546,11 +1584,12 @@ function syncAiBall() {
   const ball = $('#ai-ball');
   if (!ball) return;
   const v = store.state.view;
-  const show = ['today', 'practice-hub', 'wrong', 'me', 'practice'].includes(v);
+  // 做题时不显示全局悬浮顾问，避免与做题界面、草稿纸 FAB 重叠；做题时由随题辅导服务
+  const show = ['today', 'practice-hub', 'wrong', 'me'].includes(v);
   ball.style.display = show ? 'flex' : 'none';
   const label = ball.querySelector('.ai-ball-label');
   if (label) label.textContent = currentAiContext().title;
-  ball.classList.toggle('is-compact', v === 'practice');
+  ball.classList.remove('is-compact');
 }
 /** 一次性顾问问答：复用现有会话契约（建会话 → 发消息），不做本地重复实现 */
 async function askAdvisor({ agentId, subject, title, prompt, content }) {
@@ -2083,7 +2122,24 @@ async function customPractice(batchId, name) {
       if (!r.questions || r.questions.length === 0) { toast('该批次暂无题目'); return; }
       enterQuiz(r.questions, (r.batch && r.batch.subject) || '自定义', 'custom', null, null, null, mode === 'recite');
     } catch (e) { toast('加载失败：' + e.message); }
-  };
+}
+
+/** 启动自定义题库练习（今日任务/首页批次卡片/快捷随机练习共用） */
+async function startCustomBatchPractice(batchId, name, count = 15, mode = 'practice') {
+  if (!batchId) { toast('未指定题库批次'); return; }
+  try {
+    toast('正在加载题目…');
+    const url = '/api/custom/practice?batch_id=' + encodeURIComponent(batchId) + (count > 0 ? '&count=' + count : '');
+    const r = await api(url);
+    if (!r.questions || r.questions.length === 0) {
+      toast('该批次暂无题目');
+      return;
+    }
+    const title = name || (r.batch && (r.batch.name || r.batch.subject)) || '自定义题库';
+    enterQuiz(r.questions, title, 'custom', null, null, null, mode === 'recite');
+  } catch (e) {
+    toast('加载失败：' + (e.message || e));
+  }
 }
 
 /** 导入页：文件选择 → 解析 → 预览 → 确认导入 */
@@ -4097,7 +4153,7 @@ function renderAiTutorMessages(card, state) {
   if (!list) return;
   list.textContent = '';
   if (!state.messages.length) {
-    const empty = el('div', 'ai-tutor-empty', '围绕当前题目提问，例如：为什么我选的答案不对？');
+    const empty = el('div', 'ai-tutor-empty', '启发式助教在线：围绕做题思路、破题切入点或选项辨析提问，助你自主攻克难关！');
     list.appendChild(empty);
   } else {
     for (const message of state.messages) {
@@ -4128,13 +4184,13 @@ function mountAiTutor(view, q, token) {
     <div class="ai-tutor-head">
       <div>
         <div class="ai-tutor-title">${ico('sparkles', 16)} 随题辅导</div>
-        <div class="ai-tutor-subtitle">AI 只会看到当前题目与本题会话</div>
+        <div class="ai-tutor-subtitle">启发式引导 · 点拨做题思路与解题切入点</div>
       </div>
       <span class="ai-tutor-status">准备中</span>
     </div>
     <div class="ai-tutor-messages" aria-live="polite"></div>
     <div class="ai-tutor-compose">
-      <textarea class="ai-tutor-input" rows="3" maxlength="12000" placeholder="继续追问当前题目…（Enter 发送，Shift+Enter 换行）"></textarea>
+      <textarea class="ai-tutor-input" rows="3" maxlength="12000" placeholder="请教做题思路、破题切入点或选项辨析…（Enter 发送）"></textarea>
       <div class="ai-tutor-actions">
         <span class="ai-tutor-hint">${esc(aiTutorAgent(q) === 'shenlun-grader' ? '申论/综应辅导' : '行测/职测辅导')}</span>
         <button class="btn btn-ghost btn-sm ai-tutor-stop" type="button" hidden>${ico('xCircle', 14)} 停止</button>

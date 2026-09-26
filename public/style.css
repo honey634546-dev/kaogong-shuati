@@ -1484,8 +1484,24 @@ textarea.field { resize: vertical; line-height: 1.6; }
 .analysis-card .ac-tab.on {
   background: var(--card); color: var(--text); font-weight: 600; box-shadow: var(--shadow-sm);
 }
-.analysis-card .ac-pane { padding: 13px 14px 15px; font-size: 13.5px; line-height: 1.8; color: var(--text-2); }
+.analysis-card .ac-pane {
+  padding: 13px 14px 15px; font-size: 13.5px; line-height: 1.8; color: var(--text-2);
+  max-height: min(52vh, 480px); overflow-y: auto; overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.analysis-card .ac-pane::-webkit-scrollbar,
+.analysis-card .ac-ai-result::-webkit-scrollbar {
+  width: 5px;
+}
+.analysis-card .ac-pane::-webkit-scrollbar-thumb,
+.analysis-card .ac-ai-result::-webkit-scrollbar-thumb {
+  background: var(--border-strong); border-radius: 999px;
+}
 .analysis-card .ac-pane[hidden] { display: none; }
+.analysis-card .ac-ai-result {
+  max-height: min(48vh, 440px); overflow-y: auto; overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
 .analysis-card .ac-lead { font-size: 13px; font-weight: 700; color: var(--primary); margin-bottom: 7px; }
 .analysis-card .ac-empty { color: var(--text-3); font-size: 13px; }
 .analysis-card .ab-title { font-weight: 800; color: var(--primary); margin-bottom: 8px; font-size: 14px; }
@@ -1716,8 +1732,8 @@ textarea.field { resize: vertical; line-height: 1.6; }
     max-height: calc(100vh - var(--topbar-h) - 28px);
     overflow-y: auto; overscroll-behavior: contain;
   }
-  /* 右栏内的卡片不再自带外边距/固定定位：位置由栏本身决定 */
-  #view[data-exam='1']:not(:has(.quiz-split-row)) .quiz-rail > * { margin: 0; }
+  /* 右栏内的卡片不再自带外边距/固定定位：位置由栏本身决定，不被 flex 挤压 */
+  #view[data-exam='1']:not(:has(.quiz-split-row)) .quiz-rail > * { margin: 0; flex-shrink: 0; }
   #view[data-exam='1']:not(:has(.quiz-split-row)) .quiz-rail .ai-tutor-card {
     position: static; width: auto; max-height: none; margin: 0;
   }
@@ -2277,6 +2293,12 @@ textarea.field { resize: vertical; line-height: 1.6; }
 #view.no-bottom ~ #ai-ball,
 body:has(#view.no-bottom) #ai-ball {
   bottom: calc(18px + var(--safe-bottom));
+}
+/* 做题状态 / 草稿纸存在时隐藏全局 AI 顾问浮球，避免与草稿纸按钮重叠或干扰答题 */
+body:has(#view[data-exam='1']) #ai-ball,
+body:has(.scratch-fab) #ai-ball,
+body:has(.scratch-overlay) #ai-ball {
+  display: none !important;
 }
 
 /* ---------- 07 桌面端排版增强 ---------- */
