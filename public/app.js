@@ -1,4 +1,4 @@
-﻿/* ===== 考公刷题 - 前端逻辑（原生 JS SPA） ===== */
+/* ===== 考公刷题 - 前端逻辑（原生 JS SPA） ===== */
 'use strict';
 
 /* ===== 图片离线兜底（SW 不可用环境：Capacitor WebView） =====
@@ -875,9 +875,23 @@ function daysUntil(dateStr) {
   return Math.round((t - a) / 86400000);
 }
 /** 今日任务：按数据生成 3 项，第一项为唯一主行动 */
-function buildTodayTasks(stats, todayCount, weakGroup, weakSubject) {
+function buildTodayTasks(stats, todayCount, weakGroup, weakSubject, customBatches = [], hasSubjects = true) {
   const tasks = [];
   const dailyTarget = 15;
+  const hasAnyQuestions = hasSubjects || (customBatches && customBatches.length > 0);
+
+  if (!hasAnyQuestions) {
+    tasks.push({
+      id: 'import', title: '导入第一批练习题', meta: '支持 PDF / Excel / Word / TXT',
+      done: false, kind: 'import'
+    });
+    tasks.push({
+      id: 'goal', title: '设置备考目标与考试日期', meta: '查看倒计时并开启备考冲刺',
+      done: Boolean(loadExamGoal()?.date), kind: 'goal'
+    });
+    return tasks;
+  }
+
   tasks.push({
     id: 'daily', title: '每日一练', meta: `${dailyTarget} 题 · 约 12 分钟`,
     done: todayCount >= dailyTarget, kind: 'daily',
@@ -897,11 +911,19 @@ function buildTodayTasks(stats, todayCount, weakGroup, weakSubject) {
   return tasks;
 }
 /** 执行今日任务 */
-function runTodayTask(task) {
+function runTodayTask(task, customBatches = []) {
   if (!task || task.done) return;
+  if (task.kind === 'import') { renderImport(); return; }
+  if (task.kind === 'goal') { openExamGoalSheet(() => renderToday()); return; }
   if (task.kind === 'daily' || task.kind === 'random') {
     const subj = store.subjects[0]?.subjectName;
-    if (subj) renderPractice(subj, null, null, '0');
+    if (subj) {
+      renderPractice(subj, null, null, '0');
+    } else if (customBatches && customBatches.length > 0) {
+      startCustomBatchPractice(customBatches[0].id, customBatches[0].name, 15, 'exam');
+    } else {
+      renderImport();
+    }
     return;
   }
   if (task.kind === 'wrong') { renderWrong(); return; }
@@ -920,18 +942,21 @@ async function renderToday() {
   closeImageOverlays(); // 回到首页时关闭任何残留的全屏层
   setView('today');
   $('#app-title').textContent = '今日';
-  [...document.querySelectorAll('#topbar-right > *:not(#btn-theme)')].forEach((n) => n.remove());
+  [...document.querySelectorAll('#topbar-right > *:not(#btn-theme):not(.auth-account)')].forEach((n) => n.remove());
   const view = $('#view');
   view.innerHTML = '<div class="spinner"></div>';
   try {
-    const [subjects, stats, todayStats] = await Promise.all([
-      api('/api/subjects'),
+    const [subjects, stats, todayStats, customBatchesData] = await Promise.all([
+      api('/api/subjects').catch(() => []),
       api('/api/records/stats').catch(() => null),
       api('/api/records/stats?days=1').catch(() => null),
+      api('/api/custom/batches').catch(() => ({ batches: [] })),
     ]);
-    store.subjects = subjects;
+    store.subjects = Array.isArray(subjects) ? subjects : [];
+    const customBatches = Array.isArray(customBatchesData?.batches) ? customBatchesData.batches : [];
     view.innerHTML = '';
 
+    const hasSubjects = store.subjects.length > 0;
     const hasData = (stats?.total || 0) > 0;
     const todayCount = todayStats?.total || 0;
     const streak = streakDays(stats?.daily);
@@ -962,7 +987,7 @@ async function renderToday() {
     // ---- 薄弱模块（默认科目）----
     let weakGroup = null;
     let weakSubject = null;
-    const weakSubjectName = store.state.subject || subjects[0]?.subjectName;
+    const weakSubjectName = store.state.subject || store.subjects[0]?.subjectName;
     if (weakSubjectName) {
       try {
         const chs = await api(`/api/chapters?subject=${encodeURIComponent(weakSubjectName)}&mock=0`);
@@ -977,7 +1002,7 @@ async function renderToday() {
     }
 
     // ---- 今日任务（唯一主行动卡）----
-    const tasks = buildTodayTasks(stats, todayCount, weakGroup, weakSubject);
+    const tasks = buildTodayTasks(stats, todayCount, weakGroup, weakSubject, customBatches, hasSubjects);
     const doneCount = tasks.filter((t) => t.done).length;
     const nextTask = tasks.find((t) => !t.done) || null;
     const taskCard = el('div', 'card today-tasks');
@@ -994,15 +1019,15 @@ async function renderToday() {
             <span class="today-task-meta">${esc(t.meta)}</span>
           </span>
         </div>`).join('')}
-      ${nextTask ? `<button class="btn btn-primary btn-block today-cta" id="today-cta">${ico('play', 15)} 继续做：${esc(nextTask.title)}</button>`
+      ${nextTask ? `<button class="btn btn-primary btn-block today-cta" id="today-cta">${ico('play', 15)} ${nextTask.kind === 'import' ? '立即导入第一批题目' : (nextTask.kind === 'goal' ? '设置考试日期' : `继续做：${esc(nextTask.title)}`)}</button>`
         : `<button class="btn btn-primary btn-block today-cta" id="today-cta">${ico('refresh', 15)} 今日任务已全部完成，再刷一组</button>`}
     `;
     view.appendChild(taskCard);
     taskCard.querySelectorAll('[data-task]').forEach((node) => {
       const t = tasks[Number(node.dataset.task)];
-      node.onclick = () => runTodayTask(t);
+      node.onclick = () => runTodayTask(t, customBatches);
     });
-    $('#today-cta').onclick = () => runTodayTask(nextTask || { kind: 'random' });
+    $('#today-cta').onclick = () => runTodayTask(nextTask || { kind: hasSubjects ? 'random' : 'import' }, customBatches);
 
     // ---- 继续上次 ----
     const resume = loadResumeSession();
@@ -1047,28 +1072,82 @@ async function renderToday() {
     weekCard.onclick = () => openStudyReportSheet(stats);
     view.appendChild(weekCard);
 
-    // ---- 科目快捷（横滑）----
+    // ---- 科目快捷 / 自定义题库 / 新人引导 ----
     const SUBJECT_TINTS = {
       '公务员·行测': 'subj-xingce',
       '公务员·申论': 'subj-shenlun',
       '事业编·综应': 'subj-zongying',
       '事业编·职测': 'subj-zhiche',
     };
-    const railWrap = el('div', 'today-rail-wrap', '<div class="today-rail-title">科目快捷</div>');
-    const rail = el('div', 'today-rail');
-    for (const s of subjects) {
-      const card = el('div', 'today-subj', `
-        <span class="today-subj-dot" style="background:var(--${SUBJECT_TINTS[s.subjectName] || 'brand'})"></span>
-        <div class="today-subj-name">${esc(s.subjectName)}</div>
-        <div class="today-subj-num">${s.questions >= 10000 ? `${(s.questions / 10000).toFixed(1)} 万题` : `${s.questions} 题`}</div>
-        <div class="bar today-subj-bar"><i class="brand" style="width:${s.questions ? Math.min(100, Math.round(((s.done || 0) / s.questions) * 100)) : 0}%"></i></div>
-        <div class="today-subj-pct">已做 ${s.done || 0}</div>
+
+    if (hasSubjects) {
+      const railWrap = el('div', 'today-rail-wrap', '<div class="today-rail-title">科目快捷</div>');
+      const rail = el('div', 'today-rail');
+      for (const s of store.subjects) {
+        const card = el('div', 'today-subj', `
+          <span class="today-subj-dot" style="background:var(--${SUBJECT_TINTS[s.subjectName] || 'brand'})"></span>
+          <div class="today-subj-name">${esc(s.subjectName)}</div>
+          <div class="today-subj-num">${s.questions >= 10000 ? `${(s.questions / 10000).toFixed(1)} 万题` : `${s.questions} 题`}</div>
+          <div class="bar today-subj-bar"><i class="brand" style="width:${s.questions ? Math.min(100, Math.round(((s.done || 0) / s.questions) * 100)) : 0}%"></i></div>
+          <div class="today-subj-pct">已做 ${s.done || 0}</div>
+        `);
+        card.onclick = () => renderSubject(s.subjectName);
+        rail.appendChild(card);
+      }
+      if (customBatches.length > 0) {
+        const cbCard = el('div', 'today-subj custom-entry', `
+          <span class="today-subj-dot" style="background:var(--accent);display:flex;align-items:center;justify-content:center;color:#fff">${ico('database', 12)}</span>
+          <div class="today-subj-name">自定义题库</div>
+          <div class="today-subj-num">${customBatches.length} 批次 · ${customBatches.reduce((s, b) => s + (b.count || 0), 0)} 题</div>
+          <div class="bar today-subj-bar"><i class="brand" style="width:100%;background:var(--accent)"></i></div>
+          <div class="today-subj-pct" style="color:var(--accent)">进入管理 ›</div>
+        `);
+        cbCard.onclick = () => renderCustomBank();
+        rail.appendChild(cbCard);
+      }
+      railWrap.appendChild(rail);
+      view.appendChild(railWrap);
+    } else if (customBatches.length > 0) {
+      // 拥有自定义题库但无内置库
+      const railWrap = el('div', 'today-rail-wrap', `
+        <div class="today-rail-title">
+          <span>我的题库批次</span>
+          <button class="btn btn-ghost btn-sm custom-entry" id="today-cb-manage">${ico('database', 13)} 管理题库</button>
+        </div>`);
+      const rail = el('div', 'today-rail');
+      for (const b of customBatches) {
+        const card = el('div', 'today-subj', `
+          <span class="today-subj-dot" style="background:var(--brand);display:flex;align-items:center;justify-content:center;color:#fff">${ico('folderTree', 12)}</span>
+          <div class="today-subj-name">${esc(b.name)}</div>
+          <div class="today-subj-num">${b.count} 题</div>
+          <div class="bar today-subj-bar"><i class="brand" style="width:100%"></i></div>
+          <div class="today-subj-pct">开始刷题 ›</div>
+        `);
+        card.onclick = () => startCustomBatchPractice(b.id, b.name, 15, 'exam');
+        rail.appendChild(card);
+      }
+      railWrap.appendChild(rail);
+      view.appendChild(railWrap);
+      $('#today-cb-manage').onclick = () => renderCustomBank();
+    } else {
+      // 零数据初始态：呈现精美新手引导，杜绝空白卡死
+      const onboarding = el('div', 'card today-onboarding custom-entry', `
+        <div class="onboarding-top">
+          <span class="onboarding-ico">${ico('sparkles', 22)}</span>
+          <div>
+            <div class="onboarding-title">欢迎开启备考提分之旅</div>
+            <div class="onboarding-desc">当前暂无预置题目。你可以直接导入试卷（支持 PDF/Excel/Word/TXT），或进入自定义题库开始练习。</div>
+          </div>
+        </div>
+        <div class="onboarding-actions">
+          <button class="btn btn-primary" id="btn-onboarding-import">${ico('upload', 15)} 导入题目开始刷题</button>
+          <button class="btn btn-ghost" id="btn-onboarding-custom">${ico('database', 15)} 自定义题库</button>
+        </div>
       `);
-      card.onclick = () => renderSubject(s.subjectName);
-      rail.appendChild(card);
+      view.appendChild(onboarding);
+      $('#btn-onboarding-import').onclick = () => renderImport();
+      $('#btn-onboarding-custom').onclick = () => renderCustomBank();
     }
-    railWrap.appendChild(rail);
-    view.appendChild(railWrap);
   } catch (e) {
     view.innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`;
   }
@@ -1153,7 +1232,7 @@ function openStudyReportSheet(stats) {
 async function renderPracticeHub() {
   setView('practice-hub');
   $('#app-title').textContent = '刷题';
-  [...document.querySelectorAll('#topbar-right > *:not(#btn-theme)')].forEach((n) => n.remove());
+  [...document.querySelectorAll('#topbar-right > *:not(#btn-theme):not(.auth-account)')].forEach((n) => n.remove());
   if (store.state.view !== 'practice-hub') { /* 保持 navStack 干净 */ }
   const view = $('#view');
   view.innerHTML = '<div class="spinner"></div>';
@@ -1288,7 +1367,7 @@ async function renderPracticeHub() {
     view.appendChild(genCard);
 
     // 自定义题库（原首页入口并入）
-    const customCard = el('div', 'card hub-cta-card', `
+    const customCard = el('div', 'card hub-cta-card custom-entry', `
       <span class="hub-cta-ico is-plain">${ico('database', 17)}</span>
       <span class="hub-cta-main">
         <span class="hub-cta-title">自定义题库</span>
@@ -1315,7 +1394,7 @@ async function renderPracticeHub() {
 async function renderMe() {
   setView('me');
   $('#app-title').textContent = '我的';
-  [...document.querySelectorAll('#topbar-right > *:not(#btn-theme)')].forEach((n) => n.remove());
+  [...document.querySelectorAll('#topbar-right > *:not(#btn-theme):not(.auth-account)')].forEach((n) => n.remove());
   const view = $('#view');
   view.innerHTML = '<div class="spinner"></div>';
   try {
@@ -3182,7 +3261,7 @@ async function renderCategory(subject, category, skipNav) {
   store.state.mode = 'category';
   if (!skipNav) store.navStack.push({ name: 'category', subject, category });
   $('#app-title').textContent = `${subject} · ${category}`;
-  [...document.querySelectorAll('#topbar-right > *:not(#btn-theme)')].forEach(n => n.remove());
+  [...document.querySelectorAll('#topbar-right > *:not(#btn-theme):not(.auth-account)')].forEach(n => n.remove());
   const view = $('#view');
   view.innerHTML = '<div class="spinner"></div>';
   try {
@@ -6034,7 +6113,7 @@ function organizeModule(target, refresh) {
 async function renderWrong() {
   setView('wrong');
   $('#app-title').textContent = '错题本';
-  [...document.querySelectorAll('#topbar-right > *:not(#btn-theme)')].forEach(n => n.remove());
+  [...document.querySelectorAll('#topbar-right > *:not(#btn-theme):not(.auth-account)')].forEach(n => n.remove());
   const view = $('#view');
   view.innerHTML = '<div class="spinner"></div>';
   wState.tab = wState.tab || DEFAULT_MODULE_TAB;
@@ -6394,7 +6473,7 @@ let fState = { total: 0, offset: 0, tab: DEFAULT_MODULE_TAB };
 async function renderFavorites() {
   setView('fav');
   $('#app-title').textContent = '我的收藏';
-  [...document.querySelectorAll('#topbar-right > *:not(#btn-theme)')].forEach(n => n.remove());
+  [...document.querySelectorAll('#topbar-right > *:not(#btn-theme):not(.auth-account)')].forEach(n => n.remove());
   const view = $('#view');
   view.innerHTML = '<div class="spinner"></div>';
   fState.tab = fState.tab || DEFAULT_MODULE_TAB;
@@ -6655,7 +6734,7 @@ let noteState = { total: 0, offset: 0, tab: DEFAULT_MODULE_TAB };
 async function renderNotes() {
   setView('notes');
   $('#app-title').innerHTML = `${ico('note', 19)} 我的笔记`;
-  [...document.querySelectorAll('#topbar-right > *:not(#btn-theme)')].forEach(n => n.remove());
+  [...document.querySelectorAll('#topbar-right > *:not(#btn-theme):not(.auth-account)')].forEach(n => n.remove());
   const view = $('#view');
   view.innerHTML = '<div class="spinner"></div>';
   noteState.tab = noteState.tab || DEFAULT_MODULE_TAB;
@@ -6836,7 +6915,7 @@ async function startNotesRandom(groupKey, subKey) {
 async function renderAiSettings() {
   setView('ai');
   $('#app-title').textContent = 'AI 设置';
-  [...document.querySelectorAll('#topbar-right > *:not(#btn-theme)')].forEach(n => n.remove());
+  [...document.querySelectorAll('#topbar-right > *:not(#btn-theme):not(.auth-account)')].forEach(n => n.remove());
   const view = $('#view');
   view.innerHTML = '<div class="spinner"></div>';
   let agents, skills = [], skillsErr = false;
