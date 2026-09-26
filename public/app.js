@@ -143,6 +143,7 @@ function renderAuthAccount(user) {
     try {
       await fetch('/api/auth/sign-out', { method: 'POST', credentials: 'same-origin', cache: 'no-store' });
     } finally {
+      scratchpad.clearSession();
       authState = null;
       clearAuthAccount();
       renderAuthView('signin', '已退出当前账号');
@@ -234,6 +235,8 @@ async function bootstrapAuth() {
 function renderAppAfterAuth() {
   $('#view').classList.remove('no-bottom');
   $('#bottom-nav').style.display = 'flex';
+  mountAiBall(); // 全局 AI 悬浮球：登录后（或本地模式启动后）挂载一次
+  mountSideNav(); // 桌面端侧边栏（≥1024px 由 CSS 显隐）
   const initialView = new URLSearchParams(location.search).get('view');
   api('/api/favorites').then((data) => {
     const list = Array.isArray(data) ? data : (data.list || []);
@@ -251,7 +254,7 @@ function renderAppAfterAuth() {
     refreshNoteButtons();
   }).catch(() => {});
   if (initialView === 'ai') renderAiSettings();
-  else renderHome();
+  else renderToday();
 }
 
 const SUBJECT_ICONS = {
@@ -352,6 +355,10 @@ const store = {
   // 自定义刷题筛选（2026-08）：面板保存后，专项练习模块刷题按此出题；mode=practice|recite，year=all|3|5|10，difficulty=easy|balanced|hard|random
   customConfig: Object.assign({ mode: 'practice', year: '10', difficulty: 'random', count: 15 }, JSON.parse(localStorage.getItem('custom_practice_cfg') || '{}')),
 };
+const scratchpad = window.ExamScratchpad.createController({
+  isPaused: paused,
+  onBlocked: toast,
+});
 
 // ---------- 答题辅助 ----------
 const LETTERS = 'ABCDEFGH';
@@ -473,6 +480,7 @@ function pauseToggle() {
     stampExplanation(s.idx);
     s.timing.running = false;
     s.timing.activeSince = null;
+    scratchpad.close();
   } else {
     s.timing.running = true;
     s.timing.activeSince = monotonicNow();
@@ -582,7 +590,7 @@ function recordAnswer(q, sel) {
   renderQuestion();
 }
 
-/** 背题模式判分反馈：对错横幅 + 答案对照 + 解析 + 选项锁定 + 「下一题」按钮（不自动跳转） */
+/** 背题模式判分反馈：反馈条原地滑入 + 选项染色 + 解析分段卡 + 选项锁定 + 「下一题」（不自动跳转） */
 function showAnswerFeedback(q, j, selected) {
   const s = store.state;
   const view = $('#view');
@@ -594,31 +602,49 @@ function showAnswerFeedback(q, j, selected) {
   });
   const cf = $('#btn-confirm');
   if (cf) cf.disabled = true;
-  const old = $('#answer-feedback');
-  if (old) old.remove();
-  const box = el('div', 'answer-box');
-  box.id = 'answer-feedback';
-  const okTxt = j.valid ? (j.ok ? '回答正确' : '回答错误') : '本题无标准答案';
+  // 幂等：重复判分先清掉上一轮反馈条、解析卡与反馈操作条
+  view.querySelector('#answer-feedback')?.remove();
+  view.querySelector('#inline-analysis')?.remove();
+  view.querySelector('#btn-fb-next')?.closest('.action-row')?.remove();
+  // 背题模式下隐藏页面原有操作条：否则会同时出现「上一题/查看解析/交卷」与「笔记/下一题」两组按钮
+  const pageRow = view.querySelector('.action-row');
+  if (pageRow) pageRow.style.display = 'none';
+  const okTxt = j.valid ? (j.ok ? '回答正确' : '回答错误') : '无标准答案';
+  const kind = j.valid ? (j.ok ? 'ok' : 'no') : 'none';
+  const rightSel = j.correct.map((x) => LETTERS[x]).join('') || '见解析';
+  // 答对时解析默认收起在「官方解析」段内不展开滚动干扰；答错时停在解析段便于立刻订正
+  mountFeedback(view, q, {
+    kind, mainText: okTxt,
+    rightHtml: j.valid ? `正确答案 <b>${rightSel}</b>` : '',
+    correct: j.valid ? j.ok : null,
+    selected,
+    defaultTab: (q.analysis && String(q.analysis).trim()) ? 'official' : 'ai',
+  });
+  // 底部操作：上一题（多题时） / 笔记 / 下一题（AI 入口已内聚进解析卡的「AI 讲解」段，不再单列按钮）
+  // 页面原有操作条已在上面隐藏，这里补齐背题态真正需要的动作，避免出现两组按钮或丢失「上一题」
   const fbqid = q.questionId ?? q.id;
-  box.innerHTML = `
-    <div class="ab-title ${j.valid ? (j.ok ? 'ok' : 'no') : ''}">${ico(j.valid ? (j.ok ? 'checkCircle' : 'xCircle') : 'alert', 16)} ${okTxt}</div>
-    <div class="answer-cmp" style="margin:0 0 10px">
-      <span class="cmp-item"><i class="cmp-dot mine"></i>我的答案 <b>${selected.map((x) => LETTERS[x]).join('') || '—'}</b></span>
-      <span class="cmp-item"><i class="cmp-dot right"></i>正确答案 <b>${j.correct.map((x) => LETTERS[x]).join('') || '见解析'}</b></span>
-    </div>
-    ${q.analysis ? `<div class="ab-body" style="margin:0 0 10px">${renderStudyText(q.analysis)}</div>` : ''}
-    <div class="action-row" style="margin-bottom:6px">
-      <button class="btn btn-ghost ${store.notes.has(String(fbqid)) ? 'on' : ''}" data-note-btn="${String(fbqid)}" id="btn-note-fb">${ico('pen', 14)} ${noteBtnLabel(fbqid)}</button>
-      <button class="btn btn-ghost" id="btn-ai-explain-fb">${ico('sparkles', 15)} AI 解析本题（考点/错项/技巧）</button>
-    </div>
-    <div id="ai-explain-result-fb" style="display:none"></div>
-    <button class="btn btn-primary btn-block" id="btn-fb-next">下一题</button>
-  `;
-  view.appendChild(box);
-  box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  $('#btn-note-fb').onclick = () => openNoteSheet(q);
-  $('#btn-ai-explain-fb').onclick = () => explainQuestion(q, selected, j.correct, box);
-  $('#btn-fb-next').onclick = () => { box.remove(); nextQuestion(); };
+  const row = el('div', 'action-row');
+  if (s.questions.length > 1) {
+    const prevBtn = el('button', 'btn btn-ghost nav-pc', `${ico('chevronLeft', 14)} 上一题`);
+    prevBtn.onclick = () => prevQuestion();
+    row.appendChild(prevBtn);
+  }
+  const noteBtn = el('button', 'btn btn-ghost' + (store.notes.has(String(fbqid)) ? ' on' : ''), `${ico('pen', 14)} ${noteBtnLabel(fbqid)}`);
+  noteBtn.onclick = () => openNoteSheet(q);
+  const nextBtn = el('button', 'btn btn-primary', s.idx >= s.questions.length - 1 ? '交卷' : '下一题');
+  nextBtn.id = 'btn-fb-next';
+  nextBtn.onclick = () => {
+    view.querySelector('#answer-feedback')?.remove();
+    view.querySelector('#inline-analysis')?.remove();
+    row.remove();
+    if (s.idx >= s.questions.length - 1) submitExam();
+    else nextQuestion();
+  };
+  row.appendChild(noteBtn);
+  row.appendChild(nextBtn);
+  view.appendChild(row);
+  const bar = view.querySelector('#answer-feedback');
+  if (bar) bar.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   if (s.idx >= s.questions.length - 1) toast('已是最后一题，点「交卷」结束');
 }
 
@@ -628,16 +654,21 @@ function saveWrong() {
 
 // ---------- 视图切换 ----------
 function setView(name) {
+  if (name !== 'practice' && store.state.view === 'practice') scratchpad.clearSession();
   cropSession++;          // 任何页面切换：使未完成的裁剪会话失效
   closeCropEditor();      // 清理可能残留的裁剪器 overlay
   store.state.view = name;
   const navBtns = document.querySelectorAll('#bottom-nav .nav-item');
   navBtns.forEach((b) => b.classList.toggle('active', b.dataset.nav === name));
-  const showNav = ['home', 'papers', 'wrong', 'fav'].includes(name);
+  // 底部 Tab 仅在 4 个一级页面（今日 / 刷题 / 错题 / 我的）显示；做题等全屏页隐藏
+  const showNav = ['today', 'practice-hub', 'wrong', 'me'].includes(name);
   $('#bottom-nav').style.display = showNav ? 'flex' : 'none';
   $('#view').classList.toggle('no-bottom', !showNav);
   $('#view').removeAttribute('data-exam'); // 离开做题页：滑动切题/长按排除失效
-  $('#btn-back').style.visibility = (name === 'home') ? 'hidden' : 'visible';
+  $('#btn-back').style.visibility = (name === 'today') ? 'hidden' : 'visible';
+  // 桌面侧边栏（≥1024px）与底部 Tab 保持同一选中态
+  document.querySelectorAll('#side-nav .side-item').forEach((b) => b.classList.toggle('active', b.dataset.nav === name));
+  syncAiBall(); // 全局 AI 悬浮球：按当前页面切换文案与预设提示词
 }
 
 function goBack() {
@@ -697,6 +728,7 @@ function toast(msg) {
     App.addListener('backButton', () => {
       const crop = document.querySelector('.crop-overlay');
       if (crop) { closeCropEditor(); return; }          // 裁剪器优先关闭
+      if (scratchpad.isOpen()) { scratchpad.close(); return; } // 草稿纸优先于页面返回
       const sheet = document.querySelector('.sheet-overlay');
       if (sheet) { sheet.remove(); return; }            // 弹层优先关闭
       const back = $('#btn-back');
@@ -719,7 +751,7 @@ function toast(msg) {
   let edge = null, sx = 0, sy = 0;
   document.addEventListener('touchstart', (e) => {
     if (e.touches.length !== 1) return;
-    if (document.querySelector('.crop-overlay, .sheet-overlay')) return;
+    if (document.querySelector('.crop-overlay, .sheet-overlay, .scratch-overlay')) return;
     const x = e.touches[0].clientX;
     if (x <= EDGE) edge = 'left';
     else if (x >= window.innerWidth - EDGE) edge = 'right';
@@ -749,7 +781,7 @@ function toast(msg) {
     if (e.touches.length !== 1) return;
     if (!document.querySelector('#view[data-exam]')) return; // 非做题态
     if (paused()) return;                                    // 暂停冻结
-    if (document.querySelector('.sheet-overlay, .crop-overlay')) return;
+    if (document.querySelector('.sheet-overlay, .crop-overlay, .scratch-overlay')) return;
     const x = e.touches[0].clientX;
     if (x <= EDGE || x >= window.innerWidth - EDGE) return;  // 边缘不抢返回手势
     tracking = true;
@@ -769,117 +801,809 @@ function toast(msg) {
   document.addEventListener('touchcancel', () => { tracking = false; });
 })();
 
-// ---------- 登录 / 个人中心 ----------
-// ---------- 首页 ----------
-async function renderHome() {
+// ================= 「今日」行动面板 =================
+// 设计要点（方案 §6.1）：首页不是目录，而是"我今天该做什么"的行动面板。
+// 一个主行动（今日任务）+ 续接上次 + 本周概览 + 科目快捷；原 7 个快捷入口下沉到「我的」。
+
+const RESUME_KEY = 'last_practice_session';
+const EXAM_KEY = 'exam_goal';
+
+/** 记录最近一次练习进度（客户端即可，服务端与本地模式通用） */
+function saveResumeSession() {
+  const s = store.state;
+  if (!s.questions.length || s.historicalReview || s.mode === 'single') return;
+  try {
+    localStorage.setItem(RESUME_KEY, JSON.stringify({
+      subject: s.subject, chapter: s.chapter, mode: s.mode, mock: s.mock,
+      idx: s.idx, total: s.questions.length, ts: Date.now(),
+    }));
+  } catch { /* 隐私模式等场景忽略 */ }
+}
+function clearResumeSession() {
+  try { localStorage.removeItem(RESUME_KEY); } catch { /* ignore */ }
+}
+function loadResumeSession() {
+  try {
+    const r = JSON.parse(localStorage.getItem(RESUME_KEY) || 'null');
+    if (!r || !r.subject || !r.total) return null;
+    if (Date.now() - (r.ts || 0) > 7 * 86400000) return null; // 超 7 天视为过期
+    return r;
+  } catch { return null; }
+}
+function relTime(ts) {
+  const d = Math.max(0, Date.now() - (ts || 0));
+  if (d < 60000) return '刚刚';
+  if (d < 3600000) return `${Math.floor(d / 60000)} 分钟前`;
+  if (d < 86400000) return `${Math.floor(d / 3600000)} 小时前`;
+  return `${Math.floor(d / 86400000)} 天前`;
+}
+function todayMMDD() {
+  const d = new Date();
+  return `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+/** 连续打卡天数：由 stats.daily 推算（服务端 d='YYYY-MM-DD'，本地 d='MM-DD'，统一取后 5 位） */
+function streakDays(daily) {
+  if (!Array.isArray(daily) || !daily.length) return 0;
+  const set = new Set(daily.filter((d) => Number(d.c) > 0).map((d) => String(d.d || '').slice(-5)));
+  let n = 0;
+  const cur = new Date();
+  if (!set.has(todayMMDD())) cur.setDate(cur.getDate() - 1); // 今天还没刷不清零
+  for (let i = 0; i < 400; i++) {
+    const k = `${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`;
+    if (!set.has(k)) break;
+    n += 1;
+    cur.setDate(cur.getDate() - 1);
+  }
+  return n;
+}
+function loadExamGoal() {
+  try { return JSON.parse(localStorage.getItem(EXAM_KEY) || 'null') || null; } catch { return null; }
+}
+function saveExamGoal(goal) {
+  try {
+    if (goal) localStorage.setItem(EXAM_KEY, JSON.stringify(goal));
+    else localStorage.removeItem(EXAM_KEY);
+  } catch { /* ignore */ }
+}
+/** 距考试还有几天（按本地日历日差，今天=0） */
+function daysUntil(dateStr) {
+  if (!dateStr) return null;
+  const t = new Date(`${dateStr}T00:00:00`);
+  if (Number.isNaN(t.getTime())) return null;
+  const now = new Date();
+  const a = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.round((t - a) / 86400000);
+}
+/** 今日任务：按数据生成 3 项，第一项为唯一主行动 */
+function buildTodayTasks(stats, todayCount, weakGroup, weakSubject) {
+  const tasks = [];
+  const dailyTarget = 15;
+  tasks.push({
+    id: 'daily', title: '每日一练', meta: `${dailyTarget} 题 · 约 12 分钟`,
+    done: todayCount >= dailyTarget, kind: 'daily',
+  });
+  const wrong = Number(stats?.wrong || 0);
+  if (wrong > 0) {
+    tasks.push({ id: 'wrong', title: '错题重做', meta: `${wrong} 题 · 约 ${Math.max(5, Math.round(wrong * 0.8))} 分钟`, done: false, kind: 'wrong' });
+  }
+  if (weakGroup) {
+    tasks.push({
+      id: 'weak', title: `${weakGroup.name}突破`, meta: `${weakGroup.total || 0} 题 · 约 15 分钟`,
+      done: false, kind: 'weak', weak: true, subject: weakSubject, group: weakGroup,
+    });
+  } else {
+    tasks.push({ id: 'random', title: '随机练习', meta: '15 题 · 约 12 分钟', done: false, kind: 'random' });
+  }
+  return tasks;
+}
+/** 执行今日任务 */
+function runTodayTask(task) {
+  if (!task || task.done) return;
+  if (task.kind === 'daily' || task.kind === 'random') {
+    const subj = store.subjects[0]?.subjectName;
+    if (subj) renderPractice(subj, null, null, '0');
+    return;
+  }
+  if (task.kind === 'wrong') { renderWrong(); return; }
+  if (task.kind === 'weak') {
+    const names = [];
+    for (const sub of task.group.subs || []) {
+      for (const cn of sub.chapters || []) names.push(cn);
+      for (const lf of sub.leaves || []) for (const cn of lf.chapters || []) names.push(cn);
+    }
+    if (names.length) renderPractice(task.subject, names, null, '0');
+    else renderPractice(task.subject, null, null, '0', false, task.group.name, '全部');
+  }
+}
+
+async function renderToday() {
   closeImageOverlays(); // 回到首页时关闭任何残留的全屏层
-  setView('home');
-  $('#app-title').textContent = '刷题';
+  setView('today');
+  $('#app-title').textContent = '今日';
+  [...document.querySelectorAll('#topbar-right > *:not(#btn-theme)')].forEach((n) => n.remove());
   const view = $('#view');
   view.innerHTML = '<div class="spinner"></div>';
   try {
-    const [subjects, stats] = await Promise.all([
+    const [subjects, stats, todayStats] = await Promise.all([
       api('/api/subjects'),
       api('/api/records/stats').catch(() => null),
+      api('/api/records/stats?days=1').catch(() => null),
     ]);
     store.subjects = subjects;
     view.innerHTML = '';
 
-    // Hero：今日作答卡
-    const hasData = stats && stats.total > 0;
-    const hero = el('div', 'hero', `
-      <div class="hero-eyebrow">EXAM ARCHIVE · ${hasData ? '你的学习档案' : '新档案'}</div>
-      <div class="hero-title">${hasData ? '继续保持，坚持就是上岸' : '开始刷第一道题'}</div>
-      <div class="hero-stats">
-        ${hasData ? `
-          <div class="hero-stat"><div class="hs-num">${stats.total}</div><div class="hs-label">累计做题</div></div>
-          <div class="hero-stat"><div class="hs-num">${stats.rate}%</div><div class="hs-label">正确率</div></div>
-          <div class="hero-stat"><div class="hs-num">${stats.wrong}</div><div class="hs-label">待订错题</div></div>
-        ` : `
-          <div class="hero-stat"><div class="hs-num">0</div><div class="hs-label">累计做题</div></div>
-          <div class="hero-stat"><div class="hs-num">—</div><div class="hs-label">正确率</div></div>
-        `}
-      </div>
-      <button class="hero-cta" id="hero-cta"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3l14 9-14 9V3Z"/></svg> ${hasData ? '继续学习' : '开始刷题'}</button>
-    `);
-    view.appendChild(hero);
-    $('#hero-cta').onclick = () => { if (store.subjects[0]) renderPractice(store.subjects[0].subjectName, null, null, '0'); };
+    const hasData = (stats?.total || 0) > 0;
+    const todayCount = todayStats?.total || 0;
+    const streak = streakDays(stats?.daily);
+    const goal = loadExamGoal();
 
-    // 题库网格（试卷封面卡）
-    const grid = el('div', 'subject-grid');
-    // 自定义题库入口卡（2026-08-15：文件导入 → 批次 → 刷题）
-    const customCard = el('div', 'subject-card custom-entry', `
-      <span class="emoji tint-cyan">${fico('database', 30)}</span>
-      <div class="name">自定义题库</div>
-      <div class="desc">导入 PDF / Excel / Word / TXT 题目，自由刷题</div>
-      <div class="stat-line"><span id="custom-batch-count">加载中…</span></div>
+    // ---- 顶部：日期 + 倒计时 + 连续打卡 ----
+    const left = daysUntil(goal?.date);
+    const d = new Date();
+    const dateLabel = `${d.getMonth() + 1}月${d.getDate()}日 周${'日一二三四五六'[d.getDay()]}`;
+    const countdown = left == null
+      ? `<button class="today-goal-btn" id="today-set-goal">${ico('target', 13)} 设置考试日期</button>`
+      : (left >= 0
+        ? `<span class="today-countdown">${esc(goal?.name || '考试')} · 还有 <b>${left}</b> 天</span>`
+        : `<span class="today-countdown">${esc(goal?.name || '考试')} · 已结束</span>`);
+    const head = el('div', 'today-head', `
+      <div class="today-head-left">
+        <div class="h-title">今日</div>
+        <div class="today-dateline">${dateLabel} · ${countdown}</div>
+      </div>
+      <div class="today-head-right">
+        ${streak > 0 ? `<span class="tag tag-streak">${ico('zap', 12)} 连续 ${streak} 天</span>` : ''}
+      </div>
     `);
-    customCard.onclick = () => renderCustomBank();
-    grid.appendChild(customCard);
-    api('/api/custom/batches').then((d) => {
-      const el0 = $('#custom-batch-count');
-      if (el0) el0.innerHTML = d.batches.length ? `<b>${d.batches.length}</b> 个批次 · <b>${d.batches.reduce((s, b) => s + b.count, 0)}</b> 题` : '暂无批次，点击导入';
-    }).catch(() => { const el0 = $('#custom-batch-count'); if (el0) el0.textContent = '点击导入'; });
-    const SUBJECT_TINTS = {
-      '公务员·行测': 'tint-orange',
-      '公务员·申论': 'tint-green',
-      '事业编·综应': 'tint-violet',
-      '事业编·职测': 'tint-blue',
-    };
-    for (const s of subjects) {
-      const card = el('div', 'subject-card', `
-        <span class="emoji ${SUBJECT_TINTS[s.subjectName] || ''}">${SUBJECT_ICONS[s.subjectName] || ''}</span>
-        <div class="name">${s.subjectName}</div>
-        <div class="desc">${SUBJECT_DESC[s.subjectName] || ''}</div>
-        <div class="stat-line">
-          <span><b>${s.papers}</b> 套</span>
-          <span><b>${s.done || 0}/${s.questions}</b> 题</span>
+    view.appendChild(head);
+    const setGoalBtn = $('#today-set-goal');
+    if (setGoalBtn) setGoalBtn.onclick = () => openExamGoalSheet(() => renderToday());
+
+    // ---- 薄弱模块（默认科目）----
+    let weakGroup = null;
+    let weakSubject = null;
+    const weakSubjectName = store.state.subject || subjects[0]?.subjectName;
+    if (weakSubjectName) {
+      try {
+        const chs = await api(`/api/chapters?subject=${encodeURIComponent(weakSubjectName)}&mock=0`);
+        const cands = (Array.isArray(chs) ? chs : [])
+          .filter((g) => g.rate != null && (g.done || 0) >= 5)
+          .sort((a, b) => a.rate - b.rate);
+        if (cands.length && cands[0].rate < 70) {
+          weakGroup = { name: cands[0].group, total: cands[0].total, subs: cands[0].subs || [] };
+          weakSubject = weakSubjectName;
+        }
+      } catch { /* 薄弱模块为增益，失败不阻塞首页 */ }
+    }
+
+    // ---- 今日任务（唯一主行动卡）----
+    const tasks = buildTodayTasks(stats, todayCount, weakGroup, weakSubject);
+    const doneCount = tasks.filter((t) => t.done).length;
+    const nextTask = tasks.find((t) => !t.done) || null;
+    const taskCard = el('div', 'card today-tasks');
+    taskCard.innerHTML = `
+      <div class="today-tasks-head">
+        <span class="today-tasks-title">今日任务</span>
+        <span class="today-tasks-progress">已完成 ${doneCount}/${tasks.length}</span>
+      </div>
+      ${tasks.map((t, i) => `
+        <div class="today-task${t.done ? ' is-done' : ''}" data-task="${i}">
+          <span class="today-task-mark">${t.done ? ico('checkCircle', 20) : '<i></i>'}</span>
+          <span class="today-task-body">
+            <span class="today-task-title">${esc(t.title)}${t.weak ? '<span class="tag tag-weak">薄弱</span>' : ''}</span>
+            <span class="today-task-meta">${esc(t.meta)}</span>
+          </span>
+        </div>`).join('')}
+      ${nextTask ? `<button class="btn btn-primary btn-block today-cta" id="today-cta">${ico('play', 15)} 继续做：${esc(nextTask.title)}</button>`
+        : `<button class="btn btn-primary btn-block today-cta" id="today-cta">${ico('refresh', 15)} 今日任务已全部完成，再刷一组</button>`}
+    `;
+    view.appendChild(taskCard);
+    taskCard.querySelectorAll('[data-task]').forEach((node) => {
+      const t = tasks[Number(node.dataset.task)];
+      node.onclick = () => runTodayTask(t);
+    });
+    $('#today-cta').onclick = () => runTodayTask(nextTask || { kind: 'random' });
+
+    // ---- 继续上次 ----
+    const resume = loadResumeSession();
+    if (resume) {
+      const pct = resume.total ? Math.round((resume.idx / resume.total) * 100) : 0;
+      const rCard = el('div', 'card today-resume', `
+        <div class="today-resume-ico">${ico('repeat', 18)}</div>
+        <div class="today-resume-main">
+          <div class="today-resume-title">${esc(resume.subject)}${resume.chapter ? ` · ${esc(Array.isArray(resume.chapter) ? resume.chapter[0] : resume.chapter)}` : ''}</div>
+          <div class="today-resume-sub">第 ${resume.idx + 1}/${resume.total} 题 · ${relTime(resume.ts)}</div>
+          <div class="bar today-resume-bar"><i class="brand" style="width:${pct}%"></i></div>
         </div>
+        <span class="today-resume-go">继续 ›</span>
+      `);
+      rCard.onclick = () => renderPractice(
+        resume.subject,
+        Array.isArray(resume.chapter) ? resume.chapter : (resume.chapter || null),
+        null, resume.mock ?? '0',
+      );
+      view.appendChild(rCard);
+    }
+
+    // ---- 本周概览 ----
+    const last7 = Array.isArray(stats?.last7) ? stats.last7 : [];
+    const counts = last7.map((x) => Number(x.c) || 0);
+    const maxC = Math.max(1, ...counts);
+    const weekTotal = counts.reduce((a, b) => a + b, 0);
+    const spark = counts.length
+      ? counts.map((c, i) => `<i style="height:${Math.max(6, Math.round((c / maxC) * 100))}%${i === counts.length - 1 ? ';background:var(--brand)' : ''}"></i>`).join('')
+      : '<i style="height:6%"></i>'.repeat(7);
+    const weekCard = el('div', 'card today-week', `
+      <div class="today-week-head">
+        <span class="today-week-title">本周概览</span>
+        <span class="today-week-rate">${hasData ? `正确率 <b>${stats.rate}%</b>` : '还没有数据'}</span>
+      </div>
+      <div class="spark">${spark}</div>
+      <div class="today-week-foot">
+        <span>近 7 天做了 <b>${weekTotal}</b> 题</span>
+        ${weakGroup ? `<span class="today-week-weak">薄弱：${esc(weakGroup.name)}</span>` : ''}
+      </div>
+    `);
+    weekCard.onclick = () => openStudyReportSheet(stats);
+    view.appendChild(weekCard);
+
+    // ---- 科目快捷（横滑）----
+    const SUBJECT_TINTS = {
+      '公务员·行测': 'subj-xingce',
+      '公务员·申论': 'subj-shenlun',
+      '事业编·综应': 'subj-zongying',
+      '事业编·职测': 'subj-zhiche',
+    };
+    const railWrap = el('div', 'today-rail-wrap', '<div class="today-rail-title">科目快捷</div>');
+    const rail = el('div', 'today-rail');
+    for (const s of subjects) {
+      const card = el('div', 'today-subj', `
+        <span class="today-subj-dot" style="background:var(--${SUBJECT_TINTS[s.subjectName] || 'brand'})"></span>
+        <div class="today-subj-name">${esc(s.subjectName)}</div>
+        <div class="today-subj-num">${s.questions >= 10000 ? `${(s.questions / 10000).toFixed(1)} 万题` : `${s.questions} 题`}</div>
+        <div class="bar today-subj-bar"><i class="brand" style="width:${s.questions ? Math.min(100, Math.round(((s.done || 0) / s.questions) * 100)) : 0}%"></i></div>
+        <div class="today-subj-pct">已做 ${s.done || 0}</div>
       `);
       card.onclick = () => renderSubject(s.subjectName);
-      grid.appendChild(card);
+      rail.appendChild(card);
     }
-    view.appendChild(grid);
+    railWrap.appendChild(rail);
+    view.appendChild(railWrap);
+  } catch (e) {
+    view.innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`;
+  }
+}
 
-    // 快捷入口
+/** 兼容旧调用点（goBack / renderResult / exitSingle 等仍走 renderHome） */
+async function renderHome() { return renderToday(); }
+
+/** 考试日期设置弹层 */
+function openExamGoalSheet(after) {
+  const cur = loadExamGoal() || {};
+  const overlay = customSheet(`
+    <div class="sheet-head"><b>${ico('target', 16)} 备考目标</b><button class="sheet-close">✕</button></div>
+    <div style="padding:14px 16px 0">
+      <label class="sheet-field">考试名称
+        <input id="goal-name" type="text" maxlength="20" placeholder="例如：国考 / 省考 / 事业单位" value="${esc(cur.name || '')}">
+      </label>
+      <label class="sheet-field">考试日期
+        <input id="goal-date" type="date" value="${esc(cur.date || '')}">
+      </label>
+      <div class="li-tip">${ico('lightbulb', 13)} 设置后首页会显示倒计时；留空则隐藏。</div>
+    </div>
+    <div class="action-row">
+      <button class="btn btn-ghost" id="goal-clear">清除</button>
+      <button class="btn btn-primary" id="goal-save">保存</button>
+    </div>`);
+  overlay.querySelector('.sheet-close').onclick = () => overlay.remove();
+  overlay.querySelector('#goal-clear').onclick = () => { saveExamGoal(null); overlay.remove(); toast('已清除备考目标'); if (after) after(); };
+  overlay.querySelector('#goal-save').onclick = () => {
+    const name = overlay.querySelector('#goal-name').value.trim();
+    const date = overlay.querySelector('#goal-date').value;
+    saveExamGoal(name || date ? { name: name || '考试', date } : null);
+    overlay.remove();
+    toast(date ? '已保存备考目标' : '已保存');
+    if (after) after();
+  };
+}
+
+/** 学习报告弹层：本周趋势 + 章节正确率明细（数据来自 /api/records/stats） */
+function openStudyReportSheet(stats) {
+  const byChapter = Array.isArray(stats?.byChapter) ? stats.byChapter : [];
+  const rows = byChapter
+    .filter((c) => Number(c.c) > 0)
+    .map((c) => {
+      const graded = Number(c.c);
+      const ok = Number(c.ok || 0);
+      return { chapter: c.chapter || '未分类', c: graded, rate: Math.round((ok / graded) * 100) };
+    })
+    .sort((a, b) => b.c - a.c)
+    .slice(0, 20);
+  const last7 = Array.isArray(stats?.last7) ? stats.last7 : [];
+  const counts = last7.map((x) => Number(x.c) || 0);
+  const maxC = Math.max(1, ...counts);
+  const overlay = customSheet(`
+    <div class="sheet-head"><b>${ico('chart', 16)} 学习报告</b><button class="sheet-close">✕</button></div>
+    <div style="padding:14px 16px 0">
+      <div class="stat-row" style="margin-bottom:14px">
+        <div class="stat-card"><div class="num">${stats?.total || 0}</div><div class="label">累计做题</div></div>
+        <div class="stat-card"><div class="num">${stats?.rate || 0}%</div><div class="label">正确率</div></div>
+        <div class="stat-card"><div class="num">${stats?.wrong || 0}</div><div class="label">待订错题</div></div>
+      </div>
+      <div class="li-tip" style="margin:0 0 8px">近 7 天</div>
+      <div class="spark" style="height:44px">${counts.length ? counts.map((c) => `<i style="height:${Math.max(6, Math.round((c / maxC) * 100))}%"></i>`).join('') : '<i style="height:6%"></i>'.repeat(7)}</div>
+      <div class="li-tip" style="margin:16px 0 8px">章节正确率（做题量前 20）</div>
+      ${rows.length ? rows.map((r) => `
+        <div class="report-row">
+          <span class="report-name">${esc(r.chapter)}</span>
+          <span class="report-bar"><i style="width:${r.rate}%;background:${r.rate >= 75 ? 'var(--green)' : (r.rate < 60 ? 'var(--red)' : 'var(--amber)')}"></i></span>
+          <span class="report-pct">${r.rate}%</span>
+          <span class="report-cnt">${r.c} 题</span>
+        </div>`).join('') : '<div class="li-tip">还没有做题记录</div>'}
+    </div>
+    <div class="action-row"><button class="btn btn-primary btn-block" id="report-done">知道了</button></div>`);
+  overlay.querySelector('.sheet-close').onclick = () => overlay.remove();
+  overlay.querySelector('#report-done').onclick = () => overlay.remove();
+}
+
+// ================= 「刷题」题库 Hub =================
+// 设计要点（方案 §6.2）：科目树节点带 题量 / 已做 / 正确率 / 薄弱标；
+// 整行可点 = 直接开刷该模块；行尾箭头 = 进入完整三级知识点树。
+// 原「智能组卷」Tab 与「自定义题库」并入本页。
+async function renderPracticeHub() {
+  setView('practice-hub');
+  $('#app-title').textContent = '刷题';
+  [...document.querySelectorAll('#topbar-right > *:not(#btn-theme)')].forEach((n) => n.remove());
+  if (store.state.view !== 'practice-hub') { /* 保持 navStack 干净 */ }
+  const view = $('#view');
+  view.innerHTML = '<div class="spinner"></div>';
+  try {
+    const subjects = store.subjects.length ? store.subjects : await api('/api/subjects');
+    store.subjects = subjects;
+    view.innerHTML = '';
+
+    // 说明：题库无全文检索接口，故此处不放搜索框（不做无法落地的控件）
+    const seg = el('div', 'hub-seg', `
+      <button class="hub-seg-btn active" data-seg="chapter">章节刷</button>
+      <button class="hub-seg-btn" data-seg="paper">套卷刷</button>
+      <button class="hub-seg-btn" data-seg="mock">模考</button>
+    `);
+    view.appendChild(seg);
+
+    const body = el('div', 'hub-body');
+    view.appendChild(body);
+
+    const renderChapterMode = async () => {
+      body.innerHTML = '<div class="spinner"></div>';
+      const results = await Promise.all(subjects.map(async (s) => {
+        try {
+          const [chs, st] = await Promise.all([
+            api(`/api/chapters?subject=${encodeURIComponent(s.subjectName)}&mock=0`),
+            api(`/api/records/stats?subject=${encodeURIComponent(s.subjectName)}`).catch(() => null),
+          ]);
+          return { subject: s, chapters: Array.isArray(chs) ? chs : [], rate: st?.rate ?? null, done: st?.total ?? 0 };
+        } catch {
+          return { subject: s, chapters: [], rate: null, done: 0 };
+        }
+      }));
+      body.innerHTML = '';
+      for (const r of results) {
+        const group = el('div', 'hub-subject');
+        group.appendChild(el('div', 'hub-subject-head', `
+          <span class="hub-subject-name">${esc(r.subject.subjectName)}</span>
+          <span class="hub-subject-rate">${r.rate != null && r.done > 0 ? `${r.rate}%` : '—'}</span>
+        `));
+        const card = el('div', 'card hub-card');
+        if (!r.chapters.length) {
+          card.innerHTML = '<div class="li-tip">该科目暂无章节分类</div>';
+        } else {
+          for (const g of r.chapters) {
+            const pct = g.total ? Math.min(100, Math.round(((g.done || 0) / g.total) * 100)) : 0;
+            const weak = g.rate != null && g.rate < 60;
+            const row = el('div', 'hub-mod', `
+              <div class="hub-mod-main">
+                <div class="hub-mod-title">
+                  <span class="hub-mod-name">${esc(g.group)}</span>
+                  ${weak ? '<span class="tag tag-weak">薄弱</span>' : ''}
+                </div>
+                <div class="bar hub-mod-bar"><i class="${weak ? 'ver' : (g.rate != null && g.rate >= 75 ? 'jade' : '')}" style="width:${pct}%"></i></div>
+                <div class="hub-mod-meta">${g.total} 题 · 已做 ${g.done || 0}</div>
+              </div>
+              <div class="hub-mod-right">
+                <div class="hub-mod-rate" data-weak="${weak ? '1' : '0'}">${g.rate != null ? `${g.rate}%` : '—'}</div>
+                <button class="hub-mod-more" data-more title="展开知识点树">${ico('chevronRight', 16)}</button>
+              </div>
+            `);
+            row.querySelector('.hub-mod-main').onclick = () => {
+              const names = [];
+              for (const sub of g.subs || []) {
+                for (const cn of sub.chapters || []) names.push(cn);
+                for (const lf of sub.leaves || []) for (const cn of lf.chapters || []) names.push(cn);
+              }
+              if (names.length) renderPractice(r.subject.subjectName, names, null, '0');
+              else renderPractice(r.subject.subjectName, null, null, '0', false, g.group, '全部');
+            };
+            row.querySelector('[data-more]').onclick = (e) => { e.stopPropagation(); renderSubject(r.subject.subjectName); };
+            card.appendChild(row);
+          }
+        }
+        group.appendChild(card);
+        body.appendChild(group);
+      }
+    };
+
+    const renderPaperMode = async (mock) => {
+      body.innerHTML = '<div class="spinner"></div>';
+      const results = await Promise.all(subjects.map(async (s) => {
+        try {
+          const papers = await api(`/api/papers?subject=${encodeURIComponent(s.subjectName)}&mock=${mock}&limit=20`);
+          return { subject: s, papers: Array.isArray(papers) ? papers : (papers.list || []) };
+        } catch { return { subject: s, papers: [] }; }
+      }));
+      body.innerHTML = '';
+      for (const r of results) {
+        const group = el('div', 'hub-subject');
+        group.appendChild(el('div', 'hub-subject-head', `
+          <span class="hub-subject-name">${esc(r.subject.subjectName)}</span>
+          <span class="hub-subject-rate">${r.papers.length} 套</span>
+        `));
+        const card = el('div', 'card hub-card');
+        if (!r.papers.length) card.innerHTML = '<div class="li-tip">暂无试卷</div>';
+        for (const p of r.papers) {
+          const item = el('div', 'hub-paper', `
+            <span class="hub-paper-main">
+              <span class="hub-paper-title">${esc(p.title || p.name || `试卷 ${p.id}`)}</span>
+              <span class="hub-paper-sub">${p.questionCount || p.questions || 0} 题${p.year ? ` · ${esc(String(p.year))}` : ''}</span>
+            </span>
+            <span class="hub-paper-go">${ico('chevronRight', 15)}</span>
+          `);
+          item.onclick = () => renderPaperDetail(r.subject.subjectName, p.id);
+          card.appendChild(item);
+        }
+        group.appendChild(card);
+        body.appendChild(group);
+      }
+    };
+
+    seg.querySelectorAll('[data-seg]').forEach((btn) => {
+      btn.onclick = () => {
+        seg.querySelectorAll('[data-seg]').forEach((b) => b.classList.toggle('active', b === btn));
+        const mode = btn.dataset.seg;
+        if (mode === 'chapter') renderChapterMode().catch((e) => { body.innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`; });
+        else renderPaperMode(mode === 'mock' ? 1 : 0).catch((e) => { body.innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`; });
+      };
+    });
+    await renderChapterMode().catch((e) => { body.innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`; });
+
+    // 智能组卷（原 Tab 并入）
+    const genCard = el('div', 'card hub-cta-card', `
+      <span class="hub-cta-ico">${ico('target', 17)}</span>
+      <span class="hub-cta-main">
+        <span class="hub-cta-title">智能组卷</span>
+        <span class="hub-cta-sub">按模块 / 难度 / 年份 自由配比</span>
+      </span>
+      <span class="hub-cta-go">${ico('chevronRight', 16)}</span>
+    `);
+    genCard.onclick = () => openPaperConfig();
+    view.appendChild(genCard);
+
+    // 自定义题库（原首页入口并入）
+    const customCard = el('div', 'card hub-cta-card', `
+      <span class="hub-cta-ico is-plain">${ico('database', 17)}</span>
+      <span class="hub-cta-main">
+        <span class="hub-cta-title">自定义题库</span>
+        <span class="hub-cta-sub" id="hub-custom-sub">导入 PDF / Excel / Word / TXT 题目</span>
+      </span>
+      <span class="hub-cta-go">${ico('chevronRight', 16)}</span>
+    `);
+    customCard.onclick = () => renderCustomBank();
+    view.appendChild(customCard);
+    api('/api/custom/batches').then((d) => {
+      const el0 = $('#hub-custom-sub');
+      if (!el0) return;
+      const n = d.batches.length;
+      const q = d.batches.reduce((s, b) => s + b.count, 0);
+      el0.textContent = n ? `${n} 个批次 · ${q} 题` : '暂无批次，点击导入';
+    }).catch(() => {});
+  } catch (e) {
+    view.innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`;
+  }
+}
+
+// ================= 「我的」数据与设置 =================
+// 设计要点（方案 §6.7）：原首页 7 个快捷入口全部下沉到这里；AI 配置按"助手"分组。
+async function renderMe() {
+  setView('me');
+  $('#app-title').textContent = '我的';
+  [...document.querySelectorAll('#topbar-right > *:not(#btn-theme)')].forEach((n) => n.remove());
+  const view = $('#view');
+  view.innerHTML = '<div class="spinner"></div>';
+  try {
+    const stats = await api('/api/records/stats').catch(() => null);
+    const [favData, noteData, batchData, agentsData] = await Promise.all([
+      api('/api/favorites?limit=1&offset=0').catch(() => null),
+      api('/api/notes?limit=1&offset=0').catch(() => null),
+      api('/api/custom/batches').catch(() => null),
+      api('/api/ai/agents').catch(() => null),
+    ]);
+    view.innerHTML = '';
+
+    const favTotal = Array.isArray(favData) ? favData.length : (favData?.total ?? 0);
+    const noteTotal = Array.isArray(noteData) ? noteData.length : (noteData?.total ?? 0);
+    const batchCount = batchData?.batches?.length ?? 0;
+    const agents = Array.isArray(agentsData) ? agentsData : (agentsData?.agents || []);
+    const streak = streakDays(stats?.daily);
+    const goal = loadExamGoal();
+    const name = authState?.user?.name || authState?.user?.email || '本机用户';
+
+    // ---- 用户卡 ----
+    const left = daysUntil(goal?.date);
+    const userCard = el('div', 'card me-user', `
+      <div class="me-user-top">
+        <span class="me-avatar">${esc(String(name).slice(0, 1).toUpperCase())}</span>
+        <div class="me-user-info">
+          <div class="me-user-name">${esc(name)}</div>
+          <div class="me-user-goal">${goal?.name ? `目标：${esc(goal.name)}${left != null && left >= 0 ? ` · 还有 ${left} 天` : ''}` : '未设置备考目标'}</div>
+        </div>
+        <button class="me-user-edit" id="me-goal">${goal?.name ? '编辑' : '设置'}</button>
+      </div>
+      <div class="me-stats">
+        <div class="me-stat"><div class="num">${stats?.total || 0}</div><div class="label">累计做题</div></div>
+        <div class="me-stat"><div class="num">${stats?.rate || 0}%</div><div class="label">正确率</div></div>
+        <div class="me-stat"><div class="num">${streak}</div><div class="label">连续打卡</div></div>
+      </div>
+    `);
+    view.appendChild(userCard);
+    $('#me-goal').onclick = () => openExamGoalSheet(() => renderMe());
+
+    // ---- 学习报告 ----
+    const last7 = Array.isArray(stats?.last7) ? stats.last7 : [];
+    const counts = last7.map((x) => Number(x.c) || 0);
+    const maxC = Math.max(1, ...counts);
+    const reportCard = el('div', 'card me-report', `
+      <div class="me-report-head">
+        <span class="me-report-title">${ico('chart', 15)} 学习报告</span>
+        <span class="me-report-rate">${stats?.total ? `正确率 ${stats.rate}%` : '暂无数据'}</span>
+      </div>
+      <div class="spark">${counts.length ? counts.map((c) => `<i style="height:${Math.max(6, Math.round((c / maxC) * 100))}%"></i>`).join('') : '<i style="height:6%"></i>'.repeat(7)}</div>
+      <div class="me-report-go">查看完整报告 ›</div>
+    `);
+    reportCard.onclick = () => openStudyReportSheet(stats);
+    view.appendChild(reportCard);
+
+    // ---- 快捷入口（由首页下沉）----
     const quick = el('div', 'card', `
       <h3>快捷入口</h3>
       <div class="quick-grid">
-        <div class="quick-item" id="quick-random"><span class="qi-ico qg-violet">${fico('dice', 22)}</span><span class="qi-label">随机练习</span></div>
-        <div class="quick-item" id="quick-wrong"><span class="qi-ico qg-coral">${fico('book', 22)}</span><span class="qi-label" id="quick-wrong-label">错题本</span></div>
+        <div class="quick-item" id="quick-random"><span class="qi-ico qg-blue">${fico('dice', 22)}</span><span class="qi-label">随机练习</span></div>
+        <div class="quick-item" id="quick-wrong"><span class="qi-ico qg-coral">${fico('book', 22)}</span><span class="qi-label">错题本</span></div>
         <div class="quick-item" id="quick-fav"><span class="qi-ico qg-amber">${fico('star', 22)}</span><span class="qi-label" id="quick-fav-label">收藏</span></div>
         <div class="quick-item" id="quick-note"><span class="qi-ico qg-green">${fico('note', 22)}</span><span class="qi-label" id="quick-note-label">笔记</span></div>
-        <div class="quick-item" id="quick-attempts"><span class="qi-ico qg-cyan">${ico('clock', 22)}</span><span class="qi-label">练习记录</span></div>
-        <div class="quick-item" id="quick-ai"><span class="qi-ico qg-blue">${fico('sparkles', 22)}</span><span class="qi-label">AI 设置</span></div>
+        <div class="quick-item" id="quick-attempts"><span class="qi-ico qg-violet">${ico('clock', 22)}</span><span class="qi-label">练习记录</span></div>
         <div class="quick-item" id="quick-paper"><span class="qi-ico qg-orange">${fico('target', 22)}</span><span class="qi-label">智能组卷</span></div>
       </div>
     `);
     view.appendChild(quick);
-    $('#quick-random').onclick = () => { if (store.subjects[0]) renderPractice(store.subjects[0].subjectName, null, null, '0'); };
+    $('#quick-random').onclick = () => { const s = store.subjects[0]?.subjectName; if (s) renderPractice(s, null, null, '0'); };
     $('#quick-wrong').onclick = () => renderWrong();
     $('#quick-fav').onclick = () => renderFavorites();
     $('#quick-note').onclick = () => renderNotes();
     $('#quick-attempts').onclick = () => renderAttemptHistory();
-    $('#quick-ai').onclick = () => renderAiSettings();
     $('#quick-paper').onclick = () => openPaperConfig();
-    // 服务端错题/收藏/笔记计数（异步刷新）
-    api('/api/records/stats').then((s) => {
-      const lbl = $('#quick-wrong-label');
-      if (lbl) lbl.textContent = `错题本${s.wrong ? ` (${s.wrong})` : ''}`;
-    }).catch(() => {});
-    api('/api/favorites?limit=1&offset=0').then((d) => {
-      const lbl = $('#quick-fav-label');
-      const total = Array.isArray(d) ? d.length : (d.total ?? 0);
-      if (lbl) lbl.textContent = `收藏${total ? ` (${total})` : ''}`;
-    }).catch(() => {});
-    api('/api/notes?limit=1&offset=0').then((d) => {
-      const lbl = $('#quick-note-label');
-      const total = Array.isArray(d) ? d.length : (d.total ?? 0);
-      if (lbl) lbl.textContent = `笔记${total ? ` (${total})` : ''}`;
-    }).catch(() => {});
+    const favLbl = $('#quick-fav-label'); if (favLbl) favLbl.textContent = `收藏${favTotal ? ` (${favTotal})` : ''}`;
+    const noteLbl = $('#quick-note-label'); if (noteLbl) noteLbl.textContent = `笔记${noteTotal ? ` (${noteTotal})` : ''}`;
+
+    // ---- AI 助手 ----
+    const AI_ROWS = [
+      { id: 'xingce-explainer', name: '行测解析 AI', icon: 'sparkles', tint: 'tint-blue' },
+      { id: 'shenlun-grader', name: '申论批改 AI', icon: 'pen', tint: 'tint-green' },
+      { id: 'study-advisor', name: '学习进度顾问', icon: 'chart', tint: 'tint-orange' },
+    ];
+    const aiList = el('div', 'card', '<h3>AI 助手</h3>');
+    for (const row of AI_ROWS) {
+      const a = agents.find((x) => x.id === row.id);
+      const enabled = a ? Boolean(a.enabled) : false;
+      const item = el('div', 'list-item', `
+        <span class="li-icon ${row.tint}">${ico(row.icon, 18)}</span>
+        <div class="li-main">
+          <div class="li-title">${row.name}</div>
+          <div class="li-sub">${a ? (a.model ? esc(a.model) : '已配置') : '未配置'}</div>
+        </div>
+        <span class="me-ai-dot ${enabled ? 'on' : ''}"></span>
+        <span class="li-arrow">›</span>
+      `);
+      item.onclick = () => renderAiSettings();
+      aiList.appendChild(item);
+    }
+    view.appendChild(aiList);
+
+    // ---- 管理项 ----
+    const mgmt = el('div', 'card');
+    const mgmtRows = [
+      { icon: 'database', label: '自定义题库', value: batchCount ? `${batchCount} 批次` : '未导入', go: () => renderCustomBank() },
+      { icon: 'pen', label: '我的笔记', value: noteTotal ? `${noteTotal} 条` : '暂无', go: () => renderNotes() },
+      { icon: 'clock', label: '练习记录', value: '', go: () => renderAttemptHistory() },
+      { icon: 'sliders', label: 'AI 设置', value: '', go: () => renderAiSettings() },
+      { icon: 'save', label: '数据备份与恢复', value: '', go: () => toast('App 版数据保存在本机，无需手动备份') },
+    ];
+    for (const r of mgmtRows) {
+      const item = el('div', 'list-item', `
+        <span class="li-icon is-plain">${ico(r.icon, 18)}</span>
+        <div class="li-main"><div class="li-title">${r.label}</div></div>
+        <span class="me-row-value">${esc(r.value || '')}</span>
+        <span class="li-arrow">›</span>
+      `);
+      item.onclick = r.go;
+      mgmt.appendChild(item);
+    }
+    const about = el('div', 'list-item', `
+      <span class="li-icon is-plain">${ico('lightbulb', 18)}</span>
+      <div class="li-main"><div class="li-title">关于</div></div>
+      <span class="me-row-value">刷题 · 行测/申论/事业编</span>
+    `);
+    about.onclick = () => toast('考公刷题 · 本地优先，数据保存在你的设备上');
+    mgmt.appendChild(about);
+    view.appendChild(mgmt);
   } catch (e) {
-    view.innerHTML = `<div class="empty">加载失败：${e.message}</div>`;
+    view.innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`;
   }
+}
+
+// ================= 全局 AI 悬浮球（上下文自适应） =================
+// 设计要点（方案 §6.8 流程 E）：AI 不是设置项，而是随页面切换语义的入口。
+const AI_BALL_CONTEXT = {
+  today: { title: '学习顾问', hint: '基于你的真实做题数据给出建议', agent: 'study-advisor', chips: ['我最近哪些模块最薄弱？', '帮我制定明天的刷题计划', '我这周进步了吗？'] },
+  'practice-hub': { title: '选题顾问', hint: '不确定刷什么？让 AI 按你的数据推荐', agent: 'study-advisor', chips: ['我该优先刷哪个模块？', '数量关系怎么提分？'] },
+  wrong: { title: '错因归纳', hint: '把错题按错因归类，找到真正的短板', agent: 'study-advisor', chips: ['我这些错题的共性错因是什么？', '错题重做总还是错，怎么办？'] },
+  me: { title: '学习顾问', hint: '基于你的真实做题数据给出建议', agent: 'study-advisor', chips: ['给我一份本周复盘', '我离目标还差多少？'] },
+  practice: { title: '问这道题', hint: '围绕当前题目追问，AI 只看得到这道题', agent: null, chips: [] },
+};
+function currentAiContext() {
+  const v = store.state.view;
+  return AI_BALL_CONTEXT[v] || AI_BALL_CONTEXT.today;
+}
+/** 悬浮球显隐与文案：由 setView 调用 */
+function syncAiBall() {
+  const ball = $('#ai-ball');
+  if (!ball) return;
+  const v = store.state.view;
+  const show = ['today', 'practice-hub', 'wrong', 'me', 'practice'].includes(v);
+  ball.style.display = show ? 'flex' : 'none';
+  const label = ball.querySelector('.ai-ball-label');
+  if (label) label.textContent = currentAiContext().title;
+  ball.classList.toggle('is-compact', v === 'practice');
+}
+/** 一次性顾问问答：复用现有会话契约（建会话 → 发消息），不做本地重复实现 */
+async function askAdvisor({ agentId, subject, title, prompt, content }) {
+  const created = await api('/api/ai/conversations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      questionId: '', questionUid: `advisor-${Date.now()}`, revision: 1,
+      subject: subject || '',
+      title: String(title || '顾问咨询').slice(0, 160),
+      questionSnapshot: { prompt: String(prompt || '').slice(0, 12000) },
+    }),
+  });
+  if (created?.error || created?.ok === false) throw new Error(created.error || '创建会话失败');
+  const cid = created?.conversation?.conversationId;
+  if (!cid) throw new Error('会话响应缺少 conversationId');
+  const r = await api(`/api/ai/conversations/${encodeURIComponent(cid)}/messages`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ agentId, content }),
+  });
+  if (r?.error || r?.ok === false) throw new Error(r.error || 'AI 回复失败');
+  const msgs = Array.isArray(r?.messages) ? r.messages : [];
+  const last = [...msgs].reverse().find((m) => m.role === 'assistant');
+  return { text: last?.content || '', mock: !!r.mock };
+}
+function openAiBallSheet() {
+  const ctx = currentAiContext();
+  // 做题页：悬浮球是"跳转到随题辅导"的快捷方式（不重复实现对话）
+  if (store.state.view === 'practice') {
+    const card = document.querySelector('.ai-tutor-card');
+    if (!card) { toast('当前题目暂不支持 AI 追问'); return; }
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const input = card.querySelector('.ai-tutor-input');
+    if (input) setTimeout(() => input.focus({ preventScroll: true }), 320);
+    return;
+  }
+  const subject = store.state.subject || store.subjects[0]?.subjectName || '';
+  const overlay = customSheet(`
+    <div class="sheet-head">
+      <b>${ico('sparkles', 16)} ${esc(ctx.title)}</b>
+      <button class="sheet-close">✕</button>
+    </div>
+    <div class="ai-ball-body">
+      <div class="ai-ball-hint">${esc(ctx.hint)}</div>
+      <div class="ai-ball-chips">
+        ${ctx.chips.map((c, i) => `<button class="ai-ball-chip" data-chip="${i}">${esc(c)}</button>`).join('')}
+      </div>
+      <div class="ai-ball-answer" id="ai-ball-answer"></div>
+      <div class="ai-ball-compose">
+        <textarea id="ai-ball-input" rows="2" maxlength="2000" placeholder="直接提问…（Enter 发送）"></textarea>
+        <button class="btn btn-primary btn-sm" id="ai-ball-send">${ico('sparkles', 14)} 发送</button>
+      </div>
+    </div>`);
+  const answer = overlay.querySelector('#ai-ball-answer');
+  const input = overlay.querySelector('#ai-ball-input');
+  const sendBtn = overlay.querySelector('#ai-ball-send');
+  overlay.querySelector('.sheet-close').onclick = () => overlay.remove();
+
+  const ask = async (text) => {
+    const content = String(text || '').trim();
+    if (!content) { toast('请输入问题'); return; }
+    answer.innerHTML = `<div class="ai-ball-loading">${ico('sparkles', 14)} 正在思考…</div>`;
+    sendBtn.disabled = true;
+    try {
+      const stats = await api('/api/records/stats').catch(() => null);
+      const prompt = [
+        `我的累计做题：${stats?.total || 0} 题，正确率 ${stats?.rate || 0}%，待订错题 ${stats?.wrong || 0} 题。`,
+        Array.isArray(stats?.byChapter) && stats.byChapter.length
+          ? `章节做题分布：${stats.byChapter.slice(0, 10).map((c) => `${c.chapter}(${c.c}题)`).join('、')}。`
+          : '',
+      ].filter(Boolean).join('\n');
+      const r = await askAdvisor({ agentId: ctx.agent || 'study-advisor', subject, title: content.slice(0, 60), prompt, content });
+      answer.innerHTML = `<div class="ai-ball-text">${renderStudyText(r.text || '（AI 未返回内容）')}</div>${r.mock ? '<div class="li-tip">本地 Mock 模式</div>' : ''}`;
+    } catch (e) {
+      answer.innerHTML = `<div class="ai-ball-error">${ico('xCircle', 14)} ${esc(e.message || 'AI 请求失败')}</div>`;
+    } finally {
+      sendBtn.disabled = false;
+    }
+  };
+  overlay.querySelectorAll('[data-chip]').forEach((b) => { b.onclick = () => ask(ctx.chips[Number(b.dataset.chip)]); });
+  sendBtn.onclick = () => ask(input.value);
+  input.onkeydown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(input.value); }
+  };
+}
+/** 挂载悬浮球（启动时调用一次） */
+function mountAiBall() {
+  if ($('#ai-ball')) return;
+  const ball = el('button', 'ai-ball', `
+    <span class="ai-ball-ico">${ico('sparkles', 20)}</span>
+    <span class="ai-ball-label">学习顾问</span>
+  `);
+  ball.id = 'ai-ball';
+  ball.type = 'button';
+  ball.setAttribute('aria-label', 'AI 助手');
+  ball.onclick = openAiBallSheet;
+  document.body.appendChild(ball);
+  syncAiBall();
+}
+
+// ================= 桌面端侧边栏（≥1024px） =================
+// 设计要点（方案 §8）：桌面不是手机版的拉伸 —— 底部 Tab 换成左侧边栏，
+// 与底部 Tab 共用同一套 data-nav 语义与选中态（setView 同步）。
+function mountSideNav() {
+  if ($('#side-nav')) return;
+  const items = [
+    { nav: 'today', label: '今日', icon: 'home' },
+    { nav: 'practice-hub', label: '刷题', icon: 'book' },
+    { nav: 'wrong', label: '错题本', icon: 'bookX' },
+    { nav: 'me', label: '我的', icon: 'chart' },
+  ];
+  const aside = el('aside', 'side-nav');
+  aside.id = 'side-nav';
+  aside.innerHTML = `
+    <div class="side-brand">
+      <span class="side-brand-mark">${ico('checkCircle', 15, 2.8)}</span>
+      <span class="side-brand-name">刷题</span>
+    </div>
+    ${items.map((it) => `
+      <button class="side-item${it.nav === 'today' ? ' active' : ''}" data-nav="${it.nav}" type="button">
+        <span class="side-item-ico">${ico(it.icon, 17)}</span>
+        <span class="side-item-label">${it.label}</span>
+      </button>`).join('')}
+    <div class="side-foot">
+      <div class="side-foot-title">快捷键</div>
+      <div class="side-foot-line"><kbd>1</kbd>–<kbd>4</kbd> 选选项</div>
+      <div class="side-foot-line"><kbd>Enter</kbd> 提交 / 下一题</div>
+      <div class="side-foot-line"><kbd>←</kbd><kbd>→</kbd> 切题</div>
+    </div>`;
+  document.body.appendChild(aside);
+  document.querySelectorAll('#side-nav .side-item').forEach((b) => b.classList.toggle('active', b.dataset.nav === store.state.view));
 }
 
 // ================= 自定义题库（2026-08-15：文件导入 → 批次管理 → 刷题判分） =================
@@ -2524,13 +3248,8 @@ async function renderPaperDetail(subject, paperId, skipNav) {
       <button class="btn btn-primary btn-block" id="btn-start">${ico('play', 15)} 开始做这套卷（${p.questionCount} 题）</button>
     `));
     $('#btn-start').onclick = () => {
-      store.state.questions = p.questions;
-      store.state.idx = 0;
-      store.state.results = [];
-      store.state.mode = 'paper';
-      store.state.subject = p.subjectName;
       store.navStack.push({ name: 'practice', subject: p.subjectName, chapter: null, mock: '0' });
-      renderQuestion();
+      enterQuiz(p.questions, p.subjectName, 'paper', null, '0');
     };
   } catch (e) {
     view.innerHTML = `<div class="empty">加载失败：${e.message}</div>`;
@@ -2543,6 +3262,7 @@ function practiceCount(subject) {
   return (subject === '公务员·申论' || subject === '事业编·综应') ? 2 : 15;
 }
 async function renderPractice(subject, chapter, paperId, mock, skipNav, group, sub) {
+  if (!skipNav) scratchpad.startSession();
   setView('practice');
   if (!skipNav) store.navStack.push({ name: 'practice', subject, chapter: Array.isArray(chapter) ? chapter[0] : (chapter || null), mock: mock ?? '0' });
   // chapter 可为字符串或数组（多章节混刷）；group/sub 为树节点出题（ESSAY_TREE）
@@ -2571,6 +3291,7 @@ async function renderPractice(subject, chapter, paperId, mock, skipNav, group, s
 
 /** 进入刷题状态（随机/章节/组卷/自定义共用）：写入 store、开计时、渲染首题；backMode=背题模式 */
 function enterQuiz(questions, subject, mode, chapter, mock, limitSec, backMode) {
+  setView('practice');
   closeImageOverlays(); // 新开一套题，清理可能残留的全屏层
   store.state.questions = questions;
   store.state.idx = 0;
@@ -2988,7 +3709,53 @@ function closeImageViewer() { if (_ivOverlay) { _ivOverlay.remove(); _ivOverlay 
 function closeMaterialFull() { if (_ivFullOverlay) { _ivFullOverlay.remove(); _ivFullOverlay = null; } }
 function closeImageOverlays() { closeImageViewer(); closeMaterialFull(); }
 // 切题/离开做题页时清理可能残留的全屏层（与 cropSession 清理同理）
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeImageOverlays(); });
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (scratchpad.isOpen()) { scratchpad.close(); return; }
+  closeImageOverlays();
+});
+
+// ========== 键盘快捷键（阶段 5 · 做题页） ==========
+// 兑现侧边栏「快捷键」说明：1–8 选选项 / Enter 提交或下一题 / ← → 切题。
+// 桌面端深度复盘（一次连做几十题）场景下，键盘比触屏快一个数量级。
+// 安全边界：只在做题页生效；输入框聚焦、弹层打开、草稿纸打开、暂停、带修饰键时一律让位，
+// 避免把用户正常打字/截图/缩放误判成答题操作。
+function shortcutsAllowed(e) {
+  if (e.metaKey || e.ctrlKey || e.altKey) return false;
+  if (store.state.view !== 'practice') return false;
+  const t = e.target;
+  if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName || ''))) return false;
+  if (scratchpad.isOpen()) return false;
+  if (document.querySelector('.sheet-overlay, .iv-overlay, .crop-overlay')) return false;
+  if (paused()) return false;
+  return true;
+}
+document.addEventListener('keydown', (e) => {
+  if (!shortcutsAllowed(e)) return;
+  const view = $('#view');
+  if (!view || view.dataset.exam !== '1') return;
+  // 1–8：选中第 N 个选项（走 .click() 复用多选/排除法/暂停等既有逻辑，不另写一套状态机）
+  if (/^[1-8]$/.test(e.key)) {
+    const opts = view.querySelectorAll('.option');
+    const i = Number(e.key) - 1;
+    const o = opts[i];
+    if (o && !o.classList.contains('locked') && !o.classList.contains('excluded')) { e.preventDefault(); o.click(); }
+    return;
+  }
+  // Enter：多选「确认选择」→ 背题反馈「下一题」→ 底部「下一题」，逐级回退
+  if (e.key === 'Enter') {
+    const confirm = $('#btn-confirm');
+    if (confirm && !confirm.disabled) { e.preventDefault(); confirm.click(); return; }
+    const fbNext = $('#btn-fb-next');
+    if (fbNext) { e.preventDefault(); fbNext.click(); return; }
+    // 无反馈条时（已判分/已作答）找操作条里的「下一题 / 交卷」推进
+    const adv = [...view.querySelectorAll('.action-row .btn')].find((b) => /下一题|交卷/.test(b.textContent));
+    if (adv) { e.preventDefault(); adv.click(); }
+    return;
+  }
+  if (e.key === 'ArrowLeft') { e.preventDefault(); prevQuestion(); return; }
+  if (e.key === 'ArrowRight') { e.preventDefault(); nextQuestion(); return; }
+});
 
 // 给容器里的宽表格图（≥350px 或粉笔 tarzan 整表图）外套一层角标，提示"可点开放大"；不改数据源 HTML
 function markWideImages(root) {
@@ -3295,7 +4062,8 @@ function mountAiTutor(view, q, token) {
         <button class="btn btn-primary btn-sm ai-tutor-send" type="button">${ico('sparkles', 14)} 发送</button>
       </div>
     </div>`;
-  view.appendChild(card);
+  // 桌面宽屏（≥1180px 非材料题）：辅导卡进右侧常驻栏，与解析并排；其余情况追加到页尾（与改造前一致）
+  (desktopRail(view) || view).appendChild(card);
   renderAiTutorMessages(card, state);
 
   const statusEl = card.querySelector('.ai-tutor-status');
@@ -3404,6 +4172,251 @@ function mountAiTutor(view, q, token) {
   })();
 }
 
+/**
+ * 反馈条（阶段 3）：横向一行 · 圆形状态图标 · 右侧答案对照，原地滑入（CSS 动画 fbSlideIn）
+ * 与旧版差异：旧版是居中大字横幅，会打断阅读视线；新版把「结论」放左、「正确答案」放右，
+ * 一眼扫过即可，不遮挡下方选项与解析。
+ */
+function feedbackBar(kind, mainText, rightHtml) {
+  const icon = kind === 'ok' ? 'checkCircle' : (kind === 'no' ? 'xCircle' : 'ban');
+  const bar = el('div', `result-banner ${kind}`);
+  // .ab-title 为兼容既有选择器（测试与历史样式按此定位状态文案）
+  bar.innerHTML = `<span class="rb-ico">${ico(icon, 12)}</span><span class="rb-text ab-title">${esc(mainText)}</span>${rightHtml ? `<span class="rb-right">${rightHtml}</span>` : ''}`;
+  return bar;
+}
+
+/**
+ * 解析卡（阶段 3）：分段 Tab ——「官方解析」/「AI 讲解」
+ * 为什么是这两段而不是设计稿的「考点/解析/技巧」：题库只有单一 analysis 字段，
+ * 拆成考点/技巧属于凭空造数据。真实可用的两段只有"题库自带的官方解析"与"AI 现场讲解"，
+ * 二者信息来源不同、可靠性不同，分段展示才真正减少一次性信息量。
+ * AI 段懒加载：点开该 Tab 才调接口，避免每答一题都烧 token。
+ */
+function analysisCard(q, { correct, selected, defaultTab } = {}) {
+  const hasOfficial = !!(q.analysis && String(q.analysis).trim());
+  const tab = defaultTab || (hasOfficial ? 'official' : 'ai');
+  const card = el('div', 'analysis-card');
+  card.innerHTML = `
+    <div class="ac-tabs">
+      <button type="button" class="ac-tab${tab === 'official' ? ' on' : ''}" data-ac-tab="official">官方解析</button>
+      <button type="button" class="ac-tab${tab === 'ai' ? ' on' : ''}" data-ac-tab="ai">AI 讲解</button>
+    </div>
+    <div class="ac-pane" data-ac-pane="official"${tab === 'official' ? '' : ' hidden'}>
+      ${hasOfficial ? renderStudyText(q.analysis) : '<div class="ac-empty">题库未提供官方解析，可切到「AI 讲解」获取考点与错项拆解。</div>'}
+    </div>
+    <div class="ac-pane" data-ac-pane="ai"${tab === 'ai' ? '' : ' hidden'}>
+      <button type="button" class="ac-ai-cta" data-ac-ai>
+        ${ico('sparkles', 15)} AI 讲解本题（考点 / 错项 / 技巧）<span class="ac-arrow">›</span>
+      </button>
+      <div class="ac-ai-result" style="display:none;margin-top:10px"></div>
+    </div>`;
+  const panes = card.querySelectorAll('.ac-pane');
+  const tabs = card.querySelectorAll('.ac-tab');
+  const show = (name) => {
+    tabs.forEach((b) => b.classList.toggle('on', b.dataset.acTab === name));
+    panes.forEach((p) => { p.hidden = p.dataset.acPane !== name; });
+  };
+  tabs.forEach((b) => { b.onclick = () => show(b.dataset.acTab); });
+  // AI 段：点按钮才请求；已有结果时不重复请求（同一题同一次判分只算一次）
+  const aiBtn = card.querySelector('[data-ac-ai]');
+  const aiBox = card.querySelector('.ac-ai-result');
+  aiBtn.onclick = async () => {
+    if (aiBox.dataset.loaded === '1') return;
+    aiBox.style.display = 'block';
+    aiBox.innerHTML = '<div class="spinner" style="width:20px;height:20px"></div>';
+    aiBtn.disabled = true;
+    try {
+      const r = await api('/api/ai/explain', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify((() => {
+          const b = { questionId: q.id, selected: selected ?? null, correct: correct ?? null };
+          if (q.type === 'custom' && String(q.id || '').startsWith('custom-')) {
+            b.questionData = {
+              content: q.content || q.prompt || '',
+              material: q.material || '',
+              options: q.options || [],
+              answer: q.answer || '',
+              answerIndex: q.answerIndex != null ? q.answerIndex : -1,
+            };
+          }
+          return b;
+        })()),
+      });
+      if (r.content) {
+        let html = '';
+        if (r.imageNote) {
+          html += `<details style="margin-bottom:8px"><summary style="font-size:13px;color:var(--muted);cursor:pointer">${ico('camera', 13)} 查看 AI 识图转写（含图题）</summary><div style="font-size:12.5px;line-height:1.7;color:var(--muted);margin-top:6px;background:var(--bg);padding:8px;border-radius:8px">${renderStudyText(r.imageNote.replace(/^【图片转写（AI 识图）】\s*/, ''))}</div></details>`;
+        }
+        html += renderStudyText(r.content);
+        if (r.cached) html += `<div style="font-size:11px;color:var(--text-3);margin-top:6px">（来自缓存）</div>`;
+        aiBox.innerHTML = html;
+        aiBox.dataset.loaded = '1';
+        aiBtn.style.display = 'none'; // 已出结果，收起入口，避免重复点击
+      } else {
+        aiBox.innerHTML = `<div class="ab-title no">${ico('alert', 15)} ${esc(r.notice || r.error || '解析失败')}</div>`;
+        aiBtn.disabled = false;
+      }
+    } catch (e) {
+      aiBox.innerHTML = `<div class="ab-title no">${ico('xCircle', 15)} ${esc(e.message)}</div>`;
+      aiBtn.disabled = false;
+    }
+  };
+  return card;
+}
+
+/**
+ * 相对某个节点插入（自动取它的真实父节点）。
+ * 为什么不能直接 view.insertBefore(node, ref)：材料题在 ≥980px 会把题干/选项搬进 .quiz-split-right，
+ * 此时 ref 的父节点已不是 #view，直接调 view.insertBefore 会抛 NotFoundError，
+ * 反馈条与解析卡双双不渲染（静默失败，只在宽屏材料题上复现）。
+ */
+function insertBeforeRef(node, ref) {
+  if (!node) return node;
+  const view = $('#view');
+  const parent = (ref && ref.parentNode) || view;
+  parent.insertBefore(node, ref && ref.parentNode === parent ? ref : null);
+  return node;
+}
+
+/**
+ * 确保右侧常驻栏存在（按需创建，不预先插入空栏 —— 空栏会凭 CSS 把内容列压窄）。
+ * 插在 .action-row 之后：移动端 .quiz-rail 是 display:contents，视觉顺序与改造前一致（AI 卡仍在最末）。
+ */
+function ensureRail(view) {
+  const existing = view.querySelector('.quiz-rail');
+  if (existing) return existing;
+  const rail = el('div', 'quiz-rail');
+  const actions = view.querySelector('.action-row');
+  if (actions && actions.parentNode === view) view.insertBefore(rail, actions.nextSibling);
+  else view.appendChild(rail);
+  return rail;
+}
+
+/**
+ * 桌面右栏（阶段 5，≥1180px 且非材料题）：解析卡与 AI 辅导卡常驻右侧，与题干/选项并排。
+ * 与 style.css 中 `#view[data-exam='1']:not(:has(.quiz-split-row)) .quiz-rail` 的媒体查询条件保持一致。
+ * 材料题返回 null —— 它已有「材料左 / 题目右」分屏，再叠一栏会挤成三栏。
+ */
+function desktopRail(view) {
+  if (window.innerWidth < 1180) return null;
+  if (view.querySelector('.quiz-split-row')) return null;
+  return ensureRail(view);
+}
+
+/** 解析卡落位：桌面右栏存在则进右栏（题目/解析并排）；否则紧跟选项之后（移动端阅读顺序） */
+function placeAnalysisCard(view, box) {
+  const rail = desktopRail(view);
+  if (rail) { rail.insertBefore(box, rail.firstChild); return box; }
+  const optWrap = view.querySelector('.option')?.parentElement;
+  const actions = view.querySelector('.action-row');
+  if (optWrap && optWrap.parentNode) optWrap.parentNode.insertBefore(box, optWrap.nextSibling);
+  else insertBeforeRef(box, actions);
+  return box;
+}
+
+/** 把反馈条 + 解析卡插入到题干之前（原型 04：反馈条在题干上方，不被手指遮挡） */function mountFeedback(view, q, { kind, mainText, rightHtml, correct, selected, defaultTab }) {
+  const bar = feedbackBar(kind, mainText, rightHtml);
+  bar.id = 'answer-feedback';
+  const anchor = view.querySelector('.q-content') || view.querySelector('.q-meta') || view.firstChild;
+  insertBeforeRef(bar, anchor);
+  const card = analysisCard(q, { correct, selected, defaultTab });
+  card.id = 'inline-analysis';
+  // 解析卡紧跟选项之后（题干 → 选项 → 解析），桌面宽屏则进右侧常驻栏
+  placeAnalysisCard(view, card);
+  return { bar, card };
+}
+
+// ================= 申论/综应作答区增强（阶段 4） =================
+/** 申论字数口径：与阅卷习惯一致，只计非空白字符（含标点，不含空格/换行） */
+function essayCharCount(text) {
+  return String(text || '').replace(/\s+/g, '').length;
+}
+/** 题干里「不超过 N 字」的字数上限；取不到返回 0（= 不提示上限，不编造限制） */
+function essayLimitOf(q) {
+  const plain = String(q?.content || '').replace(/<[^>]+>/g, '');
+  const m = plain.match(/(?:不超过|不多于|不多于|限|约)\s*(\d{2,4})\s*字/);
+  return m ? Number(m[1]) : 0;
+}
+/** 参考答案文本：只在真有长文本答案时才展示（过滤掉 "A"/"AB" 这类客观题选项索引） */
+function essayReference(q) {
+  const cands = [q?.answerText, q?.answer, q?.analysis].map((v) => String(v ?? '').trim());
+  return cands.find((v) => v.length > 6 && !/^[A-H]{1,8}$/.test(v)) || '';
+}
+/**
+ * 从 AI 批改文本里抽取「采分点」。
+ * 为什么用启发式而不要求模型返回 JSON：批改走通用文本接口，换模型就会漂移输出格式；
+ * 这里只做「结构识别」，识别不到就整块不渲染 —— 宁可不显示，也不编造得分点。
+ */
+function parseScorePoints(text) {
+  const bullet = /^\s*(?:[-*•]|\d+[.、)]|[①②③④⑤⑥⑦⑧⑨⑩])\s*(.+)$/;
+  const scoreRe = /[（(]?\s*(\d+(?:\.\d+)?)\s*分\s*[)）]?\s*$/;
+  const out = [];
+  for (const raw of String(text || '').split(/\r?\n/)) {
+    const m = raw.match(bullet);
+    if (!m) continue;
+    let body = m[1].trim();
+    if (!body || body.length > 120) continue;
+    let score = null;
+    const sm = body.match(scoreRe);
+    if (sm) { score = Number(sm[1]); body = body.slice(0, sm.index).trim(); }
+    body = body.replace(/^(?:采分点|得分点|要点|考点)\s*[:：]\s*/, '').trim();
+    if (body.length < 4) continue;
+    out.push({ text: body, score });
+  }
+  return out.slice(0, 12);
+}
+/** 命中判定：采分点常含多个并列要素（如「权责边界不清，事项层层下压」），
+ *  按标点切成片段后任一实质片段出现在作答中即算覆盖；纯关键词级匹配，UI 上已标注口径。 */
+function scorePointHit(point, answer) {
+  const norm = (s) => String(s || '').replace(/[\s，。；：、,.;:!?！？"'“”‘’（）()《》<>【】\[\]—－/\\|]+/g, '');
+  const a = norm(answer);
+  if (!a) return false;
+  const parts = String(point).split(/[，。；：、,.;:!?！？（）()/\\|]+/).map(norm).filter((p) => p.length >= 3);
+  const keys = parts.length ? parts : [norm(point)];
+  return keys.some((k) => {
+    const probe = k.slice(0, 6);
+    return probe.length >= 3 && a.includes(probe);
+  });
+}
+/** 采分表：得分点 / 是否命中 / 建议（命中判定仅为关键词级，UI 上明确标注口径） */
+function renderScoreTable(points, answer, fullScore) {
+  if (!points.length) return '';
+  const hitOf = points.map((p) => scorePointHit(p.text, answer));
+  const hasScore = points.some((p) => p.score != null);
+  const got = points.reduce((sum, p, i) => sum + (hitOf[i] && p.score != null ? p.score : 0), 0);
+  const total = hasScore ? points.reduce((s, p) => s + (p.score || 0), 0) : 0;
+  const hitCount = hitOf.filter(Boolean).length;
+  const rows = points.map((p, i) => `
+    <div class="score-row ${hitOf[i] ? 'hit' : 'miss'}">
+      <span class="sc-flag">${hitOf[i] ? '✓' : '✕'}</span>
+      <div class="sc-main">
+        <div class="sc-point">${esc(p.text)}</div>
+        <div class="sc-advice">${hitOf[i] ? '你的作答已覆盖该得分点' : '未在你的作答中检出该得分点关键词'}</div>
+      </div>
+      ${p.score != null ? `<span class="sc-score">${p.score} 分</span>` : ''}
+    </div>`).join('');
+  return `<div class="score-table">
+    <div class="score-table-head">${ico('clipboard', 14)} 采分表
+      <span class="st-total">${hasScore ? `${got} / ${total || fullScore || '—'} 分` : `${hitCount} / ${points.length} 点命中`}</span>
+    </div>
+    ${rows}
+    <div class="score-row" style="border-top:1px solid var(--border)"><div class="sc-main"><div class="sc-advice">命中判定按「得分点关键词是否出现在作答中」自动匹配，仅作自查参考，不替代人工阅卷。</div></div></div>
+  </div>`;
+}
+/** 参考答案对照：我的作答 vs 参考答案（逐块对照，不自动评分） */
+function renderRefCompare(q, answer) {
+  const ref = essayReference(q);
+  if (!ref) return '';
+  return `<details class="ref-cmp">
+    <summary>参考答案对照</summary>
+    <div class="ref-cmp-body">
+      <div class="rc-block rc-mine"><div class="rc-label">我的作答</div>${renderStudyText(answer || '（尚未作答）')}</div>
+      <div class="rc-block rc-ref"><div class="rc-label">参考答案</div>${renderStudyText(ref)}</div>
+    </div>
+  </details>`;
+}
+
 function renderQuestion() {
   cropSession++;          // 视图切换：使未完成的裁剪会话失效
   closeCropEditor();      // 清理可能残留的裁剪器 overlay
@@ -3413,7 +4426,9 @@ function renderQuestion() {
   if (store.aiTutor?.controller) store.aiTutor.controller.abort();
   store.aiTutor = { token: tutorToken, controller: null, loading: false, conversationId: null, messages: [] };
   const q = s.questions[s.idx];
-  if (!q) { renderResult(); return; }
+  if (!q) { scratchpad.clearSession(); renderResult(); return; }
+  saveResumeSession(); // 续接上次：每切一题记录一次进度（客户端即可，双模式通用）
+  scratchpad.bind(s.questions, s.idx, q, { enabled: !s.historicalReview });
   startQuestionSolve(s.idx);
   const view = $('#view');
   view.dataset.exam = '1'; // 做题态标记：滑动切题/长按排除在此生效
@@ -3490,9 +4505,14 @@ function renderQuestion() {
     view.appendChild(overlay);
   };
 
+  // 阶段 5：题干/选项包进 .q-main（默认 display:contents，零布局影响）。
+  // 移动端 DOM 顺序与视觉与改造前完全一致；≥1180px 由 CSS 把 .quiz-rail 变成右侧常驻栏，
+  // 实现「题目 / 解析」并排。.quiz-rail 按需创建（见 ensureRail），避免空栏挤压内容宽度。
+  const main = el('div', 'q-main');
   const content = el('div', 'q-content');
   renderContent(content, q);
-  view.appendChild(content);
+  main.appendChild(content);
+  view.appendChild(main);
 
   // 材料题组：显示材料（material HTML）+ 小问标记
   // 默认展开（材料题需边看边算），状态栏显示字数/图片数，头部可收起，支持全屏查看 + 点图放大
@@ -3511,7 +4531,7 @@ function renderQuestion() {
         <button type="button" class="mat-full" title="全屏查看材料">${ico('expand', 14)} 全屏查看</button>
       </div>
       <div class="mat-body">${matHtml}</div>`;
-    view.insertBefore(matBox, content.nextSibling);
+    main.insertBefore(matBox, content.nextSibling);
     const body = matBox.querySelector('.mat-body');
     matBox.querySelector('.mat-head').onclick = (e) => {
       if (e.target.closest('.mat-full')) return; // 全屏按钮不触发展开/收起
@@ -3528,7 +4548,7 @@ function renderQuestion() {
     // 申论/综应：加载给定材料（题干带 [materialid] 或整卷材料）并展示
     const matBox = el('div', 'material-box');
     matBox.innerHTML = `<div class="mat-head">${ico('fileText', 14)} 给定材料 <span class="mat-status">加载中…</span></div><div class="mat-body" style="display:none;white-space:pre-wrap;max-height:320px"></div>`;
-    view.insertBefore(matBox, content.nextSibling);
+    main.insertBefore(matBox, content.nextSibling);
     const status = matBox.querySelector('.mat-status');
     const body = matBox.querySelector('.mat-body');
     matBox.querySelector('.mat-head').onclick = () => { body.style.display = body.style.display === 'none' ? 'block' : 'none'; };
@@ -3547,6 +4567,7 @@ function renderQuestion() {
     // 申论/主观题：AI 批改入口（拍照/相册双入口 + 裁剪旋转 + 多图队列 + 逐张识别拼接）
     // 队列绑定当前题目：切题后旧题图片不再显示，避免跨题答案污染
     if (ocrQueueQid !== q.id) { ocrQueue = []; ocrQueueQid = q.id; }
+    const essayLimit = essayLimitOf(q);
     const essayCard = el('div', 'card', `
       <h3>${ico('pen', 16)} ${s.subject && s.subject.includes('综应') ? '综应' : '申论'} AI 批改</h3>
       <div class="li-sub" style="margin-bottom:10px">写下作答，或拍照/上传答案图片让 AI 识别后批改。</div>
@@ -3559,8 +4580,39 @@ function renderQuestion() {
       <div id="ocr-queue" class="ocr-queue"></div>
       <div id="ocr-status" class="ocr-status"></div>
       <textarea id="essay-input" placeholder="在此粘贴或输入你的答案…"></textarea>
+      <div class="essay-meta">
+        <span class="essay-count" id="essay-count">已写 <b>0</b> 字${essayLimit ? ` · 上限 ${essayLimit} 字` : ''}</span>
+        <span class="essay-tools">
+          <button class="btn btn-ghost" id="essay-preview-btn" type="button">${ico('fileText', 14)} 预览</button>
+        </span>
+      </div>
+      <div id="essay-preview" class="essay-rt" style="display:none" hidden></div>
+      <div id="essay-ref"></div>
     `);
-    view.appendChild(essayCard);
+    main.appendChild(essayCard);
+    // 实时字数 + 富文本预览（阶段 4）：字数口径与阅卷一致（非空白字符）；预览复用 rich-text 渲染
+    const essayInput = $('#essay-input');
+    const essayCount = $('#essay-count');
+    const essayPreview = $('#essay-preview');
+    const refreshEssayCount = () => {
+      const n = essayCharCount(essayInput.value);
+      essayCount.innerHTML = `已写 <b>${n}</b> 字${essayLimit ? ` · 上限 ${essayLimit} 字` : ''}`;
+      essayCount.classList.toggle('is-over', !!essayLimit && n > essayLimit);
+    };
+    essayInput.addEventListener('input', () => {
+      refreshEssayCount();
+      if (!essayPreview.hidden) essayPreview.innerHTML = renderStudyText(essayInput.value || '');
+    });
+    refreshEssayCount();
+    $('#essay-preview-btn').onclick = () => {
+      const show = essayPreview.hidden;
+      essayPreview.hidden = !show;
+      essayPreview.style.display = show ? 'block' : 'none';
+      essayInput.style.display = show ? 'none' : 'block'; // 预览态收起输入框，避免同屏两处答案
+      if (show) essayPreview.innerHTML = renderStudyText(essayInput.value || '') || '<span style="color:var(--text-3)">还没有作答内容</span>';
+      $('#essay-preview-btn').innerHTML = show ? `${ico('pen', 14)} 编辑` : `${ico('fileText', 14)} 预览`;
+    };
+    $('#essay-ref').innerHTML = renderRefCompare(q, '');
     // ---- 识图导入作答：双入口 → 裁剪/旋转 → 图片队列 → 逐张识别按页拼接 ----
     // 拍照（Capacitor 原生相机 / 浏览器 input capture 降级）
     const openOcrCamera = async () => {
@@ -3624,7 +4676,7 @@ function renderQuestion() {
     const gradeBtn = el('button', 'btn btn-primary', `${ico('sparkles', 15)} AI 批改`);
     const resultBox = el('div', 'answer-box');
     resultBox.style.display = 'none';
-    view.appendChild(resultBox);
+    main.appendChild(resultBox);
     gradeBtn.onclick = async () => {
       let text = $('#essay-input').value.trim();
       // 有图片先识别合并进文本框再批改（识别失败但已有手输内容时，用手输内容继续批改）
@@ -3660,7 +4712,10 @@ function renderQuestion() {
           body: JSON.stringify({ questionId: q.id, content: text }),
         });
         if (r.result) {
-          resultBox.innerHTML = `<div class="ab-title">${ico('sparkles', 15)} AI 批改结果</div>${r.fullScore ? `<div style="font-size:13px;color:#8a8f98;margin:4px 0 8px">本题满分 ${esc(r.fullScore)} 分 · 批改分数请以此口径核对</div>` : ''}${renderStudyText(r.result)}`;
+          // 采分表 + 参考答案对照（阶段 4）：把「一大段批改文本」结构化，便于逐点自查
+          const points = parseScorePoints(r.result);
+          const extra = `${renderScoreTable(points, text, r.fullScore)}${renderRefCompare(q, text)}`;
+          resultBox.innerHTML = `<div class="ab-title">${ico('sparkles', 15)} AI 批改结果</div>${r.fullScore ? `<div style="font-size:13px;color:#8a8f98;margin:4px 0 8px">本题满分 ${esc(r.fullScore)} 分 · 批改分数请以此口径核对</div>` : ''}${renderStudyText(r.result)}${extra}`;
         } else {
           resultBox.innerHTML = `<div class="ab-title" style="color:var(--red)">${ico('alert', 15)} ${esc(r.notice || '批改失败')}</div>`;
         }
@@ -3671,7 +4726,7 @@ function renderQuestion() {
       gradeBtn.innerHTML = `${ico('sparkles', 15)} AI 批改`;
     };
     actions.appendChild(gradeBtn);
-    view.appendChild(actions);
+    main.appendChild(actions);
     // 主观题底部操作条：上一题 | 下一题 | 添加笔记（/查看笔记）| 查看解析 | 交卷（上一题/下一题仅桌面端显示，与客观题一致）
     const multiQ = s.questions.length > 1;
     const subActions = el('div', 'action-row tri' + (multiQ ? ' with-nav' : ''));
@@ -3696,24 +4751,17 @@ function renderQuestion() {
       stampCost(s.idx);
       ensureAnswer(s.idx).solveStopped = true;
       q._explanationOpen = true;
-      const box = el('div', 'answer-box');
+      const box = analysisCard(q, { defaultTab: (q.analysis && String(q.analysis).trim()) ? 'official' : 'ai' });
       box.id = 'inline-explain';
-      box.innerHTML = `
-        <div class="ab-title">${ico('book', 16)} 解析</div>
-        ${q.analysis ? `<div class="ab-body" style="margin:0 0 10px">${renderStudyText(q.analysis)}</div>` : '<div class="ab-body" style="margin:0 0 10px;color:var(--muted)">本题暂无官方解析，可用上方「AI 批改」获取评分与讲解。</div>'}
-        <button class="btn btn-ghost btn-block" style="margin-bottom:6px" id="btn-ai-explain">${ico('sparkles', 15)} AI 解析本题（解析考点/错项/技巧）</button>
-        <div id="ai-explain-result" style="display:none"></div>
-      `;
-      view.appendChild(box);
+      placeAnalysisCard(view, box);
       startExplanationTimer(s.idx);
-      $('#btn-ai-explain').onclick = () => explainQuestion(q, s.answers[s.idx]?.selected, s.answers[s.idx]?.correct ?? null, box);
     };
     const subSubmit = el('button', 'btn btn-primary', '交卷');
     subSubmit.onclick = () => { if (paused()) { toast('已暂停，先点继续再交卷'); return; } submitExam(); };
     subActions.appendChild(subNote);
     subActions.appendChild(subExplain);
     subActions.appendChild(subSubmit);
-    view.appendChild(subActions);
+    main.appendChild(subActions);
     return;
   }
 
@@ -3789,9 +4837,9 @@ function renderQuestion() {
     b.addEventListener('pointercancel', lpClear);
     optWrap.appendChild(b);
   });
-  view.appendChild(optWrap);
+  main.appendChild(optWrap);
   if (!opts.length) {
-    view.appendChild(el('div', 'empty-opt-tip', `${ico('info', 14)} 本题无选项（无标准答案的主观题），可直接下一题；交卷后按「无答案」统计`));
+    main.appendChild(el('div', 'empty-opt-tip', `${ico('info', 14)} 本题无选项（无标准答案的主观题），可直接下一题；交卷后按「无答案」统计`));
   }
 
   // 多选确认
@@ -3829,7 +4877,7 @@ function renderQuestion() {
   const explainBtn = el('button', 'btn btn-ghost', `${ico('book', 15)} 查看解析`);
   explainBtn.onclick = () => {
     if (paused()) { toast('已暂停，先点继续再操作'); return; }
-    // 当前题展开解析（不自动判分，仅展示答案对照 + AI 解析入口）
+    // 当前题展开解析（不自动判分，仅展示答案对照 + 解析分段卡）
     const existing = $('#inline-explain');
     if (existing) { stampExplanation(s.idx); q._explanationOpen = false; existing.remove(); return; }
     stampCost(s.idx);
@@ -3838,21 +4886,19 @@ function renderQuestion() {
     const j = s.answers[s.idx] ? judge(q, s.answers[s.idx].selected) : null;
     const rightSel = j ? j.correct.map((x) => LETTERS[x]).join('') : '见解析';
     const mySel = [...(s.answers[s.idx]?.selected || [])].sort((x, y) => x - y).map((x) => LETTERS[x]).join('') || '未答';
-    const box = el('div', 'answer-box');
+    const box = analysisCard(q, {
+      correct: s.answers[s.idx]?.correct ?? null,
+      selected: [...(s.answers[s.idx]?.selected || [])],
+      defaultTab: (q.analysis && String(q.analysis).trim()) ? 'official' : 'ai',
+    });
     box.id = 'inline-explain';
-    box.innerHTML = `
-      <div class="ab-title">${ico('book', 16)} 解析</div>
-      <div class="answer-cmp" style="margin:0 0 10px">
+    box.insertAdjacentHTML('afterbegin', `
+      <div class="answer-cmp" style="margin:12px 14px 0">
         <span class="cmp-item"><i class="cmp-dot mine"></i>我的答案 <b>${mySel || '—'}</b></span>
         <span class="cmp-item"><i class="cmp-dot right"></i>正确答案 <b>${rightSel}</b></span>
-      </div>
-      ${q.analysis ? `<div class="ab-body" style="margin:0 0 10px">${renderStudyText(q.analysis)}</div>` : ''}
-      <button class="btn btn-ghost btn-block" style="margin-bottom:6px" id="btn-ai-explain">${ico('sparkles', 15)} AI 解析本题（考点/错项/技巧）</button>
-      <div id="ai-explain-result" style="display:none"></div>
-    `;
-    view.appendChild(box);
+      </div>`);
+    placeAnalysisCard(view, box);
     startExplanationTimer(s.idx);
-    $('#btn-ai-explain').onclick = () => explainQuestion(q, s.answers[s.idx]?.selected, s.answers[s.idx]?.correct ?? null, box);
   };
   const submitBtn = el('button', 'btn btn-primary', '交卷');
   submitBtn.onclick = () => { if (paused()) { toast('已暂停，先点继续再交卷'); return; } submitExam(); };
@@ -3887,21 +4933,17 @@ function renderQuestion() {
 /** 桌面/平板宽屏（≥980px）：材料题改为左右分屏——材料固定左侧滚动、题干+选项右侧，边看边算；手机端布局不变 */
 function maybeSplitMaterial(view) {
   if (window.innerWidth < 980) return;
-  const box = view.querySelector('.material-box');
+  const main = view.querySelector('.q-main') || view;
+  const box = main.querySelector('.material-box');
   if (!box) return;
   const left = el('div', 'quiz-split-left');
   const right = el('div', 'quiz-split-right');
-  let node = box.nextSibling; // 材料盒之后的选项/操作条等移入右栏，材料盒保留在左栏
-  while (node) {
-    const next = node.nextSibling;
-    right.appendChild(node);
-    node = next;
-  }
-  left.appendChild(box);
+  // 材料进左栏、题干/选项进右栏（阶段 5 起 .q-main 同时容纳题干，故不能再用「材料之后全部右移」的旧写法）
+  Array.from(main.children).forEach((n) => (n === box ? left : right).appendChild(n));
   const row = el('div', 'quiz-split-row');
   row.appendChild(left);
   row.appendChild(right);
-  view.appendChild(row);
+  main.appendChild(row);
 }
 
 function submitAnswer(q, selected, optWrap, opts, isMulti) {
@@ -3918,26 +4960,28 @@ function submitAnswer(q, selected, optWrap, opts, isMulti) {
       else if (graded && (Array.isArray(r.selected) ? r.selected : [r.selected]).includes(i)) o.classList.add('wrong');
       o.style.pointerEvents = 'none';
     });
-    const banner = el('div', `result-banner ${graded ? (r.ok ? 'ok' : 'no') : 'none'}`, graded ? (r.ok ? `${ico('checkCircle', 16)} 回答正确！` : `${ico('xCircle', 16)} 回答错误`) : `${ico('ban', 16)} 无标准答案（本题不判分）`);
-    // 答案对照行（粉笔风格：我的答案 / 正确答案；多选按字母序显示）
+    const banner = feedbackBar(
+      graded ? (r.ok ? 'ok' : 'no') : 'none',
+      graded ? (r.ok ? '回答正确' : '回答错误') : '无标准答案（本题不判分）',
+      graded ? `正确答案 <b>${[...(r.correct || [])].sort((a, b) => a - b).map((i) => 'ABCDEFGH'[i]).join('') || '见解析'}</b>` : '',
+    );
+    // 答案对照行（我的答案 / 正确答案；多选按字母序显示）
     const mySel = [...(r.selected || [])].sort((a, b) => a - b).map((i) => 'ABCDEFGH'[i]).join('');
     const rightSel = [...(r.correct || [])].sort((a, b) => a - b).map((i) => 'ABCDEFGH'[i]).join('');
     const cmp = el('div', 'answer-cmp', `
       <span class="cmp-item"><i class="cmp-dot mine"></i>我的答案 <b>${mySel || '—'}</b></span>
       <span class="cmp-item"><i class="cmp-dot right"></i>正确答案 <b>${rightSel || '见解析'}</b></span>
     `);
-    // 插入到选项后
+    // 反馈条插到题干上方（原型 04）；答案对照 + 解析卡插到选项之后
     const view = $('#view');
     const actions = view.querySelector('.action-row');
-    view.insertBefore(cmp, actions);
-    view.insertBefore(banner, actions);
-    // 解析框：答案对照 + AI 解析按钮
-    const box = el('div', 'answer-box');
-    box.innerHTML = `<div class="ab-title">${ico('book', 16)} 解析</div>${q.analysis ? `<div class="ab-body" style="margin:8px 0">${renderStudyText(q.analysis)}</div>` : ''}${r.correctText?.length ? '正确答案内容：' + r.correctText.map((t) => esc(t)).join(' | ') : ''}
-      <button class="btn btn-ghost btn-block" style="margin-top:10px" id="btn-ai-explain">${ico('sparkles', 15)} AI 解析本题（解析考点/错项/技巧）</button>
-      <div id="ai-explain-result" style="margin-top:8px;display:none"></div>`;
-    view.insertBefore(box, actions);
-    $('#btn-ai-explain').onclick = () => explainQuestion(q, selected, r.ok, box);
+    const qContent = view.querySelector('.q-content') || view.querySelector('.q-meta');
+    insertBeforeRef(banner, qContent || view.firstChild);
+    insertBeforeRef(cmp, actions);
+    const box = analysisCard(q, { correct: graded ? r.ok : null, selected: [...(r.selected || [])] });
+    box.id = 'inline-analysis';
+    placeAnalysisCard(view, box);
+    if (r.correctText?.length) box.querySelector('[data-ac-pane="official"]')?.insertAdjacentHTML('beforeend', `<div style="margin-top:8px">正确答案内容：${r.correctText.map((t) => esc(t)).join(' | ')}</div>`);
     // 服务端做题记录落库（判分后自动上报，供进度 AI 与跨设备同步）
     api('/api/records', {
       method: 'POST',
@@ -4153,15 +5197,27 @@ function renderReview() {
   const wrongN = scored.length - correctN;
   const elapsed = s.timing?.elapsed ?? 0;
   view.innerHTML = '';
-  view.appendChild(el('div', 'hero', `
-    <div class="hero-eyebrow">EXAM ARCHIVE · 本次成绩</div>
-      <div class="hero-title">答对 ${correctN} / ${scored.length} 题</div>
-    <div class="hero-stats">
-      <div class="hero-stat"><div class="hs-num">${rate}%</div><div class="hs-label">正确率</div></div>
-      <div class="hero-stat"><div class="hs-num">${fmtTime(elapsed)}</div><div class="hs-label">有效用时（暂停不计）</div></div>
-      <div class="hero-stat"><div class="hs-num">${wrongN}${noAns ? ` +${noAns}` : ''}</div><div class="hs-label">错题${noAns ? '/无答案' : ''}</div></div>
-    </div>
-  `));
+  // 结算卡（阶段 3）：进度环 + 三格统计，取代旧 hero —— 一瞥即知"对多少 / 用多久 / 错几道"
+  const st = settlementStats(s);
+  const rc = rateColor(st.rate);
+  const head = el('div', 'card res-head');
+  head.innerHTML = `
+    <div class="res-wrap">
+      <div class="res-cap">本次练习</div>
+      ${ringSvg({ rate: st.rate, main: `${st.correctN}<tspan font-size="23" fill="var(--text-3)">/${st.scoredN}</tspan>`, sub: `${st.rate}% 正确率`, subColor: rc })}
+      <div class="res-stats">
+        <div><div class="rs-v">${fmtTime(elapsed)}</div><div class="rs-k">用时</div></div>
+        <div><div class="rs-v${wrongN ? ' is-bad' : ''}">${wrongN}${noAns ? `<span style="font-size:12px;font-weight:500"> +${noAns}</span>` : ''}</div><div class="rs-k">错题${noAns ? '/无答案' : ''}</div></div>
+        <div><div class="rs-v" style="color:${rc}">${rate}%</div><div class="rs-k">正确率</div></div>
+      </div>
+    </div>`;
+  // 主行动：把用户从"做完"推向"订正"（错题本已按掌握度排好，这里只负责送达）
+  const headActs = el('div', 'res-actions');
+  const goWrong = el('button', 'btn btn-primary btn-block', wrongN ? `${ico('bookX', 16)} 去攻克这 ${wrongN} 道错题` : `${ico('checkCircle', 16)} 全部答对，去错题本复盘`);
+  goWrong.onclick = () => renderWrong();
+  headActs.appendChild(goWrong);
+  head.appendChild(headActs);
+  view.appendChild(head);
   /* ---- 工具条：筛选 tab + 答题卡 + 全部解析 ---- */
   const cards = [];
   const toolbar = el('div', 'review-toolbar');
@@ -4766,50 +5822,52 @@ function buildCropEditor(img, opts) {
 }
 
 // ---------- AI 解析本题 ----------
-async function explainQuestion(q, selected, correct, box) {  const btn = $('#btn-ai-explain');
-  const result = box.querySelector('#ai-explain-result');
-  if (!btn) return;
-  btn.disabled = true;
-  btn.innerHTML = `${ico('sparkles', 15)} AI 解析中…（约 5~15 秒）`;
-  result.style.display = 'block';
-  result.innerHTML = '<div class="spinner" style="width:20px;height:20px"></div>';
-  try {
-    const r = await api('/api/ai/explain', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify((() => {
-        const b = { questionId: q.id, selected, correct };
-        if (q.type === 'custom' && (q.id || '').startsWith('custom-')) {
-          b.questionData = {
-            content: q.content || q.prompt || '',
-            material: q.material || '',
-            options: q.options || [],
-            answer: q.answer || '',
-            answerIndex: q.answerIndex != null ? q.answerIndex : -1,
-          };
-        }
-        return b;
-      })()),
-    });
-    if (r.content) {
-      let html = `<div class="ab-title">${ico('sparkles', 15)} AI 解析${r.cached ? ' <span style="color:var(--muted);font-size:11px">（缓存）</span>' : ''}</div>`;
-      if (r.imageNote) {
-        html += `<details style="margin-bottom:8px"><summary style="font-size:13px;color:var(--muted);cursor:pointer">${ico('camera', 13)} 查看 AI 识图转写（含图题）</summary><div style="font-size:12.5px;line-height:1.7;color:var(--muted);margin-top:6px;background:var(--bg);padding:8px;border-radius:8px">${renderStudyText(r.imageNote.replace(/^【图片转写（AI 识图）】\s*/, ''))}</div></details>`;
-      }
-      html += renderStudyText(r.content);
-      result.innerHTML = html;
-    } else {
-      result.innerHTML = `<div class="ab-title" style="color:var(--red)">${ico('alert', 15)} ${esc(r.notice || r.error || '解析失败')}</div>`;
-    }
-  } catch (e) {
-    result.innerHTML = `<div class="ab-title" style="color:var(--red)">${ico('xCircle', 15)} ${esc(e.message)}</div>`;
-  }
-  btn.disabled = false;
-  btn.innerHTML = `${ico('sparkles', 15)} AI 解析本题（解析考点/错项/技巧）`;
+// 阶段 3 起统一收敛到 analysisCard() 的「AI 讲解」分段（懒加载、结果缓存于 DOM）。
+// 旧的 explainQuestion() 依赖 #btn-ai-explain / #ai-explain-result 两个固定 id，
+// 与分段卡职责重叠会造成两条并行的 AI 解析路径，故删除，避免行为漂移。
+
+// ---------- 结算（阶段 3）：大进度环 + 三格统计 + 本次错题 + 唯一主行动 ----------
+
+/**
+ * 进度环 SVG。第一性原理：环的价值不是"好看"，而是让"做完多少 / 对多少"在一瞥内被读到，
+ * 因此中心放绝对数（12/15）而非百分比——绝对数才回答"我还剩几道"。
+ * 语义色只表达语义：≥60% 竹青（掌握）、40~59% 琥珀（待巩固）、<40% 朱批（薄弱）。
+ * arcColor 与 subColor 必须分开传：弧表达"掌握程度"（语义色），副标题只是说明文字（弱化色）。
+ */
+function ringSvg({ size = 196, stroke = 14, r = 80, rate = 0, main = '', sub = '', arcColor = 'var(--jade)', subColor = 'var(--text-3)', numSize, subSize, numDy = -3, subDy = 27 }) {
+  const c = 2 * Math.PI * r;
+  const off = c * (1 - Math.max(0, Math.min(1, rate / 100)));
+  const cx = size / 2, cy = size / 2;
+  const ns = numSize ?? Math.round(size * 0.214);
+  const ss = subSize ?? Math.round(size * 0.0714);
+  return `<svg class="ring" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" role="img" aria-label="${esc(main)} ${esc(sub)}">
+    <circle class="ring-track" cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke-width="${stroke}"/>
+    <circle class="ring-val" cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${arcColor}" stroke-width="${stroke}" stroke-linecap="round"
+            stroke-dasharray="${c.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}" transform="rotate(-90 ${cx} ${cy})"/>
+    <text class="ring-num" x="${cx}" y="${cy + numDy}" text-anchor="middle" font-size="${ns}">${main}</text>
+    <text class="ring-sub" x="${cx}" y="${cy + subDy}" text-anchor="middle" font-size="${ss}" fill="${subColor}">${sub}</text>
+  </svg>`;
+}
+/** 正确率 → 语义色（红=薄弱 / 琥珀=待巩固 / 竹青=掌握） */
+function rateColor(rate) {
+  return rate >= 60 ? 'var(--jade)' : (rate >= 40 ? 'var(--amber)' : 'var(--vermilion)');
+}
+/** 结算统计：本次成绩口径（只统计可判分题，与 renderReview/落库一致） */
+function settlementStats(s) {
+  const total = s.questions.length;
+  const scored = s.answers.filter((a) => a && a.correct != null);
+  const correctN = scored.filter((a) => a.correct).length;
+  const rate = scored.length ? Math.round((correctN / scored.length) * 100) : 0;
+  const wrongIdx = s.questions.map((_, i) => i).filter((i) => {
+    const a = s.answers[i];
+    if (!a || a.correct == null) return false;
+    return a.correct === false;
+  });
+  return { total, scoredN: scored.length, correctN, rate, noAns: total - scored.length, wrongN: wrongIdx.length, wrongIdx };
 }
 
-// ---------- 结果页 ----------
 function renderResult() {
+  scratchpad.clearSession();
   closeImageOverlays(); // 交卷进结果页时关闭全屏查看器/材料页
   if (store.state.mode === 'single') {
     // 单题重练完成：清掉导航栈里的 single + 来源层（wrong/fav），避免残留污染后续导航
@@ -4820,22 +5878,68 @@ function renderResult() {
   setView('practice');
   $('#app-title').innerHTML = `练习完成 ${ico('trophy', 20)}`;
   const view = $('#view');
-  const done = store.wrong.filter((w) => w.time > (Date.now() - 3600 * 1000 * 24)).length;
-  view.innerHTML = `
-    <div class="card" style="text-align:center;padding:30px 16px">
-      <div style="font-size:44px;margin-bottom:10px">${ico('trophy', 44)}</div>
-      <h2>练习完成！</h2>
-      <div class="li-sub" style="margin-top:6px">共 ${store.state.questions.length} 题</div>
-      <div style="margin-top:16px">
-        <button class="btn btn-primary btn-block" id="again">${ico('repeat', 15)} 再来一组</button>
-        <button class="btn btn-ghost btn-block" style="margin-top:10px" id="home">${ico('home', 15)} 返回首页</button>
-        <button class="btn btn-ghost btn-block" style="margin-top:10px" id="wrong">${ico('bookX', 15)} 查看错题本</button>
-      </div>
+  const s = store.state;
+  const st = settlementStats(s);
+  const color = rateColor(st.rate);
+  view.innerHTML = '';
+  const wrap = el('div', 'res-wrap');
+  wrap.innerHTML = `
+    <div class="res-cap">${st.total > 1 ? '本次练习' : '单题重练'}</div>
+    ${ringSvg({ rate: st.rate, main: `${st.correctN}<tspan font-size="23" fill="var(--text-3)">/${st.scoredN}</tspan>`, sub: `${st.rate}% 正确率`, arcColor: color })}
+    <div class="res-stats">
+      <div><div class="rs-v">${fmtTime(s.timing?.elapsed ?? 0)}</div><div class="rs-k">用时</div></div>
+      <div><div class="rs-v${st.wrongN ? ' is-bad' : ''}">${st.wrongN}</div><div class="rs-k">本次错题</div></div>
+      <div><div class="rs-v" style="color:${color}">${st.rate}%</div><div class="rs-k">正确率</div></div>
     </div>`;
-  $('#again').onclick = () => renderPractice(store.state.subject, store.state.chapter, null, store.state.mock);
-  $('#home').onclick = () => renderHome();
-  $('#wrong').onclick = () => renderWrong();
+  // 本次错题（最多 3 条，让"去攻克"有明确指向，而不是一个抽象按钮）
+  if (st.wrongIdx.length) {
+    const sec = el('div', 'res-sec');
+    sec.innerHTML = `<div class="res-sec-head"><b>本次错题</b><span>${st.wrongIdx.length} 题</span></div>`;
+    const listEl = el('div', 'res-wrong-list');
+    st.wrongIdx.slice(0, 3).forEach((i) => {
+      const q = s.questions[i];
+      const a = s.answers[i] || {};
+      const mySel = [...(a.selected || [])].sort((x, y) => x - y).map((x) => LETTERS[x]).join('') || '未答';
+      listEl.appendChild(el('div', 'res-wrong-row', `
+        <span class="rw-chap">${esc(q.chapter || q.subject || '未分类')}</span>
+        <span class="rw-text">${esc(String(q.content || '').replace(/<[^>]+>/g, '').slice(0, 40))}</span>
+        <span class="rw-mine">你选 ${esc(mySel)}</span>`));
+    });
+    if (st.wrongIdx.length > 3) listEl.appendChild(el('div', 'res-wrong-row', `<span class="rw-text" style="color:var(--text-2)">还有 ${st.wrongIdx.length - 3} 道…</span>`));
+    sec.appendChild(listEl);
+    wrap.appendChild(sec);
+  }
+  view.appendChild(wrap);
+  // 唯一主行动：把用户从"做完"推向"订正"（原型 05 的核心主张）
+  const acts = el('div', 'res-actions');
+  if (st.wrongN) {
+    const go = el('button', 'btn btn-primary btn-block', `${ico('bookX', 16)} 去攻克这 ${st.wrongN} 道错题`);
+    go.onclick = () => {
+      // 只把本次错题组成本轮练习；来源层压栈保证返回可回到结算
+      store.navStack.push({ name: 'practice' });
+      enterQuiz(st.wrongIdx.map((i) => s.questions[i]), s.subject, 'wrong-retry', null, '0');
+    };
+    acts.appendChild(go);
+  } else {
+    const go = el('button', 'btn btn-primary btn-block', `${ico('repeat', 16)} 再来一组`);
+    go.onclick = () => renderPractice(s.subject, s.chapter, null, s.mock);
+    acts.appendChild(go);
+  }
+  const row2 = el('div', 'res-row2');
+  const review = el('button', 'btn btn-ghost', '查看逐题解析');
+  review.onclick = () => renderReview();
+  const again = el('button', 'btn btn-ghost', `${ico('repeat', 15)} 再来一组`);
+  again.onclick = () => renderPractice(s.subject, s.chapter, null, s.mock);
+  const wrongBook = el('button', 'btn btn-ghost', `${ico('bookX', 15)} 错题本`);
+  wrongBook.onclick = () => renderWrong();
+  row2.appendChild(review);
+  row2.appendChild(again);
+  row2.appendChild(wrongBook);
+  acts.appendChild(row2);
+  view.appendChild(acts);
 }
+
+// ---------- 结果页（成绩与解析） ----------
 
 // ---------- 错题本（服务端同步，跨设备） ----------
 // 错题本分页状态
@@ -4941,32 +6045,116 @@ async function renderWrong() {
 async function renderWrongTab(view) {
   const tab = wState.tab;
   view.innerHTML = '';
-  view.appendChild(moduleTabsEl(tab, (key) => { wState.tab = key; renderWrongTab(view); }));
-  if (tab === 'custom') { await renderWrongList('custom', '', '自定义题库', true); return; }
-  let groups = [];
-  try {
-    const data = await api('/api/records/wrong/groups');
-    groups = Array.isArray(data) ? data : (data.list || []);
-  } catch (e) {
-    view.innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`;
-    return;
-  }
-  const name = moduleTabName(tab);
-  const g = groups.find((x) => x.key === tab) || { key: tab, name, count: 0, subs: [] };
-  const card = el('div', 'card', `<h3>${esc(name)}错题共 ${g.count} 条</h3>
-    <button class="btn btn-primary btn-block" id="wrong-random">${ico('play', 15)} 随机练习（从${esc(name)}错题抽 10-15 题）</button>
-    <button class="btn btn-ghost btn-block" id="wrong-organize">${ico('folderTree', 15)} 一键整理（自动归类历史未分类错题）</button>
-    <button class="btn btn-danger btn-block" id="clear-wrong">${ico('trash', 15)} 清空${esc(name)}错题</button>
-    <div class="li-tip">${ico('lightbulb', 13)} 点击子模块查看对应错题，点击错题可直接重做</div>`);
+  // ① 掌握度卡：环描述"当下这个错题本里，我已掌握多少"（mastered + pending = 环上的题）
+  const card = el('div', 'card mastery-card');
+  card.innerHTML = `<div class="spinner" style="width:20px;height:20px"></div>`;
   view.appendChild(card);
-  $('#wrong-random').onclick = () => startWrongRandom(tab, '');
-  $('#wrong-organize').onclick = () => organizeModule('wrong', () => renderWrongTab(view));
-  $('#clear-wrong').onclick = () => clearWrongGroup(tab, name, () => renderWrongTab(view));
-  if (!g.subs.length && g.count === 0) {
-    view.appendChild(el('div', 'empty', `<span class="empty-ico">${ico('bookX', 40)}</span>暂无${esc(name)}错题<br>刷题做错的题目会自动收录到这里`));
-    return;
+  // ② 大模块 tab（科目维度）
+  const tabsHolder = el('div');
+  view.appendChild(tabsHolder);
+  // ③ 分组列表 + 一键重做
+  const listHolder = el('div');
+  view.appendChild(listHolder);
+
+  const [mastery, groups] = await Promise.all([
+    api('/api/records/mastery').catch(() => null),
+    api('/api/records/wrong/groups').catch(() => []),
+  ]);
+  // 掌握度卡
+  if (mastery && mastery.total) {
+    const rc = mastery.rate >= 60 ? 'var(--jade)' : (mastery.rate >= 30 ? 'var(--amber)' : 'var(--vermilion)');
+    card.innerHTML = `
+      ${ringSvg({ size: 92, stroke: 9, r: 37, rate: mastery.rate, main: `${mastery.rate}%`, sub: '掌握度', arcColor: rc, subColor: 'var(--text-3)', numSize: 20, subSize: 9.5, numDy: -3, subDy: 12 })}
+      <div class="mastery-legend">
+        <div class="ml-row"><span class="ml-v is-pending">${mastery.pending}</span><span class="ml-k">待攻克</span></div>
+        <div class="ml-row"><span class="ml-v is-mastered">${mastery.mastered}</span><span class="ml-k">已掌握</span></div>
+        <div class="ml-row"><span class="ml-v">${mastery.total}</span><span class="ml-k">总错题</span></div>
+        <div class="ml-bar" title="已掌握 ${mastery.mastered} / ${mastery.total}"><i style="width:${mastery.rate}%;background:${rc}"></i></div>
+      </div>`;
+  } else if (mastery) {
+    card.innerHTML = `<div class="li-tip" style="margin:0">${ico('lightbulb', 13)} 刷题做错的题目会自动收录，跨 ${mastery.okDaysTarget || 3} 天累计做对即视为掌握并移出。</div>`;
+  } else {
+    card.remove();
   }
-  view.appendChild(moduleSubsEl(g, (subKey, subName) => renderWrongList(tab, subKey, subName, false)));
+  tabsHolder.appendChild(moduleTabsEl(tab, (key) => { wState.tab = key; renderWrongTab(view); }));
+  if (tab === 'custom') { listHolder.remove(); await renderWrongList('custom', '', '自定义题库', true); return; }
+  const name = moduleTabName(tab);
+  const g = (Array.isArray(groups) ? groups : []).find((x) => x.key === tab) || { key: tab, name, count: 0, subs: [] };
+
+  // 一键重做待攻克（主行动）：把当前模块的未掌握错题一次组卷，闭环从"看错题"变成"重做错题"
+  if (g.count > 0) {
+    const redo = el('button', 'btn btn-primary btn-block', `${ico('repeat', 15)} 一键重做待攻克（${g.count} 题）`);
+    redo.onclick = () => startWrongRandom(tab, '', true);
+    listHolder.appendChild(redo);
+  }
+  // 分组列表：按知识点（章节）聚合，每题带"错 N 次 / 已对 M 天"真实标签
+  const listWrap = el('div');
+  listHolder.appendChild(listWrap);
+  listWrap.innerHTML = '<div class="spinner" style="width:20px;height:20px;margin:14px auto"></div>';
+  let items = [];
+  try {
+    const data = await api(`/api/records/wrong?limit=200&group=${encodeURIComponent(tab)}&sub=`);
+    items = Array.isArray(data) ? data : (data.list || []);
+  } catch { /* 列表失败不影响掌握度与入口 */ }
+  listWrap.innerHTML = '';
+  if (!items.length) {
+    if (!g.subs.length && g.count === 0) {
+      listWrap.appendChild(el('div', 'empty', `<span class="empty-ico">${ico('bookX', 40)}</span>暂无${esc(name)}错题<br>刷题做错的题目会自动收录到这里`));
+    } else {
+      // 有归档计数但拉不到明细（分页/权限边界）：退化为子模块入口，保证不出现"空白页"
+      listWrap.appendChild(moduleSubsEl(g, (subKey, subName) => renderWrongList(tab, subKey, subName, false)));
+    }
+  } else {
+    const target = mastery?.okDaysTarget || 3;
+    const byChap = new Map();
+    for (const w of items) {
+      const key = w.chapter || '未分类';
+      if (!byChap.has(key)) byChap.set(key, []);
+      byChap.get(key).push(w);
+    }
+    // 错得多的知识点排前面（"先补最大的洞"）
+    const chapList = [...byChap.entries()].sort((a, b) => {
+      const wa = a[1].reduce((n, x) => n + (x.wrongCount || 1), 0);
+      const wb = b[1].reduce((n, x) => n + (x.wrongCount || 1), 0);
+      return wb - wa;
+    });
+    for (const [chap, list] of chapList) {
+      const grp = el('div', 'wrong-group');
+      grp.innerHTML = `<div class="wrong-group-head"><b>${esc(chap)}</b><span>${list.length} 题</span></div>`;
+      const rows = el('div', 'wrong-group-list');
+      for (const w of list) {
+        const wrongCount = w.wrongCount || 1;
+        const okDays = w.okDays || 0;
+        const tagCls = okDays >= target ? 'tag-done' : (okDays > 0 ? 'tag-mid' : 'tag-err');
+        const progress = okDays >= target ? '已掌握' : `已对 ${okDays}/${target} 天`;
+        const row = el('div', `wrong-row${w.available === false ? ' li-disabled' : ''}`);
+        row.innerHTML = `
+          <div class="wr-text">${w.available === false ? `${renderStudyInline(w.content || '（题目已移除）')} <span class="li-badge">已移除</span>` : renderStudyInline(w.content || '（无题干）')}</div>
+          <div class="wr-meta">
+            <span class="${tagCls}">错 ${wrongCount} 次</span>
+            <span class="muted">${progress}</span>
+            ${w.available === false ? '' : '<span class="wr-redo">重做 ›</span>'}
+          </div>`;
+        if (w.available === false) row.onclick = () => toast('该题已从题库移除，无法重做');
+        else row.onclick = () => openQuestionBatch('wrong', w.questionId, tab, '', chap);
+        rows.appendChild(row);
+      }
+      grp.appendChild(rows);
+      listWrap.appendChild(grp);
+    }
+  }
+  // 次级动作：随机练习 / 一键整理 / 清空（主行动已被"一键重做"占用，这里全部降级为描边/文字）
+  const tools = el('div', 'action-row', '');
+  const bRandom = el('button', 'btn btn-ghost btn-sm', `${ico('play', 14)} 随机练习`);
+  bRandom.onclick = () => startWrongRandom(tab, '');
+  const bOrganize = el('button', 'btn btn-ghost btn-sm', `${ico('folderTree', 14)} 一键整理`);
+  bOrganize.onclick = () => organizeModule('wrong', () => renderWrongTab(view));
+  const bClear = el('button', 'btn btn-ghost btn-sm', `${ico('trash', 14)} 清空${esc(name)}错题`);
+  bClear.onclick = () => clearWrongGroup(tab, name, () => renderWrongTab(view));
+  tools.appendChild(bRandom);
+  tools.appendChild(bOrganize);
+  tools.appendChild(bClear);
+  listHolder.appendChild(tools);
 }
 
 /** 清空某大模块错题（确认弹窗） */
@@ -5082,9 +6270,9 @@ function appendWrongMore(view, listEl, loadPage, batchType, groupKey, subKey, su
   view.appendChild(more);
 }
 
-// ---------- 错题随机练习：从当前模块错题随机抽 10-15 题组一套练习 ----------
-async function startWrongRandom(groupKey, subKey) {
-  const toastBtn = $('#wrong-random');
+// ---------- 错题重做：随机抽题（默认）或全量重做待攻克（all=true） ----------
+async function startWrongRandom(groupKey, subKey, all) {
+  const toastBtn = all ? null : $('#wrong-random');
   if (toastBtn) { toastBtn.disabled = true; toastBtn.textContent = '抽取中…'; }
   try {
     // 分页拉全当前大模块/子模块错题 id（available 题）
@@ -5100,9 +6288,12 @@ async function startWrongRandom(groupKey, subKey) {
       if (offset >= total || !list.length) break;
     }
     if (!ids.length) { toast('当前模块暂无错题可练'); return; }
-    // 随机抽 10-15 道（不足则全量）
-    const n = Math.min(10 + Math.floor(Math.random() * 6), ids.length);
-    const picked = [...ids].sort(() => Math.random() - 0.5).slice(0, n);
+    // all=true：全量重做待攻克（与"一键重做（N 题）"按钮承诺一致）；
+    // 否则随机抽 10-15 道（不足则全量）
+    const picked = all
+      ? ids
+      : [...ids].sort(() => Math.random() - 0.5).slice(0, Math.min(10 + Math.floor(Math.random() * 6), ids.length));
+    if (all && picked.length > 80) toast(`本次共 ${picked.length} 题，可分次完成；中途退出会保留进度`);
     const questions = [];
     for (const id of picked) {
       try {
@@ -5114,9 +6305,9 @@ async function startWrongRandom(groupKey, subKey) {
     // 入栈来源层（当前所在页：子模块列表页保留其层数据，返回时回到原视图）：交卷返回时先 pop 做题层，再 pop 来源层
     const topLayer = store.navStack[store.navStack.length - 1];
     store.navStack.push((topLayer && (topLayer.name === 'wrong-list' || topLayer.name === 'wrong')) ? { ...topLayer } : { name: 'wrong' });
-    enterQuiz(questions, groupKey || questions[0].subject || '公务员·行测', 'wrong-random', null, '0');
+    enterQuiz(questions, groupKey || questions[0].subject || '公务员·行测', all ? 'wrong-retry-all' : 'wrong-random', null, '0');
   } catch (e) {
-    toast('随机练习失败：' + e.message);
+    toast('错题重做失败：' + e.message);
   } finally {
     if (toastBtn) { toastBtn.disabled = false; toastBtn.textContent = `${ico('play', 15)} 随机练习（从错题抽 10-15 题）`; }
   }
@@ -5147,6 +6338,7 @@ async function openQuestionById(questionId, from) {
     s.subject = q.subject || store.state.subject || '';
     s.chapter = q.chapter || null;
     s.mock = '0';
+    setView('practice');
     stopTimer();
     startTimer();
     renderQuestion();
@@ -6367,13 +7559,13 @@ function esc(s) {
 
 // ---------- 导航 ----------
 document.addEventListener('click', (e) => {
-  const nav = e.target.closest('#bottom-nav .nav-item');
+  const nav = e.target.closest('#bottom-nav .nav-item, #side-nav .side-item');
   if (!nav) return;
   const name = nav.dataset.nav;
-  if (name === 'home') renderHome();
-  else if (name === 'papers') openPaperConfig();
+  if (name === 'today') renderToday();
+  else if (name === 'practice-hub') renderPracticeHub();
   else if (name === 'wrong') renderWrong();
-  else if (name === 'fav') renderFavorites();
+  else if (name === 'me') renderMe();
 });
 
 $('#btn-back').onclick = goBack;

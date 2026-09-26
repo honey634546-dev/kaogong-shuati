@@ -3,11 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta name="theme-color" content="#007aff" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#FBFAF8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#101215" media="(prefers-color-scheme: dark)">
 <title>刷题 · 行测/申论/事业编</title>
-<link rel="stylesheet" href="style.css?v=20260923-attempt-review-1">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%23007aff'/><path d='M28 52 L44 68 L74 34' fill='none' stroke='%23ffffff' stroke-width='10' stroke-linecap='round' stroke-linejoin='round'/><circle cx='76' cy='72' r='7' fill='%23ff9f0a'/></svg>">
+<link rel="stylesheet" href="style.css?v=20260926-inkstone-2">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%231F4E8C'/><path d='M26 52 L42 68 L72 34' fill='none' stroke='%23ffffff' stroke-width='10' stroke-linecap='round' stroke-linejoin='round'/><circle cx='77' cy='73' r='8' fill='%23C0392B'/></svg>">
 <script>
   // 主题初始化（防闪烁）：localStorage > 系统
   (function () {
@@ -17,8 +17,8 @@
 </script>
 </head>
 <body>
-<div id="boot-splash" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;width:100%;height:100%;z-index:9999;background:#007aff;color:#fff;flex-direction:column;align-items:center;justify-content:center;gap:18px;font-family:system-ui,sans-serif;text-align:center;padding:24px">
-  <svg width="72" height="72" viewBox="0 0 100 100"><rect x="6" y="6" width="88" height="88" rx="22" fill="rgba(255,255,255,.12)" stroke="rgba(255,255,255,.32)" stroke-width="2"/><path d="M28 52 L44 68 L74 34" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/><circle cx="76" cy="72" r="7" fill="#ffd60a"/></svg>
+<div id="boot-splash" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;width:100%;height:100%;z-index:9999;background:#1F4E8C;color:#fff;flex-direction:column;align-items:center;justify-content:center;gap:18px;font-family:system-ui,sans-serif;text-align:center;padding:24px">
+  <svg width="72" height="72" viewBox="0 0 100 100"><rect x="6" y="6" width="88" height="88" rx="22" fill="rgba(255,255,255,.12)" stroke="rgba(255,255,255,.32)" stroke-width="2"/><path d="M26 52 L42 68 L72 34" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/><circle cx="77" cy="73" r="8" fill="#C0392B"/></svg>
   <div style="font-size:21px;font-weight:700;letter-spacing:0">刷题</div>
   <div style="font-size:13px;opacity:.85">正在准备题库，首次启动需复制题库文件…</div>
   <div style="width:180px;height:4px;border-radius:2px;background:rgba(255,255,255,.28);overflow:hidden"><div id="boot-splash-bar" style="width:0%;height:100%;background:#fff;border-radius:2px;transition:width .3s"></div></div>
@@ -37,19 +37,20 @@
   </main>
 
   <nav id="bottom-nav" style="display:none">
-    <button data-nav="home" class="nav-item active"><span class="nav-ico"><span class="o"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9.5 21v-6h5v6"/></svg></span><span class="f"><svg viewBox="0 0 24 24" width="21" height="21" fill="currentColor"><path fill-rule="evenodd" d="M12 2.8 3.2 10.5l1.5 1.9L6 11v8.2A1.8 1.8 0 0 0 7.8 21h8.4a1.8 1.8 0 0 0 1.8-1.8V11l1.3 1.4 1.5-1.9L12 2.8ZM9.6 21v-3.6h4.8V21h-4.8Z"/></svg></span></span>首页</button>
-    <button data-nav="papers" class="nav-item"><span class="nav-ico"><span class="o"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/></svg></span><span class="f"><svg viewBox="0 0 24 24" width="21" height="21" fill="currentColor"><path fill-rule="evenodd" d="M12 22a10 10 0 1 1 0-20 10 10 0 0 1 0 20Zm0-5a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm0-2.8a2.2 2.2 0 1 1 0-4.4 2.2 2.2 0 0 1 0 4.4Z"/></svg></span></span>智能组卷</button>
-    <button data-nav="wrong" class="nav-item"><span class="nav-ico"><span class="o"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V2H6.5A2.5 2.5 0 0 0 4 4.5Z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/><path d="M9 7h7M9 11h5"/></svg></span><span class="f"><svg viewBox="0 0 24 24" width="21" height="21" fill="currentColor"><path fill-rule="evenodd" d="M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5Zm4 2v16h2V4h-2Z"/></svg></span></span>错题</button>
-    <button data-nav="fav" class="nav-item"><span class="nav-ico"><span class="o"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1Z"/></svg></span><span class="f"><svg viewBox="0 0 24 24" width="21" height="21" fill="currentColor"><path d="M12 2.2 15.1 8.4l6.9 1-5 4.9 1.2 6.8-6.2-3.2-6.2 3.2 1.2-6.8-5-4.9 6.9-1L12 2.2Z"/></svg></span></span>收藏</button>
+    <button data-nav="today" class="nav-item active"><span class="nav-ico"><span class="o"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9.5 21v-6h5v6"/></svg></span><span class="f"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path fill-rule="evenodd" d="M12 2.8 3.2 10.5l1.5 1.9L6 11v8.2A1.8 1.8 0 0 0 7.8 21h8.4a1.8 1.8 0 0 0 1.8-1.8V11l1.3 1.4 1.5-1.9L12 2.8ZM9.6 21v-3.6h4.8V21h-4.8Z"/></svg></span></span>今日</button>
+    <button data-nav="practice-hub" class="nav-item"><span class="nav-ico"><span class="o"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V2H6.5A2.5 2.5 0 0 0 4 4.5Z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/><path d="M9 7h7M9 11h5"/></svg></span><span class="f"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M6.5 2A2.5 2.5 0 0 0 4 4.5v15A2.5 2.5 0 0 0 6.5 22H20v-4.6H6.5a.9.9 0 0 1 0-1.8H20V2H6.5Zm2.5 5h7a1 1 0 1 1 0 2H9a1 1 0 1 1 0-2Zm0 4h5a1 1 0 1 1 0 2H9a1 1 0 1 1 0-2Z"/></svg></span></span>刷题</button>
+    <button data-nav="wrong" class="nav-item"><span class="nav-ico"><span class="o"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="m9.5 14.5 5 5M14.5 14.5l-5 5"/></svg></span><span class="f"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path fill-rule="evenodd" d="M13.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8.5L13.5 2Zm-4.2 11.3a1 1 0 0 1 1.4 0l1.3 1.3 1.3-1.3a1 1 0 1 1 1.4 1.4L13.4 16l1.3 1.3a1 1 0 0 1-1.4 1.4L12 17.4l-1.3 1.3a1 1 0 0 1-1.4-1.4l1.3-1.3-1.3-1.3a1 1 0 0 1 0-1.4Z"/></svg></span></span>错题</button>
+    <button data-nav="me" class="nav-item"><span class="nav-ico"><span class="o"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0"/></svg></span><span class="f"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M12 2.6a5.2 5.2 0 1 1 0 10.4 5.2 5.2 0 0 1 0-10.4ZM3.4 21a8.6 8.6 0 0 1 17.2 0Z"/></svg></span></span>我的</button>
   </nav>
 </div>
 
 <div id="toast" class="toast"></div>
 <script src="crop-math.js"></script>
+<script src="scratchpad.js?v=20260926-inkstone-1"></script>
 <script src="vendor/xlsx/xlsx.full.min.js"></script>
 <script src="ai-browser.js"></script>
 <script src="rich-text.js?v=20260920-rich-text-4"></script>
 <script src="local-bootstrap.js"></script>
-<script src="app.js?v=20260923-attempt-review-1"></script>
+<script src="app.js?v=20260926-inkstone-2"></script>
 </body>
 </html>

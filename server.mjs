@@ -980,7 +980,7 @@ function resolveRecordQuestion(questionId, ownerId = LEGACY_OWNER_ID) {
       },
     };
   }
-  const q = qQuestionById.get(questionId);
+  const q = questionByAnyId(questionId);
   if (!q) return null;
   const revision = Number(q.revision) > 0 ? Number(q.revision) : 1;
   return {
@@ -1160,6 +1160,30 @@ const qQuestionsByPaper = db.prepare(
 const qQuestionById = db.prepare(
   "SELECT questionId, paperId, chapter, type, content, contentHtml, options, answer, answerIndex, difficulty, analysis FROM questions WHERE questionId = ? LIMIT 1"
 );
+// 兜底：questionId 历史上可能以数字形式写入（practice_records.question_id 是 INTEGER），
+// 按数值比较一次；仅当查询串是纯数字时才启用，避免 'abc' 与 'xyz' 都被 CAST 成 0 而误命中。
+const qQuestionByNumericId = db.prepare(
+  "SELECT questionId, paperId, chapter, type, content, contentHtml, options, answer, answerIndex, difficulty, analysis FROM questions WHERE questionId NOT GLOB '*[^0-9]*' AND CAST(questionId AS INTEGER) = ? LIMIT 1"
+);
+/**
+ * 按 questionId 取题（全站唯一入口）。
+ *
+ * 为什么需要这层包装：node:sqlite 会把 JS 的 number 一律绑定为 REAL——
+ * `1001` 实际下发的是 `1001.0`，而 questions.questionId 是 TEXT 列，
+ * `'1001' = 1001.0` 恒为假。后果不是"少一条数据"，而是整条链路静默降级：
+ *   · 错题本每道题都被标成 available:false（"已移除"），用户无法重做
+ *   · resolveRecordQuestion 取不到权威题面/答案，判分退回"信任前端传入的 correct"
+ * 因此统一先按字符串精确匹配，再对纯数字 id 做一次数值兜底匹配。
+ */
+function questionByAnyId(raw) {
+  if (raw == null || raw === '') return undefined;
+  const asText = String(raw);
+  const hit = qQuestionById.get(asText);
+  if (hit) return hit;
+  if (!/^\d+$/.test(asText)) return undefined;
+  const n = Number(asText);
+  return Number.isSafeInteger(n) ? qQuestionByNumericId.get(n) : undefined;
+}
 const qChaptersBySubject = db.prepare(
   "SELECT DISTINCT q.chapter FROM questions q JOIN papers p ON p.id = q.paperId WHERE p.subjectName = ? AND q.chapter != '' ORDER BY q.chapter"
 );
@@ -1272,7 +1296,7 @@ function sourceGroupName(key) {
 function classifySource(questionId) {
   const id = String(questionId || '');
   if (id.startsWith('custom-')) return { groupKey: 'custom', groupName: sourceGroupName('custom'), subKey: '', subName: '', paperId: null };
-  const q = qQuestionById.get(id);
+  const q = questionByAnyId(id);
   if (!q) return { groupKey: '', groupName: sourceGroupName(''), subKey: '', subName: '', paperId: null };
   const p = qPaperById.get(q.paperId);
   const subject = p ? (p.subjectName || '') : '';
@@ -1306,6 +1330,106 @@ function buildSourceGroups(rows) {
   const unclassified = totals.get('') || 0;
   if (unclassified > 0) list.push({ key: '', name: '未分类', count: unclassified, subs: [] });
   return list;
+}
+/**
+ * 掌握度模型（2026-09-26）：不新增冗余列，直接从 practice_records 派生。
+ *
+ * 第一性原理：掌握度是"作答历史的派生物"，不是独立事实。若单独存一列，写入方（服务端 /
+ * 本地 IndexedDB / 历史迁移）任一路径漏写就会与真实记录漂移，而漂移后的"掌握度"无法被校验。
+ * 记录是唯一事实来源，因此每次读取时聚合推导：无迁移、无同步、历史数据立即生效。
+ *
+ * 判定口径与既有"错题自动移出"逻辑严格一致（见 POST /api/records：跨不同日期累计做对 3 次
+ * → archived=1）。之所以用"跨天 × 3 次"而不是"连续正确 2 次"：连续两次可能发生在同一分钟内
+ * （重做一遍而已），抗蒙对能力弱；跨天累计才对得上"遗忘曲线"。二者必须同源，否则会出现
+ * "掌握度环说已掌握、题目却还留在错题本里"的自相矛盾。
+ *
+ * 分类（互斥且完备）：
+ *   mastered  = okDays >= 3                 → 已掌握（服务端已自动移出错题本）
+ *   pending   = archived = 0 且 okDays < 3  → 待攻克（= 错题本列表里的题，与"一键重做"完全对齐）
+ *   dismissed = archived = 1 且 okDays < 3  → 用户主动移出，不计入掌握度环
+ * 主观题 is_correct IS NULL 不参与（与错题本口径一致）。
+ */
+const MASTERY_OK_DAYS = 3;
+/**
+ * 错题本统一基础过滤（列表 / 计数 / 分组共用，三处必须同源，否则"N 题"按钮承诺与结果不符）：
+ *   1) 未移出（archived = 0）
+ *   2) 按题去重：一题多次答错只算一条（取最近一次答错记录）——与本地模式口径一致
+ *   3) 排除已掌握题：跨天累计做对 >= MASTERY_OK_DAYS。不能只依赖"自动归档"这个副作用，
+ *      因为历史导入/迁移的数据可能没有走归档路径，仅靠 archived 会漏掉它们，
+ *      导致"掌握度环说已掌握、题却还在错题本里"。
+ * 占位符顺序固定为 (ownerId, ownerId, MASTERY_OK_DAYS)，调用方在其后追加 group/sub 条件。
+ */
+const WRONG_BASE_WHERE = `
+  FROM practice_records r
+  WHERE r.user_id = ? AND r.is_correct = 0 AND r.archived = 0
+    AND r.id = (SELECT MAX(r2.id) FROM practice_records r2
+                WHERE r2.user_id = r.user_id AND r2.question_id = r.question_id AND r2.is_correct = 0)
+    AND r.question_id NOT IN (
+      SELECT r3.question_id FROM practice_records r3
+      WHERE r3.user_id = ? AND r3.is_correct = 1
+      GROUP BY r3.question_id
+      HAVING COUNT(DISTINCT date(r3.created_at)) >= ?
+    )
+`;
+/** 单题掌握度：Map<questionId, {okDays, wrongCount, attempts, mastered}> */
+function masteryOf(ownerId, ids) {
+  const out = new Map();
+  const list = (ids || []).map((x) => String(x)).filter(Boolean);
+  if (!list.length) return out;
+  const ph = list.map(() => '?').join(',');
+  const rows = pdb.prepare(`
+    SELECT question_id,
+           COUNT(*) AS attempts,
+           SUM(CASE WHEN is_correct = 0 THEN 1 ELSE 0 END) AS wrong_count,
+           COUNT(DISTINCT CASE WHEN is_correct = 1 THEN date(created_at) END) AS ok_days
+    FROM practice_records
+    WHERE user_id = ? AND is_correct IS NOT NULL AND question_id IN (${ph})
+    GROUP BY question_id
+  `).all(ownerId, ...list);
+  for (const r of rows) {
+    const okDays = Number(r.ok_days) || 0;
+    out.set(String(r.question_id), {
+      okDays,
+      attempts: Number(r.attempts) || 0,
+      wrongCount: Number(r.wrong_count) || 0,
+      mastered: okDays >= MASTERY_OK_DAYS,
+    });
+  }
+  return out;
+}
+/** 错题本掌握度总览：{total, mastered, pending, dismissed, rate, okDaysTarget, bySubject} */
+function masteryStats(ownerId) {
+  const rows = pdb.prepare(`
+    SELECT question_id, MIN(subject) AS subject, MAX(archived) AS archived,
+           COUNT(DISTINCT CASE WHEN is_correct = 1 THEN date(created_at) END) AS ok_days
+    FROM practice_records
+    WHERE user_id = ? AND is_correct IS NOT NULL
+    GROUP BY question_id
+    HAVING SUM(CASE WHEN is_correct = 0 THEN 1 ELSE 0 END) > 0
+  `).all(ownerId);
+  const bySubj = new Map();
+  let mastered = 0, pending = 0, dismissed = 0;
+  for (const r of rows) {
+    const okDays = Number(r.ok_days) || 0;
+    const isMastered = okDays >= MASTERY_OK_DAYS;
+    const isDismissed = !isMastered && Number(r.archived) === 1;
+    if (isMastered) mastered++;
+    else if (isDismissed) dismissed++;
+    else pending++;
+    if (isDismissed) continue; // 主动移出的不计入科目分布，避免虚高
+    const key = r.subject || '未分类';
+    const e = bySubj.get(key) || { subject: key, total: 0, mastered: 0, pending: 0 };
+    e.total++;
+    if (isMastered) e.mastered++; else e.pending++;
+    bySubj.set(key, e);
+  }
+  const total = mastered + pending;
+  return {
+    total, mastered, pending, dismissed,
+    rate: total ? Math.round((mastered / total) * 100) : 0,
+    okDaysTarget: MASTERY_OK_DAYS,
+    bySubject: [...bySubj.values()].sort((a, b) => b.total - a.total),
+  };
 }
 /** 随机出题（支持真题/模拟题过滤；chapters 为数组时可多章节混出；year: 'all'|'3'|'5'|'10'，缺省近十年；difficulty: 'easy'|'balanced'|'hard'|'random'）
  *  注意：题库删除后 id 有空洞，单点取样会落空 → 多轮取样 + 顺序补取，凑够 n 道
@@ -2347,7 +2471,7 @@ const server = http.createServer(async (req, res) => {
         }
         const id = Number(raw);
         if (!id) return err(res, 400, '缺少 id');
-        const q = qQuestionById.get(id);
+        const q = questionByAnyId(id);
         if (!q) return err(res, 404, '题目不存在');
         const subject = pdb.prepare('SELECT subjectName FROM tiku.papers WHERE id = ?').get(q.paperId)?.subjectName ?? '';
         // 材料组信息（与 /api/practice 同构）：错题本/收藏夹单题重练也要显示给定材料
@@ -2560,7 +2684,7 @@ const server = http.createServer(async (req, res) => {
             const cr = visibleCustomQuestion(ownerId, cid);
             if (cr) { content = cr.prompt + (parseImages(cr.images).length ? ' [图]' : ''); type = 'custom'; }
           } else {
-            const q = qQuestionById.get(r.question_id);
+            const q = questionByAnyId(r.question_id);
             if (q) { content = q.content; type = q.type; }
           }
           return {
@@ -2626,7 +2750,7 @@ const server = http.createServer(async (req, res) => {
             const cr = visibleCustomQuestion(ownerId, cid);
             if (cr) { content = cr.prompt + (parseImages(cr.images).length ? ' [图]' : ''); type = 'custom'; }
           } else {
-            const q = qQuestionById.get(r.question_id);
+            const q = questionByAnyId(r.question_id);
             if (q) { content = q.content; type = q.type; }
           }
           return {
@@ -3238,6 +3362,8 @@ const server = http.createServer(async (req, res) => {
         const from = url.searchParams.get('from');
         const to = url.searchParams.get('to');
         const tikuCond = subject ? "AND practice_records.question_id IN (SELECT tq.questionId FROM tiku.questions tq JOIN tiku.papers tp ON tp.id = tq.paperId WHERE tp.subjectName = ?)" : '';
+        // 同一条件在错题本基础过滤（表别名 r）下的等价写法，供"待订错题"计数复用
+        const tikuCondR = subject ? "AND r.question_id IN (SELECT tq.questionId FROM tiku.questions tq JOIN tiku.papers tp ON tp.id = tq.paperId WHERE tp.subjectName = ?)" : '';
         const tikuParams = subject ? [subject] : [];
         const timeCond = days > 0
           ? `AND date(created_at) >= date('now','localtime','-${days} days')`
@@ -3249,11 +3375,10 @@ const server = http.createServer(async (req, res) => {
           SELECT COUNT(*) c, SUM(is_correct) ok, SUM(is_correct IS NOT NULL) graded FROM practice_records
           WHERE user_id = ? ${tikuCond} ${timeCond} ${timeCond2}
         `).get(ownerId, ...tikuParams, ...timeParams, ...timeParams2);
-        // 错题 = 严格答错（is_correct=0），与错题本口径一致（主观题 is_correct=NULL 不计入；archived 已从错题本移除的不计）
+        // 错题 = 与错题本列表同口径（按题去重 + 排除已掌握 + 未移出），保证"待订错题"数字与错题本一致
         const wrong = pdb.prepare(`
-          SELECT COUNT(*) c FROM practice_records WHERE is_correct = 0 AND archived = 0
-          AND user_id = ? ${tikuCond} ${timeCond} ${timeCond2}
-        `).get(ownerId, ...tikuParams, ...timeParams, ...timeParams2).c;
+          SELECT COUNT(*) n ${WRONG_BASE_WHERE} ${tikuCondR} ${timeCond} ${timeCond2}
+        `).get(ownerId, ownerId, MASTERY_OK_DAYS, ...tikuParams, ...timeParams, ...timeParams2).n;
         const byChapter = pdb.prepare(`
           SELECT chapter, COUNT(*) c, SUM(is_correct) ok
           FROM practice_records
@@ -3280,12 +3405,18 @@ const server = http.createServer(async (req, res) => {
           daily,
         });
       }
+      // 错题本掌握度总览（派生自 practice_records 作答序列，无冗余列）
+      if (pathname === '/api/records/mastery' && req.method === 'GET') {
+        return json(res, 200, masteryStats(ownerId));
+      }
       // 分组总览（5 大模块 + 未分类，供错题本页面上方 tab / 子模块列表）
       if (pathname === '/api/records/wrong/groups' && req.method === 'GET') {
+        // 注意：WRONG_BASE_WHERE 已含 FROM practice_records r，此处不得再写 FROM
         const rows = pdb.prepare(`
-          SELECT group_key g, sub_key s, COUNT(*) c FROM practice_records
-          WHERE user_id = ? AND is_correct = 0 AND archived = 0 GROUP BY group_key, sub_key
-        `).all(ownerId);
+          SELECT r.group_key g, r.sub_key s, COUNT(*) c
+          ${WRONG_BASE_WHERE}
+          GROUP BY r.group_key, r.sub_key
+        `).all(ownerId, ownerId, MASTERY_OK_DAYS);
         return json(res, 200, buildSourceGroups(rows));
       }
       // 服务端错题本（跨设备同步；联表 tiku.db 取题目内容；archived 标记移除但保留历史）
@@ -3296,14 +3427,16 @@ const server = http.createServer(async (req, res) => {
         const hasGroup = url.searchParams.has('group');
         const group = url.searchParams.get('group') ?? '';
         const sub = url.searchParams.get('sub') ?? '';
-        const groupCond = hasGroup ? 'AND group_key = ?' : '';
-        const subCond = sub !== '' ? 'AND sub_key = ?' : '';
-        const params = hasGroup ? [ownerId, group, ...(sub !== '' ? [sub] : []), limit, offset] : [ownerId, limit, offset];
+        const groupCond = hasGroup ? 'AND r.group_key = ?' : '';
+        const subCond = sub !== '' ? 'AND r.sub_key = ?' : '';
+        const groupParams = hasGroup ? [group, ...(sub !== '' ? [sub] : [])] : [];
         const rows = pdb.prepare(`
-          SELECT id, question_id, subject, chapter, selected, created_at
-          FROM practice_records WHERE user_id = ? AND is_correct = 0 AND archived = 0 ${groupCond} ${subCond}
-          ORDER BY id DESC LIMIT ? OFFSET ?
-        `).all(...params);
+          SELECT r.id, r.question_id, r.subject, r.chapter, r.selected, r.created_at
+          ${WRONG_BASE_WHERE} ${groupCond} ${subCond}
+          ORDER BY r.id DESC LIMIT ? OFFSET ?
+        `).all(ownerId, ownerId, MASTERY_OK_DAYS, ...groupParams, limit, offset);
+        // 本页题目的掌握度（跨天做对次数 / 错误次数），一次批量查询避免 N+1
+        const mastery = masteryOf(ownerId, rows.map((r) => r.question_id));
         const list = rows.map((r) => {
           let q = null;
           if (String(r.question_id).startsWith('custom-')) {
@@ -3312,10 +3445,11 @@ const server = http.createServer(async (req, res) => {
             const cr = visibleCustomQuestion(ownerId, cid);
             if (cr) q = { content: cr.prompt + (parseImages(cr.images).length ? ' [图]' : ''), type: 'custom' };
           } else {
-            q = qQuestionById.get(r.question_id);
+            q = questionByAnyId(r.question_id);
           }
           let myAnswer = r.selected;
           try { const arr = JSON.parse(r.selected); if (Array.isArray(arr)) myAnswer = arr.slice().sort((a, b) => a - b).join(','); } catch { /* 保持原样 */ }
+          const m = mastery.get(String(r.question_id)) || { okDays: 0, wrongCount: 1, attempts: 1, mastered: false };
           return {
             id: r.id,
             questionId: r.question_id,
@@ -3326,10 +3460,15 @@ const server = http.createServer(async (req, res) => {
             time: r.created_at,
             content: q ? q.content.slice(0, 80) : null,
             type: q ? q.type : null,
+            okDays: m.okDays,          // 累计做对的天数（>= okDaysTarget 即已掌握并自动移出）
+            wrongCount: m.wrongCount,  // 该题累计答错次数
+            attempts: m.attempts,      // 该题累计作答次数
+            mastered: m.mastered,
           };
         });
-        // 返回总数（标题显示真实错题数）+ 分页游标，前端可"加载更多"
-        const total = pdb.prepare(`SELECT COUNT(*) n FROM practice_records WHERE user_id = ? AND is_correct = 0 AND archived = 0 ${groupCond} ${subCond}`).get(...(hasGroup ? [ownerId, group, ...(sub !== '' ? [sub] : [])] : [ownerId])).n;
+        // 返回总数（与列表同口径：按题去重 + 排除已掌握），前端据此显示"一键重做（N 题）"
+        const total = pdb.prepare(`SELECT COUNT(*) n ${WRONG_BASE_WHERE} ${groupCond} ${subCond}`)
+          .get(ownerId, ownerId, MASTERY_OK_DAYS, ...groupParams).n;
         return json(res, 200, { list, total, offset, limit, hasMore: offset + list.length < total });
       }
       // 清空错题（软删除：archived=1，统计历史保留；按 id 单条移除；questionId 按题移除；subject 指定时只清该模块）
@@ -3840,7 +3979,7 @@ const server = http.createServer(async (req, res) => {
             };
           }
         } else {
-          q = qQuestionById.get(questionId);
+          q = questionByAnyId(questionId);
         }
         if (!q) return err(res, 404, '题目不存在');
         // 缓存键：题 + 作答（selected/correct 归一化；同一题同一作答只调一次 LLM）
@@ -4163,7 +4302,7 @@ const server = http.createServer(async (req, res) => {
             score: null,
           });
         }
-        const q = questionId ? qQuestionById.get(questionId) : null;
+        const q = questionId ? questionByAnyId(questionId) : null;
         // 从题干提取分值（如"（15分）"）
         const scoreMatch = (q?.content || '').match(/[（(]\s*(\d{1,2})\s*分\s*[）)]/);
         const fullScore = scoreMatch ? scoreMatch[1] : null;
@@ -4241,7 +4380,7 @@ const server = http.createServer(async (req, res) => {
         const questionId = parsed.questionId;
         const result = String(parsed.result || '').trim();
         if (!result) return err(res, 400, '缺少批改结果');
-        const q = questionId ? qQuestionById.get(questionId) : null;
+        const q = questionId ? questionByAnyId(questionId) : null;
         if (questionId && q) {
           try {
             const p = db.prepare('SELECT subjectName FROM papers WHERE id = ?').get(q.paperId);

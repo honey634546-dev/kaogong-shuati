@@ -6,6 +6,7 @@
 import { checkAnswer } from './lib/local-queries.js';
 import { customQuestionHtml, parseImages } from './lib/custom-parser.js';
 import { normalizeCustomQuestions } from './lib/custom-bank.js';
+import { localPendingWrong } from './local-api.js';
 
 /**
  * 自定义题材料分组组装（与 server.mjs groupCustomPracticeRows 同构，双端同步维护）：
@@ -211,7 +212,8 @@ async function localTutorReply({ store, ai, conversation, content, body }) {
 export function createLocalHandler({ query, records, store, ai }) {
   /** 聚合统计（与 server /api/records/stats 同构：total/correct/wrong/rate/byChapter/last7/daily） */
   async function statsWithParams({ subject, days, from, to } = {}) {
-    let rows = await store.getAll('records');
+    const all = await store.getAll('records');
+    let rows = all;
     if (subject) rows = rows.filter((r) => r.subject === subject);
     if (days) {
       const cutoff = Date.now() - Number(days) * 86400000;
@@ -225,8 +227,8 @@ export function createLocalHandler({ query, records, store, ai }) {
     const total = rows.length;
     const correct = rows.filter((r) => r.is_correct === 1).length;
     const graded = rows.filter((r) => r.is_correct === 1 || r.is_correct === 0).length;
-    // 错题 = 严格答错（is_correct=0），与 server /api/records/stats 同构；主观题（NULL）不计入错题
-    const wrong = rows.filter((r) => r.is_correct === 0).length;
+    // 错题 = 与错题本列表同口径（按题去重 + 排除已掌握 + 未移出）；okDays 用全量历史算，不受时间过滤影响
+    const wrong = localPendingWrong(all, rows).length;
 
     // byChapter：按章节聚合（与 server 同构：{chapter, c, ok}）
     const byChapterMap = new Map();
@@ -459,6 +461,8 @@ export function createLocalHandler({ query, records, store, ai }) {
       });
     }
     if (route === 'GET /records/recent') return records.recent({ limit: Number(qs.get('limit') || 20) });
+    // 错题本掌握度总览（与 server /api/records/mastery 同构）
+    if (route === 'GET /records/mastery') return records.mastery();
     // 来源分组总览（5 大模块 + 未分类）
     if (route === 'GET /records/wrong/groups') return records.groups('wrong');
     if (route === 'GET /favorites/groups') return records.groups('favorites');

@@ -52,6 +52,7 @@ ai-config.db
 
 # ===== 本地工具状态 / 数据目录（不上传）=====
 .workbuddy/
+.workbuddy-ai/
 .zcode/
 parsed/
 pdf-src/

@@ -134,7 +134,106 @@ export function aggregateStats(records, tiku) {
   return { doneBySubject, chapterStats, subStats, catStats };
 }
 
+/**
+ * 掌握度模型（本地版，与 server.mjs 的 masteryOf / masteryStats 逐字段同构）
+ * 第一性原理：掌握度是作答历史的派生物，不落冗余列——记录是唯一事实来源。
+ * 口径与既有"错题自动移出"一致：跨不同日期累计做对 MASTERY_OK_DAYS(3) 次 → 已掌握。
+ * 分类互斥完备：mastered（okDays>=3）/ pending（未移出且 okDays<3）/ dismissed（已移出且 okDays<3）。
+ */
+const LOCAL_MASTERY_OK_DAYS = 3;
+/** 本地日期键（YYYY-MM-DD，与 SQLite date(created_at,'localtime') 同粒度） */
+function localDayKey(ts) {
+  const d = new Date(Number(ts) || 0);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+/** 单题掌握度 → Map<questionId, {okDays, wrongCount, attempts, mastered}> */
+function localMasteryOf(allRecords, ids) {
+  const out = new Map();
+  const want = new Set((ids || []).map((x) => String(x)));
+  if (!want.size) return out;
+  const byQ = new Map();
+  for (const r of allRecords) {
+    if (r.is_correct !== 0 && r.is_correct !== 1) continue; // 主观题不参与
+    const key = String(r.question_id);
+    if (!want.has(key)) continue;
+    if (!byQ.has(key)) byQ.set(key, []);
+    byQ.get(key).push(r);
+  }
+  for (const [key, recs] of byQ) {
+    const okDays = new Set(recs.filter((r) => r.is_correct === 1).map((r) => localDayKey(r.created_at))).size;
+    out.set(key, {
+      okDays,
+      attempts: recs.length,
+      wrongCount: recs.filter((r) => r.is_correct === 0).length,
+      mastered: okDays >= LOCAL_MASTERY_OK_DAYS,
+    });
+  }
+  return out;
+}
+/** 错题本掌握度总览（与 server /api/records/mastery 同构） */function localMasteryStats(allRecords) {
+  const byQ = new Map();
+  for (const r of allRecords) {
+    if (r.is_correct !== 0 && r.is_correct !== 1) continue;
+    const key = String(r.question_id);
+    if (!byQ.has(key)) byQ.set(key, []);
+    byQ.get(key).push(r);
+  }
+  const bySubj = new Map();
+  let mastered = 0, pending = 0, dismissed = 0;
+  for (const recs of byQ.values()) {
+    if (!recs.some((r) => r.is_correct === 0)) continue; // 从未答错 → 不属于错题本口径
+    const okDays = new Set(recs.filter((r) => r.is_correct === 1).map((r) => localDayKey(r.created_at))).size;
+    const isMastered = okDays >= LOCAL_MASTERY_OK_DAYS;
+    // archived：本地记录以 0/1 存储（缺省视为未移出）
+    const isDismissed = !isMastered && Number(recs[0].archived || 0) === 1;
+    if (isMastered) mastered++;
+    else if (isDismissed) { dismissed++; continue; }
+    else pending++;
+    const key = recs[0].subject || '未分类';
+    const e = bySubj.get(key) || { subject: key, total: 0, mastered: 0, pending: 0 };
+    e.total++;
+    if (isMastered) e.mastered++; else e.pending++;
+    bySubj.set(key, e);
+  }
+  const total = mastered + pending;
+  return {
+    total, mastered, pending, dismissed,
+    rate: total ? Math.round((mastered / total) * 100) : 0,
+    okDaysTarget: LOCAL_MASTERY_OK_DAYS,
+    bySubject: [...bySubj.values()].sort((a, b) => b.total - a.total),
+  };
+}
+
 // ---------- 记录层（存储适配器接口） ----------
+/**
+ * 错题本统一基础过滤（本地版，与 server 的 WRONG_BASE_WHERE 同口径）：
+ *   1) 未移出（archived ≠ 1）  2) 按题去重（取最近一次答错记录）  3) 排除已掌握（okDays >= 3）
+ * `all` 用于算 okDays（必须是不加时间/科目过滤的全量历史），`scope` 为已按条件过滤后的记录。
+ * 列表 / 分组计数 / 统计三处共用，保证"一键重做（N 题）"的 N 与实际题量一致。
+ */
+export function localPendingWrong(all, scope) {
+  const okDaysOf = new Map();
+  for (const r of all) {
+    if (r.is_correct !== 1) continue;
+    const key = String(r.question_id);
+    if (!okDaysOf.has(key)) okDaysOf.set(key, new Set());
+    okDaysOf.get(key).add(localDayKey(r.created_at));
+  }
+  const latest = new Map();
+  for (const r of scope) {
+    if (r.is_correct !== 0 || Number(r.archived || 0) === 1) continue;
+    const key = String(r.question_id);
+    const prev = latest.get(key);
+    if (!prev || Number(r.created_at || 0) > Number(prev.created_at || 0)) latest.set(key, r);
+  }
+  const out = [];
+  for (const [key, r] of latest) {
+    if ((okDaysOf.get(key)?.size || 0) >= LOCAL_MASTERY_OK_DAYS) continue; // 已掌握 → 移出列表
+    out.push(r);
+  }
+  return out;
+}
+
 export function createRecordsApi(store, tiku, onChanged) {
   return {
     /** 收藏列表（与 /api/favorites GET 同构：{list,total,offset,limit,hasMore}；group/sub 按来源归档过滤） */
@@ -273,7 +372,10 @@ export function createRecordsApi(store, tiku, onChanged) {
       const row = { question_id: questionId, paper_id: paperId ?? cls.paperId ?? null, subject: subject || '', chapter: chapter || '', question_type: type ?? null, selected: selected ?? null, is_correct: correct == null ? null : (correct ? 1 : 0), cost_ms: costMs ?? null, explanation_ms: Math.max(0, Number(explanationMs) || 0), group_key: cls.groupKey, sub_key: cls.subKey, submission_key: submissionKey || '', attempt_id: attemptId || '', question_uid: questionUid || '', question_revision: Number(questionRevision) > 0 ? Number(questionRevision) : 1, question_snapshot: questionSnapshot || '', answer_snapshot: answerSnapshot || '', created_at: now };
       if (existing.length) await store.deleteBy('records', 'id', existing[0].id);
       await store.put('records', row);
-      // 错题自动移除：客观题累计做对 3 次（按不同日期计，与 server 口径一致）→ 删除该题错题记录，正确记录与统计保留
+      // 错题自动移除：客观题跨不同日期累计做对 3 次（与 server 口径一致）→ 软删除该题错题记录
+      // （archived=1，正确记录与统计历史保留，掌握度环据此统计"已掌握"）
+      // 与 server 的差异修正（2026-09-26）：旧实现是硬删除，导致本地模式永远算不出"已掌握"，
+      // 与服务端掌握度环口径不一致；改为软删除后双模式同构。
       // 只针对行测/职测客观题（错题本收录范围）；主观题（correct=null）不参与
       if (correct === true) {
         const all = await store.getAll('records');
@@ -281,9 +383,11 @@ export function createRecordsApi(store, tiku, onChanged) {
           all.filter((r) => r.question_id === questionId && r.is_correct === 1)
             .map((r) => new Date(r.created_at).toDateString())
         );
-        if (okDays.size >= 3) {
+        if (okDays.size >= LOCAL_MASTERY_OK_DAYS) {
           for (const r of all) {
-            if (r.question_id === questionId && r.is_correct === 0) await store.deleteBy('records', 'id', r.id);
+            if (r.question_id === questionId && r.is_correct === 0 && Number(r.archived || 0) !== 1) {
+              await store.put('records', { ...r, archived: 1 });
+            }
           }
         }
       }
@@ -297,21 +401,22 @@ export function createRecordsApi(store, tiku, onChanged) {
       const agg = aggregateStats(records, tiku);
       const total = records.length;
       const done = new Set(records.filter((r) => r.is_correct).map((r) => `${r.subject}|${r.question_id}`)).size;
-      // 错题 = 严格答错（is_correct=0）；主观题（申论/综应 is_correct=null）不计入错题
-      const wrong = records.filter((r) => r.is_correct === 0).length;
+      // 错题 = 与错题本列表同口径（按题去重 + 排除已掌握 + 未移出）
+      const wrong = localPendingWrong(records, records).length;
       return { total, done, wrong };
     },
     /** 错题本（与 /api/records/wrong 同构：答错题去重 + 分页；只收 is_correct=0 的题；group/sub 按来源归档过滤） */
     async wrong({ limit = 50, offset = 0, group, sub } = {}) {
-      let rows = (await store.getAll('records')).filter((r) => r.is_correct === 0);
-      // 主观题（申论/综应 is_correct=null）不计入错题本；按来源归档过滤（group='' 表示未分类，undefined=全部）
+      const all = await store.getAll('records');
+      // 统一基础过滤（按题去重 + 排除已掌握 + 未移出），再按来源归档过滤
+      let rows = localPendingWrong(all, all);
       if (group !== undefined) rows = rows.filter((r) => (r.group_key || '') === group);
       if (sub) rows = rows.filter((r) => (r.sub_key || '') === sub);
       rows.sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
-      const seen = new Set();
-      const uniq = rows.filter((r) => (seen.has(r.question_id) ? false : (seen.add(r.question_id), true)));
-      const total = uniq.length;
-      const page = uniq.slice(offset, offset + limit);
+      const total = rows.length;
+      const page = rows.slice(offset, offset + limit);
+      // 掌握度（与 server masteryOf 同构）：按题目作答序列派生，无冗余列
+      const mastery = localMasteryOf(all, page.map((r) => r.question_id));
       // 自定义题内容从 IndexedDB 取（custom- 前缀）
       const customRows = (await store.getAll('custom_questions')).filter((x) => x.prompt);
       const customOf = new Map(customRows.map((x) => [Number(x.id), x]));
@@ -325,6 +430,7 @@ export function createRecordsApi(store, tiku, onChanged) {
         } else {
           q = tiku.get('SELECT content, contentHtml, type FROM questions WHERE questionId = ? LIMIT 1', r.question_id);
         }
+        const m = mastery.get(String(r.question_id)) || { okDays: 0, wrongCount: 1, attempts: 1, mastered: false };
         list.push({
           id: r.question_id,
           questionId: r.question_id,   // 与 server /api/records/wrong 同构（app.js 点开用此字段）
@@ -336,9 +442,17 @@ export function createRecordsApi(store, tiku, onChanged) {
           chapter: r.chapter || '',
           time: fmtDT(r.created_at),
           type: q?.type ?? null,
+          okDays: m.okDays,
+          wrongCount: m.wrongCount,
+          attempts: m.attempts,
+          mastered: m.mastered,
         });
       }
       return { list, total, offset, limit, hasMore: offset + list.length < total };
+    },
+    /** 错题本掌握度总览（与 server /api/records/mastery 同构）：派生式，无冗余列 */
+    async mastery() {
+      return localMasteryStats(await store.getAll('records'));
     },
     /** 最近记录（与 /api/records/recent 同构） */
     async recent({ limit = 20 } = {}) {
@@ -363,7 +477,7 @@ export function createRecordsApi(store, tiku, onChanged) {
      *  target='wrong'|'favorites'|'notes' → [{key,name,count,subs:[...]}] */
     async groups(target) {
       const rows = target === 'wrong'
-        ? (await store.getAll('records')).filter((r) => r.is_correct === 0)
+        ? localPendingWrong(await store.getAll('records'), await store.getAll('records'))
         : await store.getAll(target);
       return buildLocalGroups(rows);
     },
