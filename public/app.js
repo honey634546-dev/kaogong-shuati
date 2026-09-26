@@ -912,7 +912,10 @@ function buildTodayTasks(stats, todayCount, weakGroup, weakSubject, customBatche
 }
 /** 执行今日任务 */
 function runTodayTask(task, customBatches = []) {
-  if (!task || task.done) return;
+  if (!task) return;
+  if (task.done) {
+    toast(`已完成「${task.title}」，正在为你开启新一组练习…`);
+  }
   if (task.kind === 'import') { renderImport(); return; }
   if (task.kind === 'goal') { openExamGoalSheet(() => renderToday()); return; }
   if (task.kind === 'daily' || task.kind === 'random') {
