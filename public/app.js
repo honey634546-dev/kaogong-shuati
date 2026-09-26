@@ -2122,6 +2122,7 @@ async function customPractice(batchId, name) {
       if (!r.questions || r.questions.length === 0) { toast('该批次暂无题目'); return; }
       enterQuiz(r.questions, (r.batch && r.batch.subject) || '自定义', 'custom', null, null, null, mode === 'recite');
     } catch (e) { toast('加载失败：' + e.message); }
+  };
 }
 
 /** 启动自定义题库练习（今日任务/首页批次卡片/快捷随机练习共用） */
