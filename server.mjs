@@ -3632,6 +3632,7 @@ const server = http.createServer(async (req, res) => {
         const content = String(parsed.content ?? '').trim();
         if (!content) return err(res, 400, '消息内容不能为空');
         if (content.length > AI_CONVERSATION_MAX_CONTENT) return err(res, 400, `消息过长（≤${AI_CONVERSATION_MAX_CONTENT} 字符）`);
+        const ref = parsed.agentId ?? parsed.agent_id ?? parsed.role ?? parsed.agentRole ?? 'xingce-explainer';
         const baseAgent = requestAgent(req, ref);
         if (!baseAgent) return err(res, 404, 'AI 不存在');
         const agent = {
