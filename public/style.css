@@ -2310,4 +2310,662 @@ body:has(.scratch-overlay) #ai-ball {
   #view { max-width: 880px; }
 }
 
+/* ============================================================
+   考公刷题 UI/UX 升维重构样式 (R1 - R4)
+   ============================================================ */
 
+/* ---------- R1: 心流答题态极简排版居中 ---------- */
+#view[data-flow='1'],
+#view[data-exam='1']:not(:has(.quiz-rail)) {
+  margin-left: auto !important;
+  margin-right: auto !important;
+  max-width: 680px;
+}
+@media (min-width: 1024px) {
+  body:has(#view[data-flow='1']) {
+    padding-left: 0 !important;
+  }
+  body:has(#view[data-flow='1']) .side-nav {
+    display: none !important;
+  }
+  body:has(#view[data-flow='1']) #topbar {
+    left: 0 !important;
+  }
+  #view[data-flow='1'],
+  #view[data-exam='1']:not(:has(.quiz-rail)) {
+    max-width: 820px;
+  }
+}
+
+/* ---------- R2: 开题模式对比双卡片 (Dual Cards) ---------- */
+.mode-card-group {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin: 6px 0 14px;
+}
+@media (min-width: 580px) {
+  .mode-card-group {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.mode-card.chip {
+  display: flex !important;
+  align-items: flex-start !important;
+  gap: 12px !important;
+  padding: 14px 16px !important;
+  border-radius: var(--radius-sm) !important;
+  background: var(--surface) !important;
+  border: 1.5px solid var(--line) !important;
+  box-shadow: var(--shadow) !important;
+  cursor: pointer;
+  text-align: left !important;
+  position: relative;
+  transition: border-color var(--dur-2) var(--ease),
+              background var(--dur-2) var(--ease),
+              transform var(--dur-1) var(--ease),
+              box-shadow var(--dur-2) var(--ease);
+  color: var(--ink) !important;
+  box-sizing: border-box;
+  outline: none;
+}
+
+.mode-card.chip:hover {
+  border-color: color-mix(in srgb, var(--brand) 45%, var(--line)) !important;
+  transform: translateY(-1.5px);
+  box-shadow: var(--shadow-lg) !important;
+}
+
+.mode-card.chip:active {
+  transform: scale(0.985);
+}
+
+.mode-card.chip:focus-visible {
+  outline: 2px solid var(--brand) !important;
+  outline-offset: 2px;
+}
+
+.mode-card.chip.on,
+.mode-card.chip.active {
+  background: color-mix(in srgb, var(--brand) 6%, var(--surface)) !important;
+  border-color: var(--brand) !important;
+  box-shadow: 0 0 0 1.5px var(--brand), var(--shadow) !important;
+}
+
+.mode-card-indicator {
+  margin-top: 2px;
+  flex: 0 0 18px;
+  color: var(--ink-3);
+  transition: color var(--dur-2) var(--ease);
+}
+.mode-card.chip.on .mode-card-indicator,
+.mode-card.chip.active .mode-card-indicator {
+  color: var(--brand);
+}
+.mode-radio-dot {
+  opacity: 0;
+  transition: opacity var(--dur-1) var(--ease);
+}
+.mode-card.chip.on .mode-radio-dot,
+.mode-card.chip.active .mode-radio-dot {
+  opacity: 1;
+}
+
+.mode-card-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mode-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mode-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.mode-ico { font-size: 15px; line-height: 1; }
+.mode-text {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+.mode-bracket {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.mode-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.pill-flow {
+  background: var(--surface-2);
+  color: var(--ink-2);
+  border: 1px solid var(--line);
+}
+.pill-study {
+  background: var(--amber-soft);
+  color: var(--amber);
+  border: 1px solid color-mix(in srgb, var(--amber) 25%, transparent);
+}
+.mode-card.chip.on .pill-flow,
+.mode-card.chip.active .pill-flow {
+  background: var(--brand-soft);
+  color: var(--brand);
+  border-color: color-mix(in srgb, var(--brand) 25%, transparent);
+}
+
+.mode-desc {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+
+.mode-bullets {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 2px;
+}
+.bullet-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: var(--ink-3);
+  line-height: 1.35;
+}
+.bullet-item svg {
+  color: var(--ink-3);
+  flex-shrink: 0;
+}
+.mode-card.chip.on .bullet-item,
+.mode-card.chip.active .bullet-item {
+  color: var(--ink-2);
+}
+.mode-card.chip.on .bullet-item svg,
+.mode-card.chip.active .bullet-item svg {
+  color: var(--brand);
+}
+
+[data-theme="dark"] .mode-card.chip.on,
+[data-theme="dark"] .mode-card.chip.active {
+  background: color-mix(in srgb, var(--brand) 14%, var(--surface)) !important;
+}
+
+/* ---------- R3: 今日首页视觉升维 ---------- */
+.today-atmosphere-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 16px;
+  margin-bottom: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-sm);
+}
+.banner-left {
+  flex: 1;
+  min-width: 0;
+}
+.banner-dateline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--ink-2);
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+}
+.dateline-day {
+  font-weight: 600;
+  color: var(--ink);
+}
+.dateline-divider {
+  color: var(--line);
+}
+.dateline-quote {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.banner-countdown-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.banner-set-goal-btn,
+.today-goal-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-xs);
+  border: 1px dashed var(--line);
+  background: var(--surface-2);
+  color: var(--brand);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--dur-1) var(--ease);
+}
+.banner-set-goal-btn:hover,
+.today-goal-btn:hover {
+  background: var(--brand-soft);
+  border-color: var(--brand);
+}
+.banner-exam-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13.5px;
+  color: var(--ink);
+  cursor: pointer;
+}
+.exam-icon {
+  color: var(--brand);
+  display: inline-flex;
+}
+.exam-name {
+  font-weight: 700;
+}
+.exam-countdown-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--brand-soft);
+  color: var(--brand);
+  font-size: 12px;
+  font-weight: 600;
+}
+.countdown-num {
+  color: var(--vermilion);
+  font-size: 14px;
+  margin: 0 2px;
+}
+.banner-edit-goal-btn {
+  border: none;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+  padding: 2px;
+  display: inline-flex;
+}
+.banner-edit-goal-btn:hover {
+  color: var(--brand);
+}
+.banner-right {
+  flex-shrink: 0;
+}
+.punch-in-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  transition: all var(--dur-1) var(--ease);
+}
+.punch-in-badge.is-active {
+  background: var(--amber-soft);
+  border-color: color-mix(in srgb, var(--amber) 30%, transparent);
+}
+.punch-badge-flame {
+  font-size: 16px;
+  line-height: 1;
+}
+.punch-badge-texts {
+  display: flex;
+  flex-direction: column;
+}
+.punch-badge-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.punch-in-badge.is-active .punch-badge-title {
+  color: var(--amber);
+}
+.punch-badge-desc {
+  font-size: 10px;
+  color: var(--ink-3);
+}
+
+/* 日目标战力 Hero */
+.today-combat-hero {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 18px 20px;
+  margin-bottom: 14px;
+}
+@media (max-width: 540px) {
+  .today-combat-hero {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+  }
+}
+.combat-hero-left {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-shrink: 0;
+}
+.combat-gauge-wrap {
+  position: relative;
+  width: 92px;
+  height: 92px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.combat-gauge-svg {
+  transform: rotate(-90deg);
+  width: 92px;
+  height: 92px;
+}
+.gauge-bg {
+  stroke: var(--surface-2);
+}
+.gauge-progress {
+  stroke: var(--brand);
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.6s var(--ease);
+}
+.combat-gauge-content {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.gauge-val {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--ink);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.gauge-target {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-3);
+}
+.combat-hero-right {
+  flex: 1;
+  min-width: 0;
+}
+.combat-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 10px 14px;
+}
+.combat-stat-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.stat-item-label {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  font-weight: 500;
+}
+.stat-item-val {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+.stat-item-status {
+  font-size: 11px;
+  color: var(--ink-2);
+  margin-top: 1px;
+}
+.stat-item-status.status-ok {
+  color: var(--jade);
+  font-weight: 600;
+}
+
+/* 7日战力走势 */
+.trend-chart-container {
+  padding: 10px 0 4px;
+}
+.trend-bars-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  height: 72px;
+  padding: 0 4px;
+}
+.trend-bar-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+}
+.trend-bar-track {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  position: relative;
+}
+.trend-bar-fill {
+  width: 100%;
+  max-width: 22px;
+  border-radius: 4px 4px 0 0;
+  background: linear-gradient(180deg, var(--brand) 0%, color-mix(in srgb, var(--brand) 60%, transparent) 100%);
+  min-height: 6px;
+  position: relative;
+  transition: height 0.5s var(--ease);
+}
+.trend-bar-col.is-empty .trend-bar-fill {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-bottom: none;
+  opacity: 0.6;
+}
+.trend-bar-col.is-today .trend-bar-fill {
+  background: linear-gradient(180deg, var(--brand-strong) 0%, var(--brand) 100%);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--brand) 35%, transparent);
+}
+.trend-bar-col.is-today.is-empty .trend-bar-fill {
+  border-color: color-mix(in srgb, var(--brand) 40%, var(--border));
+}
+.trend-bar-col {
+  cursor: pointer;
+}
+.trend-bar-col:hover .trend-bar-fill {
+  filter: brightness(1.08);
+}
+.pulse-indicator-dot {
+  position: absolute;
+  top: -7px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--brand);
+  animation: pulse-indicator 1.5s infinite ease-in-out;
+  pointer-events: none;
+}
+@keyframes pulse-indicator {
+  0%, 100% { transform: translateX(-50%) scale(1); opacity: 0.7; }
+  50% { transform: translateX(-50%) scale(1.5); opacity: 1; box-shadow: 0 0 6px var(--brand); }
+}
+.bar-val-popover {
+  display: none;
+}
+.trend-bar-label {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--ink-3);
+  font-weight: 500;
+}
+.trend-bar-label.label-today {
+  color: var(--brand);
+  font-weight: 700;
+}
+
+/* 任务状态徽章 & 微立体悬浮 */
+.task-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-left: 6px;
+}
+.badge-done {
+  background: var(--jade-soft);
+  color: var(--jade);
+}
+.badge-active {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+.badge-pending {
+  background: var(--surface-2);
+  color: var(--ink-3);
+}
+.badge-weak {
+  background: var(--vermilion-soft);
+  color: var(--vermilion);
+}
+
+.today-task {
+  transition: transform 0.18s var(--ease), box-shadow 0.18s var(--ease), background 0.18s var(--ease);
+  border-radius: var(--radius-xs);
+}
+.today-task:hover {
+  transform: translateY(-1px);
+  background: var(--surface-2);
+}
+
+.today-subj {
+  transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease) !important;
+}
+.today-subj:hover {
+  transform: translateY(-3px) !important;
+  box-shadow: var(--shadow-lg) !important;
+}
+
+/* ---------- R4: 随题 AI 快捷锦囊气泡 & 思考动画 ---------- */
+.ai-tutor-tips,
+.ai-tutor-shortcuts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.ai-tutor-tip-btn,
+.ai-tutor-bubble {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--radius-xs);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+  transition: all var(--dur-1) var(--ease);
+  font-family: inherit;
+}
+.ai-tutor-tip-btn:hover:not(:disabled),
+.ai-tutor-bubble:hover:not(:disabled) {
+  background: var(--brand-soft);
+  border-color: color-mix(in srgb, var(--brand) 35%, var(--line));
+  color: var(--brand);
+  transform: translateY(-1px);
+}
+.ai-tutor-tip-btn:disabled,
+.ai-tutor-bubble:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.ai-tutor-thinking {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 6px;
+  color: var(--ink-2);
+  font-size: 12.5px;
+}
+.ai-tutor-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.ai-tutor-dots .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--brand);
+  opacity: 0.35;
+  transform: scale(0.85);
+  animation: aiTutorPulse 1.2s infinite ease-in-out;
+  display: inline-block;
+}
+.ai-tutor-dots .dot:nth-child(2) { animation-delay: 0.2s; }
+.ai-tutor-dots .dot:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes aiTutorPulse {
+  0%, 100% {
+    opacity: 0.3;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.18);
+    box-shadow: 0 0 6px color-mix(in srgb, var(--brand) 40%, transparent);
+  }
+}
+
+.ai-tutor-message.thinking {
+  align-self: flex-start;
+  background: var(--bg-soft);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.punch-in-badge.today-streak-badge,
+.punch-in-badge.tag-streak {
+  height: auto;
+}

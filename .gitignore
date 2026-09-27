@@ -114,3 +114,8 @@ HANDOFF.md
 ai-key-security.md
 
 交接文档-2026-08-21.md
+
+# Multi-agent trace logs
+.agents/
+.agents
+ORIGINAL_REQUEST.md

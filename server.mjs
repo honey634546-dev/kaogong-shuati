@@ -3374,10 +3374,12 @@ const server = http.createServer(async (req, res) => {
         // 同一条件在错题本基础过滤（表别名 r）下的等价写法，供"待订错题"计数复用
         const tikuCondR = subject ? "AND r.question_id IN (SELECT tq.questionId FROM tiku.questions tq JOIN tiku.papers tp ON tp.id = tq.paperId WHERE tp.subjectName = ?)" : '';
         const tikuParams = subject ? [subject] : [];
-        const timeCond = days > 0
-          ? `AND date(created_at) >= date('now','localtime','-${days} days')`
-          : (from ? `AND date(created_at) >= date(?)` : '');
-        const timeParams = from ? [from] : [];
+        const timeCond = days === 1
+          ? "AND date(created_at) = date('now','localtime')"
+          : (days > 1
+            ? `AND date(created_at) >= date('now','localtime','-${days - 1} days')`
+            : (from ? `AND date(created_at) >= date(?)` : ''));
+        const timeParams = (days <= 0 && from) ? [from] : [];
         const timeCond2 = to ? `AND date(created_at) <= date(?)` : '';
         const timeParams2 = to ? [to] : [];
         const total = pdb.prepare(`

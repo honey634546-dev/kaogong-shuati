@@ -19,6 +19,7 @@
         "test:mastery": "AUTH_DISABLED=1 node --test test-mastery-model.mjs",
         "test:rich-text": "AUTH_DISABLED=1 node --test test-rich-text.mjs",
         "test:auth": "node --test test-auth-multitenancy.mjs",
+        "test:ui-redesign": "AUTH_DISABLED=1 AI_MOCK=1 node --test test-ui-redesign-e2e.mjs",
         "import:public-datasets": "node scripts/import-public-datasets.mjs",
         "import:gkzhenti": "node scripts/import-gkzhenti.mjs",
         "import:gkzhenti:recent-regions": "node scripts/import-gkzhenti-recent-regions.mjs",

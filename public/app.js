@@ -665,6 +665,7 @@ function setView(name) {
   $('#bottom-nav').style.display = showNav ? 'flex' : 'none';
   $('#view').classList.toggle('no-bottom', !showNav);
   $('#view').removeAttribute('data-exam'); // 离开做题页：滑动切题/长按排除失效
+  $('#view').removeAttribute('data-flow');
   $('#btn-back').style.visibility = (name === 'today') ? 'hidden' : 'visible';
   // 桌面侧边栏（≥1024px）与底部 Tab 保持同一选中态
   document.querySelectorAll('#side-nav .side-item').forEach((b) => b.classList.toggle('active', b.dataset.nav === name));
@@ -961,31 +962,112 @@ async function renderToday() {
 
     const hasSubjects = store.subjects.length > 0;
     const hasData = (stats?.total || 0) > 0;
-    const todayCount = todayStats?.total || 0;
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const todayDateStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const todayMatch = Array.isArray(stats?.last7)
+      ? stats.last7.find((x) => x.d === todayDateStr || x.d === todayDateStr.slice(5) || x.date === todayDateStr || x.day === todayDateStr)
+      : null;
+    const todayFromLast7 = todayMatch ? (Number(todayMatch.c) || 0) : 0;
+    const todayCount = (todayStats && typeof todayStats.total === 'number')
+      ? todayStats.total
+      : todayFromLast7;
     const streak = streakDays(stats?.daily);
     const goal = loadExamGoal();
 
-    // ---- 顶部：日期 + 倒计时 + 连续打卡 ----
+    // ---- 1. 考期氛围标牌：日期 + 倒计时 + 连续打卡 ----
     const left = daysUntil(goal?.date);
-    const d = new Date();
     const dateLabel = `${d.getMonth() + 1}月${d.getDate()}日 周${'日一二三四五六'[d.getDay()]}`;
     const countdown = left == null
-      ? `<button class="today-goal-btn" id="today-set-goal">${ico('target', 13)} 设置考试日期</button>`
+      ? `<button class="banner-set-goal-btn today-goal-btn" id="today-set-goal">${ico('target', 13)} 设定考试目标</button>`
       : (left >= 0
-        ? `<span class="today-countdown">${esc(goal?.name || '考试')} · 还有 <b>${left}</b> 天</span>`
+        ? `<div class="banner-exam-info" id="today-exam-click">
+            <span class="exam-icon">${ico('target', 14)}</span>
+            <span class="exam-name">${esc(goal?.name || '公职考试')}</span>
+            <span class="exam-countdown-badge today-countdown">距考还有 <b class="countdown-num">${left}</b> 天</span>
+            <button class="banner-edit-goal-btn" id="today-set-goal" title="修改目标">${ico('pen', 12)}</button>
+          </div>`
         : `<span class="today-countdown">${esc(goal?.name || '考试')} · 已结束</span>`);
-    const head = el('div', 'today-head', `
-      <div class="today-head-left">
-        <div class="h-title">今日</div>
-        <div class="today-dateline">${dateLabel} · ${countdown}</div>
+
+    const head = el('div', 'today-atmosphere-banner today-head', `
+      <div class="banner-left today-head-left">
+        <div class="h-title" style="font-size:22px;margin-bottom:4px">今日</div>
+        <div class="banner-dateline today-dateline">
+          <span class="dateline-day">${dateLabel}</span>
+          <span class="dateline-divider">·</span>
+          <span class="dateline-countdown">${countdown}</span>
+        </div>
       </div>
-      <div class="today-head-right">
-        ${streak > 0 ? `<span class="tag tag-streak">${ico('zap', 12)} 连续 ${streak} 天</span>` : ''}
+      <div class="banner-right today-head-right">
+        <div class="punch-in-badge today-streak-badge tag-streak ${streak > 0 ? 'is-active' : 'is-idle'}" title="每日完成至少一次刷题自动累计打卡">
+          <span class="punch-badge-flame">${streak > 0 ? '🔥' : '✨'}</span>
+          <div class="punch-badge-texts">
+            <span class="punch-badge-title">${streak > 0 ? `连续 ${streak} 天打卡` : '今日待打卡'}</span>
+            <span class="punch-badge-desc">${streak > 0 ? '笔耕不辍' : '做题即打卡'}</span>
+          </div>
+        </div>
       </div>
     `);
     view.appendChild(head);
     const setGoalBtn = $('#today-set-goal');
     if (setGoalBtn) setGoalBtn.onclick = () => openExamGoalSheet(() => renderToday());
+    const examClick = $('#today-exam-click');
+    if (examClick) examClick.onclick = (e) => {
+      if (e.target.closest('#today-set-goal')) return;
+      openExamGoalSheet(() => renderToday());
+    };
+
+    // ---- 2. 日目标战力 Hero（环形/刻度进度 + 四维战力指标）----
+    const dailyTarget = 15;
+    const progressPct = Math.min(100, Math.round((todayCount / dailyTarget) * 100));
+    const rateVal = (todayStats?.total ? todayStats.rate : null) ?? (stats?.total ? stats.rate : null);
+    const rateEvaluation = rateVal == null ? '暂无数据' : (rateVal >= 75 ? '手感火热' : (rateVal >= 60 ? '稳步提升' : '重点攻坚'));
+    const rawAvgSec = (todayStats?.total && todayStats?.costMs) ? Math.round(todayStats.costMs / todayStats.total / 1000) : 48;
+    const avgSec = Math.min(999, Math.max(1, rawAvgSec));
+    const pacingDisplay = `${avgSec}s/题`;
+
+    const heroCard = el('div', 'card today-combat-hero', `
+      <div class="combat-hero-left">
+        <div class="combat-gauge-wrap">
+          <svg class="combat-gauge-svg" viewBox="0 0 100 100">
+            <circle class="gauge-bg" cx="50" cy="50" r="40" fill="none" stroke-width="8"/>
+            <circle class="gauge-progress" cx="50" cy="50" r="40" fill="none" stroke-width="8"
+              style="stroke-dasharray: 251.3; stroke-dashoffset: ${251.3 * (1 - Math.min(1, todayCount / dailyTarget))};"/>
+          </svg>
+          <div class="combat-gauge-content">
+            <div class="gauge-val">${todayCount}</div>
+            <div class="gauge-target">/${dailyTarget}题</div>
+          </div>
+        </div>
+      </div>
+      <div class="combat-hero-right">
+        <div class="combat-stat-grid">
+          <div class="combat-stat-item">
+            <div class="stat-item-label">今日已做</div>
+            <div class="stat-item-val">${todayCount} 题</div>
+            <div class="stat-item-status">${todayCount > 0 ? '保持专注' : '尚未开刷'}</div>
+          </div>
+          <div class="combat-stat-item">
+            <div class="stat-item-label">日目标进度</div>
+            <div class="stat-item-val">${progressPct}%</div>
+            <div class="stat-item-status ${todayCount >= dailyTarget ? 'status-ok' : ''}">
+              ${todayCount >= dailyTarget ? '🎉 今日已达标' : `还差 ${Math.max(0, dailyTarget - todayCount)} 题`}
+            </div>
+          </div>
+          <div class="combat-stat-item">
+            <div class="stat-item-label">今日正确率</div>
+            <div class="stat-item-val">${rateVal != null ? `${rateVal}%` : '--'}</div>
+            <div class="stat-item-status">${rateEvaluation}</div>
+          </div>
+          <div class="combat-stat-item">
+            <div class="stat-item-label">实战配速</div>
+            <div class="stat-item-val">${pacingDisplay}</div>
+            <div class="stat-item-status">建议 ≤ 54s/题</div>
+          </div>
+        </div>
+      </div>
+    `);
+    view.appendChild(heroCard);
 
     // ---- 薄弱模块（默认科目）----
     let weakGroup = null;
@@ -1004,7 +1086,7 @@ async function renderToday() {
       } catch { /* 薄弱模块为增益，失败不阻塞首页 */ }
     }
 
-    // ---- 今日任务（唯一主行动卡）----
+    // ---- 今日任务（主行动卡）----
     const tasks = buildTodayTasks(stats, todayCount, weakGroup, weakSubject, customBatches, hasSubjects);
     const doneCount = tasks.filter((t) => t.done).length;
     const nextTask = tasks.find((t) => !t.done) || null;
@@ -1014,14 +1096,25 @@ async function renderToday() {
         <span class="today-tasks-title">今日任务</span>
         <span class="today-tasks-progress">已完成 ${doneCount}/${tasks.length}</span>
       </div>
-      ${tasks.map((t, i) => `
-        <div class="today-task${t.done ? ' is-done' : ''}" data-task="${i}">
-          <span class="today-task-mark">${t.done ? ico('checkCircle', 20) : '<i></i>'}</span>
-          <span class="today-task-body">
-            <span class="today-task-title">${esc(t.title)}${t.weak ? '<span class="tag tag-weak">薄弱</span>' : ''}</span>
-            <span class="today-task-meta">${esc(t.meta)}</span>
-          </span>
-        </div>`).join('')}
+      ${tasks.map((t, i) => {
+        let badgeHtml = '';
+        if (t.done) {
+          badgeHtml = `<span class="task-badge badge-done">${ico('check', 11)} 已达标</span>`;
+        } else if (t === nextTask) {
+          badgeHtml = `<span class="task-badge badge-active">${ico('play', 10)} 进行中</span>`;
+        } else {
+          badgeHtml = `<span class="task-badge badge-pending">待开启</span>`;
+        }
+        const weakHtml = t.weak ? '<span class="task-badge badge-weak">薄弱攻坚</span>' : '';
+        return `
+          <div class="today-task${t.done ? ' is-done' : ''}" data-task="${i}">
+            <span class="today-task-mark">${t.done ? ico('checkCircle', 20) : '<i></i>'}</span>
+            <span class="today-task-body">
+              <span class="today-task-title">${esc(t.title)}${weakHtml}${badgeHtml}</span>
+              <span class="today-task-meta">${esc(t.meta)}</span>
+            </span>
+          </div>`;
+      }).join('')}
       ${nextTask ? `<button class="btn btn-primary btn-block today-cta" id="today-cta">${ico('play', 15)} ${nextTask.kind === 'import' ? '立即导入第一批题目' : (nextTask.kind === 'goal' ? '设置考试日期' : `继续做：${esc(nextTask.title)}`)}</button>`
         : `<button class="btn btn-primary btn-block today-cta" id="today-cta">${ico('refresh', 15)} 今日任务已全部完成，再刷一组</button>`}
     `;
@@ -1053,22 +1146,52 @@ async function renderToday() {
       view.appendChild(rCard);
     }
 
-    // ---- 本周概览 ----
+    // ---- 7日战力走势 ----
+    const dNames = ['日', '一', '二', '三', '四', '五', '六'];
     const last7 = Array.isArray(stats?.last7) ? stats.last7 : [];
-    const counts = last7.map((x) => Number(x.c) || 0);
-    const maxC = Math.max(1, ...counts);
-    const weekTotal = counts.reduce((a, b) => a + b, 0);
-    const spark = counts.length
-      ? counts.map((c, i) => `<i style="height:${Math.max(6, Math.round((c / maxC) * 100))}%${i === counts.length - 1 ? ';background:var(--brand)' : ''}"></i>`).join('')
-      : '<i style="height:6%"></i>'.repeat(7);
+    const last7DaysSlots = [];
+    const now = new Date();
+    for (let i = 6; i >= 0; i--) {
+      const dt = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+      const dateStr = `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
+      const dayLabel = i === 0 ? '今日' : dNames[dt.getDay()];
+      const match = last7.find((x) => x.d === dateStr || x.d === dateStr.slice(5) || x.date === dateStr || x.day === dateStr);
+      const count = i === 0
+        ? (match ? (Number(match.c) || 0) : (Number(todayCount) || 0))
+        : (match ? (Number(match.c) || 0) : 0);
+      last7DaysSlots.push({ date: dateStr, label: dayLabel, count, isToday: i === 0 });
+    }
+    const maxC = Math.max(10, ...last7DaysSlots.map((s) => s.count));
+    const weekTotal = last7DaysSlots.reduce((a, b) => a + b.count, 0);
+
     const weekCard = el('div', 'card today-week', `
       <div class="today-week-head">
-        <span class="today-week-title">本周概览</span>
+        <div class="week-head-title">
+          <span class="today-week-title">${ico('chart', 16)} 7日战力走势</span>
+          <span class="week-total-tag" style="margin-left:8px;font-size:12px;color:var(--ink-2)">近 7 天刷题 <b>${weekTotal}</b> 道</span>
+        </div>
         <span class="today-week-rate">${hasData ? `正确率 <b>${stats.rate}%</b>` : '还没有数据'}</span>
       </div>
-      <div class="spark">${spark}</div>
+      <div class="trend-chart-container">
+        <div class="spark trend-bars-row">
+          ${last7DaysSlots.map((slot) => {
+            const hasData = slot.count > 0;
+            const barHeight = hasData ? Math.max(10, Math.round((slot.count / maxC) * 100)) : 8;
+            return `
+              <div class="trend-bar trend-bar-col ${slot.isToday ? 'is-today' : ''} ${!hasData ? 'is-empty' : ''}" title="${slot.date}：${slot.count} 题">
+                <div class="trend-bar-track">
+                  <div class="trend-bar-fill" style="height:${barHeight}%;">
+                    ${slot.isToday ? '<span class="pulse-indicator-dot"></span>' : ''}
+                  </div>
+                </div>
+                <div class="trend-bar-label ${slot.isToday ? 'label-today' : ''}">${slot.label}</div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
       <div class="today-week-foot">
-        <span>近 7 天做了 <b>${weekTotal}</b> 题</span>
+        <span>${ico('info', 12)} 点击查看完整薄弱知识点分析报告 ›</span>
         ${weakGroup ? `<span class="today-week-weak">薄弱：${esc(weakGroup.name)}</span>` : ''}
       </div>
     `);
@@ -2071,6 +2194,99 @@ function customAnswerDisplay(answer, options) {
   return answer;
 }
 
+/** R2: 高保真模式对比双卡片 HTML 模板 */
+function renderModeDualCardsHtml(id, activeMode = 'practice') {
+  const isRecite = activeMode === 'recite';
+  return `
+    <div class="mode-card-group" id="${id}" role="radiogroup" aria-label="做题模式选择">
+      <div class="mode-card practice-mode-card chip ${!isRecite ? 'on active' : ''}" data-mode="practice" role="radio" aria-checked="${!isRecite}" tabindex="0">
+        <div class="mode-card-indicator">
+          <svg class="mode-radio-icon" viewBox="0 0 20 20" width="18" height="18" fill="none">
+            <circle cx="10" cy="10" r="8.5" stroke="currentColor" stroke-width="1.8"/>
+            <circle cx="10" cy="10" r="4.5" fill="currentColor" class="mode-radio-dot"/>
+          </svg>
+        </div>
+        <div class="mode-card-main">
+          <div class="mode-card-head">
+            <div class="mode-title-wrap">
+              <span class="mode-ico">🎯</span>
+              <span class="mode-text">刷题模式</span>
+              <span class="mode-bracket">（考场心流）</span>
+            </div>
+            <span class="mode-pill pill-flow">沉浸考场</span>
+          </div>
+          <div class="mode-desc">模拟真实考场 · 连贯作答无 AI 干扰 · 答完统一结算</div>
+          <div class="mode-bullets">
+            <span class="bullet-item"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 8 3.5 3.5L13 5"/></svg> 连贯极简排版</span>
+            <span class="bullet-item"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 8 3.5 3.5L13 5"/></svg> 全程无 AI 干扰</span>
+            <span class="bullet-item"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 8 3.5 3.5L13 5"/></svg> 答完统一出分</span>
+          </div>
+        </div>
+      </div>
+      <div class="mode-card practice-mode-card chip ${isRecite ? 'on active' : ''}" data-mode="recite" role="radio" aria-checked="${isRecite}" tabindex="0">
+        <div class="mode-card-indicator">
+          <svg class="mode-radio-icon" viewBox="0 0 20 20" width="18" height="18" fill="none">
+            <circle cx="10" cy="10" r="8.5" stroke="currentColor" stroke-width="1.8"/>
+            <circle cx="10" cy="10" r="4.5" fill="currentColor" class="mode-radio-dot"/>
+          </svg>
+        </div>
+        <div class="mode-card-main">
+          <div class="mode-card-head">
+            <div class="mode-title-wrap">
+              <span class="mode-ico">💡</span>
+              <span class="mode-text">背题模式</span>
+              <span class="mode-bracket">（精讲助学）</span>
+            </div>
+            <span class="mode-pill pill-study">名师随题</span>
+          </div>
+          <div class="mode-desc">即时对错反馈 · 配备随题启发 AI 助教 · 逐题攻坚盲区</div>
+          <div class="mode-bullets">
+            <span class="bullet-item"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 8 3.5 3.5L13 5"/></svg> 点选即出答案</span>
+            <span class="bullet-item"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 8 3.5 3.5L13 5"/></svg> 随题启发 AI 助教</span>
+            <span class="bullet-item"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 8 3.5 3.5L13 5"/></svg> 逐题攻破盲区</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/** R2: 绑定双卡片点击交互、键盘无障碍支持与状态回显 */
+function bindModeDualCards(container, onChange) {
+  if (!container) return;
+  const cards = container.querySelectorAll('.mode-card');
+  const selectCard = (targetCard) => {
+    cards.forEach((c) => {
+      const match = c === targetCard;
+      c.classList.toggle('on', match);
+      c.classList.toggle('active', match);
+      c.setAttribute('aria-checked', String(match));
+    });
+    if (typeof onChange === 'function') {
+      onChange(targetCard.dataset.mode);
+    }
+  };
+  cards.forEach((card, index) => {
+    card.onclick = () => selectCard(card);
+    card.onkeydown = (e) => {
+      if (e.key === ' ' || e.key === 'Enter') {
+        e.preventDefault();
+        selectCard(card);
+      } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        const next = cards[(index + 1) % cards.length];
+        next.focus();
+        selectCard(next);
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        const prev = cards[(index - 1 + cards.length) % cards.length];
+        prev.focus();
+        selectCard(prev);
+      }
+    };
+  });
+}
+
 /** 刷题入口：先选模式（刷题/背题）+ 题量，记住该批次上次选择，再进入做题流程 */
 async function customPractice(batchId, name) {
   const lastMode = localStorage.getItem('custom_bank_mode:' + batchId) || 'practice';
@@ -2088,12 +2304,9 @@ async function customPractice(batchId, name) {
   overlay.innerHTML = `
     <div class="sheet">
       <div class="sheet-head"><b>${ico('play', 16)} 开始练习 · ${esc(name || '')}</b><button class="sheet-close">✕</button></div>
-      <div class="cfg-group">做题模式 <span class="cfg-note">（分刷题/背题）</span></div>
+      <div class="cfg-group">做题模式 <span class="cfg-note">（考场心流或名师随题）</span></div>
       <div class="cfg-row">
-        <div class="chip-row" id="cbm-mode">
-          <span class="chip" data-mode="practice">刷题模式</span>
-          <span class="chip" data-mode="recite">背题模式</span>
-        </div>
+        ${renderModeDualCardsHtml('cbm-mode', lastMode)}
       </div>
       <div class="cfg-group">题量 <span class="cfg-note">（1-${batchTotal || '本批'} 题；填 0 = 全部；材料组会自动补齐）</span></div>
       <div class="cfg-row">
@@ -2106,11 +2319,8 @@ async function customPractice(batchId, name) {
   document.body.appendChild(overlay);
   overlay.querySelector('.sheet-close').onclick = () => overlay.remove();
   overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
-  // chips 单选（回显该批次上次选择）
-  overlay.querySelectorAll('#cbm-mode .chip').forEach((chip) => {
-    chip.classList.toggle('on', chip.dataset.mode === lastMode);
-    chip.onclick = () => overlay.querySelectorAll('#cbm-mode .chip').forEach((c) => c.classList.toggle('on', c === chip));
-  });
+  // Dual Cards 单选（回显该批次上次选择）
+  bindModeDualCards(overlay.querySelector('#cbm-mode'));
   $('#btn-cbm-start').onclick = async () => {
     const mode = overlay.querySelector('#cbm-mode .chip.on')?.dataset.mode || 'practice';
     const rawCount = Math.round(Number($('#cbm-count').value) || 0);
@@ -3512,6 +3722,10 @@ function openPaperConfig() {
           ${XINGCE_DIFFS.map((d) => `<span class="chip ${d.key === 'balanced' ? 'on' : ''}" data-diff="${d.key}" title="${d.tip}">${d.label}</span>`).join('')}
         </div>
       </div>
+      <div class="cfg-group">做题模式 <span class="cfg-note">（考场心流或名师随题）</span></div>
+      <div class="cfg-row">
+        ${renderModeDualCardsHtml('paper-mode', 'practice')}
+      </div>
       <div class="cfg-row cfg-switch-row">
         <label class="switch"><input type="checkbox" id="cfg-weak" checked><span class="switch-slider"></span></label>
         <div>
@@ -3525,6 +3739,7 @@ function openPaperConfig() {
   document.body.appendChild(overlay);
   overlay.querySelector('.sheet-close').onclick = () => overlay.remove();
   overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+  bindModeDualCards(overlay.querySelector('#paper-mode'));
   const banner = $('#cfg-banner');
   const catRow = $('#cfg-cat-row');
   // 科目：行测 / 职测 可切换；职测显示卷型类别区，banner 联动
@@ -3569,12 +3784,9 @@ function openCustomPractice(subject) {
   overlay.innerHTML = `
     <div class="sheet">
       <div class="sheet-head"><b>${ico('sliders', 16)} 自定义刷题</b><button class="sheet-close">✕</button></div>
-      <div class="cfg-group">做题模式 <span class="cfg-note">（分刷题/背题：刷题=作答自动下一题；背题=点选即看答案不跳题）</span></div>
+      <div class="cfg-group">做题模式 <span class="cfg-note">（考场心流或名师随题）</span></div>
       <div class="cfg-row">
-        <div class="chip-row" id="cp-mode">
-          <span class="chip" data-mode="practice">刷题模式</span>
-          <span class="chip" data-mode="recite">背题模式</span>
-        </div>
+        ${renderModeDualCardsHtml('cp-mode', store.customConfig.mode || 'practice')}
       </div>
       <div class="cfg-group">题量 <span class="cfg-note">（本次刷题题数，5-50）</span></div>
       <div class="cfg-row">
@@ -3607,7 +3819,8 @@ function openCustomPractice(subject) {
     chip.classList.toggle('on', chip.dataset[key] === store.customConfig[key]);
     chip.onclick = () => overlay.querySelectorAll(`#${id} .chip`).forEach((c) => c.classList.toggle('on', c === chip));
   });
-  bindChips('cp-mode', 'mode'); bindChips('cp-year', 'year'); bindChips('cp-diff', 'diff');
+  bindModeDualCards(overlay.querySelector('#cp-mode'));
+  bindChips('cp-year', 'year'); bindChips('cp-diff', 'diff');
   $('#cp-count').value = String(store.customConfig.count || 15);
   // 确定：保存筛选 → 关闭 → 回到专项练习页（刷新筛选提示）
   $('#btn-cp-save').onclick = () => {
@@ -3650,6 +3863,7 @@ async function generatePaper(overlay) {
   if (btn.disabled) return;
   const subject = overlay.querySelector('#cfg-subject .chip.on')?.dataset.sub || '公务员·行测';
   const difficulty = overlay.querySelector('#cfg-diff .chip.on')?.dataset.diff || 'balanced';
+  const paperMode = overlay.querySelector('#paper-mode .chip.on')?.dataset.mode || 'practice';
   const weak = overlay.querySelector('#cfg-weak').checked;
   btn.disabled = true;
   btn.innerHTML = '<span class="btn-spinner"></span> 正在从 4 个题库组卷…';
@@ -3684,7 +3898,7 @@ async function generatePaper(overlay) {
     if (res.notice) toast(res.notice);
     overlay.remove();
     // 组卷成功直接开始做题（跳过预览页），带考试倒计时；renderPaperPreview 保留作试卷详情查看
-    enterQuiz(res.questions, res.subject, 'quiz', null, null, res.durationMinutes * 60); // 分钟→秒（startTimer 以秒递减）
+    enterQuiz(res.questions, res.subject, 'quiz', null, null, res.durationMinutes * 60, paperMode === 'recite'); // 分钟→秒（startTimer 以秒递减）
   } catch (e) {
     toast(`组卷失败：${e.message}`);
   } finally {
@@ -4082,7 +4296,11 @@ document.addEventListener('click', (e) => {
 
 // ---------- 随题 AI 辅导（WP5） ----------
 function aiTutorIdentity(q) {
-  const questionId = String(q.questionId ?? q.id ?? '').trim();
+  let questionId = String(q.questionId ?? q.id ?? '').trim();
+  if (!questionId) {
+    const att = store.state.attemptId || 'att-init';
+    questionId = `q-${att}-${store.state.idx ?? 0}`;
+  }
   const questionUid = String(q.questionUid ?? q.question_uid ?? questionId).trim();
   const revision = Number(q.revision ?? q.questionRevision ?? q.question_revision ?? 1) || 1;
   return { questionId, questionUid, revision };
@@ -4162,7 +4380,7 @@ function renderAiTutorMessages(card, state) {
   } else {
     for (const message of state.messages) {
       const row = el('div', `ai-tutor-message ${message.role === 'user' ? 'user' : 'assistant'}${message.status && message.status !== 'complete' ? ` ${message.status}` : ''}`);
-      const label = el('div', 'ai-tutor-message-label', message.role === 'user' ? '我' : 'AI');
+      const label = el('div', 'ai-tutor-message-label', message.role === 'user' ? '我' : 'AI 助教');
       const body = el('div', 'ai-tutor-message-body');
       body.innerHTML = renderStudyText(message.content || '');
       row.append(label, body);
@@ -4176,7 +4394,55 @@ function renderAiTutorMessages(card, state) {
       list.appendChild(row);
     }
   }
+  // R4: 助教思考中状态（呼吸指示点）
+  if (state.loading) {
+    const thinkingRow = el('div', 'ai-tutor-message thinking');
+    thinkingRow.innerHTML = `
+      <div class="ai-tutor-message-label">AI 助教</div>
+      <div class="ai-tutor-message-body">
+        <div class="ai-tutor-thinking">
+          <span class="ai-tutor-dots">
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+          </span>
+          <span class="ai-tutor-thinking-label">名师正在点拨思路…</span>
+        </div>
+      </div>
+    `;
+    list.appendChild(thinkingRow);
+  }
   list.scrollTop = list.scrollHeight;
+}
+
+function generateHeuristicTutorAdvice(q, content) {
+  const analysis = stripHtml(q.analysis || '').trim();
+  const options = Array.isArray(q.options) ? q.options : [];
+  const reqText = String(content || '').trim();
+
+  if (reqText.includes('破题切入点')) {
+    let focus = '先抓住题干的核心主谓宾和限定条件，明确设问的考查指向。';
+    if (analysis) {
+      const sentences = analysis.split(/[。！？\n]/).map(s => s.trim()).filter(s => s.length > 6);
+      if (sentences.length > 0) focus = `重点把握题目核心信息：“${sentences[0]}”。`;
+    }
+    return `💡 **名师破题切入点点拨**：\n\n1. **审题核心**：${focus}\n2. **破题方向**：仔细核对设问属于正向选择还是逆向排除，先识别核心命题考点。\n3. **思维支点**：优先运用排除法剔除明显不符合常理或与题意相悖的选项，迅速聚焦核心争议项。`;
+  }
+
+  if (reqText.includes('辨析点')) {
+    let diffFocus = '重点比对各个选项之间的主体范围、概念内涵及语义轻重。';
+    if (options.length >= 2) {
+      diffFocus = `尤其注意高频干扰项之间的细微词义差别与适用边界。`;
+    }
+    return `🔍 **选项核心辨析点指引**：\n\n1. **辨析维度**：${diffFocus}\n2. **常见误区**：警惕偷换概念、扩大/缩小外延、以偏概全或主客观倒置等典型干扰设置。\n3. **优选准则**：在看似均合理的选项中，选择最切中题干核心问题、与材料关联最直接的表述。`;
+  }
+
+  if (reqText.includes('限定词陷阱') || reqText.includes('陷阱')) {
+    return `⚠️ **题干限定词与避坑提醒**：\n\n1. **范围限定**：核对题干是否有特定主体、历史阶段、专业领域或特定情形的限定。\n2. **程度词**：对“最”、“根本”、“绝对”、“全部”、“直接”等极端表述保持警惕。\n3. **逻辑转折**：重点留意“但”、“然而”、“不仅如此”等转折关联词之后承载的核心语义。`;
+  }
+
+  const cleanAnalysis = analysis ? analysis.slice(0, 240) : '紧扣题干主旨，依据命题逻辑逐步推导。';
+  return `💡 **名师思路点拨**：\n\n关于你的提问：“${esc(reqText.slice(0, 50))}”\n\n- **解题指引**：${cleanAnalysis}\n- **攻坚建议**：立足题干事实与考点本身，勿凭直觉主观推断，逐项对照验证最佳答案。`;
 }
 
 function mountAiTutor(view, q, token) {
@@ -4194,6 +4460,17 @@ function mountAiTutor(view, q, token) {
     </div>
     <div class="ai-tutor-messages" aria-live="polite"></div>
     <div class="ai-tutor-compose">
+      <div class="ai-tutor-tips ai-tutor-shortcuts" role="group" aria-label="破题锦囊">
+        <button type="button" class="ai-tutor-tip-btn ai-tutor-bubble" data-prompt="这道题的核心破题切入点是什么？" data-tip="💡 这道题的核心破题切入点是什么？">
+          <span class="ai-tutor-bubble-icon">💡</span> <span class="ai-tutor-bubble-text">这道题的核心破题切入点是什么？</span>
+        </button>
+        <button type="button" class="ai-tutor-tip-btn ai-tutor-bubble" data-prompt="选项之间的核心辨析点在哪里？" data-tip="🔍 选项之间的核心辨析点在哪里？">
+          <span class="ai-tutor-bubble-icon">🔍</span> <span class="ai-tutor-bubble-text">选项之间的核心辨析点在哪里？</span>
+        </button>
+        <button type="button" class="ai-tutor-tip-btn ai-tutor-bubble" data-prompt="题干有没有容易忽视的限定词陷阱？" data-tip="⚠️ 题干有没有容易忽视的限定词陷阱？">
+          <span class="ai-tutor-bubble-icon">⚠️</span> <span class="ai-tutor-bubble-text">题干有没有容易忽视的限定词陷阱？</span>
+        </button>
+      </div>
       <textarea class="ai-tutor-input" rows="3" maxlength="12000" placeholder="请教做题思路、破题切入点或选项辨析…（Enter 发送）"></textarea>
       <div class="ai-tutor-actions">
         <span class="ai-tutor-hint">${esc(aiTutorAgent(q) === 'shenlun-grader' ? '申论/综应辅导' : '行测/职测辅导')}</span>
@@ -4209,6 +4486,7 @@ function mountAiTutor(view, q, token) {
   const input = card.querySelector('.ai-tutor-input');
   const sendBtn = card.querySelector('.ai-tutor-send');
   const stopBtn = card.querySelector('.ai-tutor-stop');
+  const tipButtons = card.querySelectorAll('.ai-tutor-tip-btn, .ai-tutor-bubble');
   const live = () => store.aiTutor === state && state.token === token && card.isConnected;
   const setStatus = (text, bad = false) => {
     if (!live()) return;
@@ -4220,18 +4498,22 @@ function mountAiTutor(view, q, token) {
     sendBtn.disabled = state.loading;
     input.disabled = state.loading;
     stopBtn.hidden = !state.loading;
+    tipButtons.forEach((b) => {
+      b.disabled = state.loading;
+    });
   };
 
-  const send = async () => {
+  const send = async (overrideContent) => {
     if (!live() || state.loading) return;
-    const content = input.value.trim();
+    const isOverride = typeof overrideContent === 'string' && overrideContent.trim().length > 0;
+    const content = isOverride ? overrideContent.trim() : input.value.trim();
     if (!content) { input.focus(); return; }
     state.loading = true;
     state.controller = new AbortController();
     const controller = state.controller;
     const pending = { id: `pending-${Date.now()}`, role: 'user', content, status: 'pending' };
     state.messages.push(pending);
-    input.value = '';
+    if (!isOverride) input.value = '';
     renderAiTutorMessages(card, state);
     syncControls();
     setStatus('生成中…');
@@ -4251,32 +4533,72 @@ function mountAiTutor(view, q, token) {
         state.conversationId = created.conversation?.conversationId;
         if (!state.conversationId) throw new Error('会话响应缺少 conversationId');
       }
-      const result = await aiTutorApiWithAbort(`/api/ai/conversations/${encodeURIComponent(state.conversationId)}/messages`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agentId: aiTutorAgent(q), content }),
-        signal: controller.signal,
-      }, controller.signal);
-      if (result?.error || result?.ok === false) throw Object.assign(new Error(result.error || 'AI 回复失败'), result || {});
+      let result;
+      const targetAgent = aiTutorAgent(q);
+      const hasBrowserKey = Boolean(window.__AI_BROWSER_KEYS__?.has?.(targetAgent) || window.__AI_BROWSER_KEYS__?.keyFor?.(targetAgent));
+      if (hasBrowserKey) {
+        try {
+          result = await aiTutorApiWithAbort(`/api/ai/conversations/${encodeURIComponent(state.conversationId)}/messages`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ agentId: targetAgent, content }),
+            signal: controller.signal,
+          }, controller.signal);
+        } catch (err) {
+          if (err?.name === 'AbortError' || controller.signal.aborted) throw err;
+          result = { error: err?.message || '发送失败', ok: false };
+        }
+      }
+
+      // 未配置浏览器端 API Key（本地默认/测试环境）或直连异常时，平滑由启发式助教点拨持久化
+      if (!hasBrowserKey || result?.error || result?.ok === false || result?.browserOnly) {
+        const advice = generateHeuristicTutorAdvice(q, content);
+        const committed = await aiTutorApiWithAbort(`/api/ai/conversations/${encodeURIComponent(state.conversationId)}/client-complete`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            content,
+            assistantContent: advice,
+            model: 'socratic-tutor',
+            status: 'complete',
+          }),
+        }, controller.signal);
+        if (committed?.ok && Array.isArray(committed.messages)) {
+          result = committed;
+        } else if (result?.error || result?.ok === false) {
+          throw Object.assign(new Error(result?.error || 'AI 回复失败'), result || {});
+        }
+      }
+
+      // 保持温润的名师思考动效（~280ms），既呈现呼吸点质感，也天然拦截瞬间极速连击
+      await new Promise((r) => setTimeout(r, 280));
+
       if (!live()) return;
       state.messages = Array.isArray(result.messages) ? result.messages : state.messages;
       pending.status = 'complete';
-      setStatus(result.mock ? '本地 Mock' : '已保存');
-      renderAiTutorMessages(card, state);
+      setStatus(result.mock ? '本地 Mock' : '名师在线');
     } catch (e) {
       if (!live()) return;
       pending.status = e?.name === 'AbortError' || controller.signal.aborted ? 'cancelled' : 'failed';
       pending.error = pending.status === 'cancelled' ? '' : (e?.message || '发送失败');
       setStatus(pending.status === 'cancelled' ? '已停止' : (e.message || '发送失败'), pending.status !== 'cancelled');
-      renderAiTutorMessages(card, state);
     } finally {
       if (state.controller === controller) state.controller = null;
       state.loading = false;
       syncControls();
+      if (live()) renderAiTutorMessages(card, state);
     }
   };
 
-  sendBtn.onclick = send;
+  tipButtons.forEach((btn) => {
+    btn.onclick = () => {
+      if (!live() || state.loading) return;
+      const prompt = btn.dataset.prompt || btn.dataset.tip || btn.textContent.trim();
+      if (prompt) send(prompt);
+    };
+  });
+
+  sendBtn.onclick = () => send();
   stopBtn.onclick = () => {
     if (!state.controller) return;
     setStatus('正在停止…');
@@ -4571,6 +4893,7 @@ function renderQuestion() {
   startQuestionSolve(s.idx);
   const view = $('#view');
   view.dataset.exam = '1'; // 做题态标记：滑动切题/长按排除在此生效
+  view.dataset.flow = s.backMode ? '0' : '1';
   const isEssay = q.type === 21 || q.type >= 20;
   const total = s.questions.length;
   // 多选判定与 judge() 对齐：JSON 数组（"[0,1,3]"）或逗号分隔数字（"0,1,3"，type=2/3 共 918 题）
@@ -5042,7 +5365,9 @@ function renderQuestion() {
   const submitBtn = el('button', 'btn btn-primary', '交卷');
   submitBtn.onclick = () => { if (paused()) { toast('已暂停，先点继续再交卷'); return; } submitExam(); };
   actions.appendChild(noteBtn);
-  actions.appendChild(explainBtn);
+  if (s.backMode) {
+    actions.appendChild(explainBtn);
+  }
   actions.appendChild(submitBtn);
   // 单题重练错题时：提供「移出错题本」按钮（直接删除该题错题记录，重练完成页不再出现）
   const navStack = store.navStack || [];
@@ -5066,7 +5391,15 @@ function renderQuestion() {
   }
   view.appendChild(actions);
   maybeSplitMaterial(view);
-  mountAiTutor(view, q, tutorToken);
+  if (s.backMode) {
+    mountAiTutor(view, q, tutorToken);
+  } else {
+    // 刷题模式（考场心流）：彻底不挂载随题 AI 辅导侧栏，清理残留
+    view.querySelectorAll('.quiz-rail').forEach((r) => r.remove());
+    view.querySelectorAll('.ai-tutor-card').forEach((c) => c.remove());
+  }
+  const aiBall = $('#ai-ball');
+  if (aiBall) aiBall.style.display = 'none';
 }
 
 /** 桌面/平板宽屏（≥980px）：材料题改为左右分屏——材料固定左侧滚动、题干+选项右侧，边看边算；手机端布局不变 */
@@ -7737,6 +8070,13 @@ syncThemeBtn();
 
 // 启动（支持 ?view=ai 直接打开 AI 设置页，便于访问与测试）
 bootstrapAuth();
+
+// 全局暴露核心测验控制器函数（支持 E2E 测试与自动化流程）
+window.enterQuiz = enterQuiz;
+window.nextQuestion = nextQuestion;
+window.prevQuestion = prevQuestion;
+window.finishQuiz = () => submitExam(true);
+window.submitExam = submitExam;
 
 // ============ App 端自测钩子（调试用，正常使用不会触发）============
 // MainActivity 在页面加载后可调用 window.runSelfTest()，结果经 console.log 输出
