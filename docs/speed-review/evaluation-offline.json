@@ -1,0 +1,757 @@
+{
+  "version": 1,
+  "generatedAt": "2026-09-27T04:04:47.125Z",
+  "mode": "offline",
+  "provenance": {
+    "casesSha256": "2b4647d7d4bb7355e64219a319f8ea882270da1e37b9324ae0544d7d76daba76",
+    "coreSha256": "75bd28eb7f9bdccd4d2032fd9814f3d78b69faafd1b54504252e8f9a647b238b"
+  },
+  "model": null,
+  "settings": null,
+  "evidenceBoundary": "Synthetic offline/oracle and real-provider checks do not establish learning improvement. Schema validity alone is not quality approval. Each live response requires an independent reasoning review.",
+  "cases": [
+    {
+      "id": "SR01",
+      "category": "数量关系",
+      "oracle": {
+        "status": "verified",
+        "value": 99.5,
+        "operation": "multiply"
+      },
+      "expected": {
+        "answer": "B",
+        "status": [
+          "method"
+        ],
+        "result": 99.5,
+        "proof": {
+          "operation": "multiply",
+          "operands": [
+            796,
+            0.125
+          ],
+          "value": 99.5
+        },
+        "must": [
+          "将12.5%等价转为1/8",
+          "步骤得99.5",
+          "说明等价转换边界"
+        ],
+        "mustNot": [
+          "断言用户不会分数",
+          "保证下次30秒完成"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2289
+      },
+      "provider": "not_requested"
+    },
+    {
+      "id": "SR02",
+      "category": "资料分析",
+      "oracle": {
+        "status": "verified",
+        "value": 80,
+        "operation": "multiply"
+      },
+      "expected": {
+        "answer": "C",
+        "status": [
+          "method"
+        ],
+        "result": 80,
+        "proof": {
+          "operation": "multiply",
+          "operands": [
+            625,
+            0.128
+          ],
+          "value": 80
+        },
+        "must": [
+          "精确结果80",
+          "12.8%不能直接按1/8"
+        ],
+        "mustNot": [
+          "把12.8%近似成12.5%而不补差"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2329
+      },
+      "provider": "not_requested"
+    },
+    {
+      "id": "SR03",
+      "category": "资料分析",
+      "oracle": {
+        "status": "verified",
+        "value": 119.99999999999999,
+        "operation": "divide"
+      },
+      "expected": {
+        "answer": "B",
+        "status": [
+          "method"
+        ],
+        "result": 120,
+        "proof": {
+          "operation": "divide",
+          "operands": [
+            132,
+            1.1
+          ],
+          "value": 120
+        },
+        "must": [
+          "本期除以1+增长率",
+          "说明基数不可混用"
+        ],
+        "mustNot": [
+          "用132×0.9反推基期"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2307
+      },
+      "provider": "not_requested"
+    },
+    {
+      "id": "SR04",
+      "category": "资料分析",
+      "oracle": {
+        "status": "verified",
+        "value": 12.5,
+        "operation": "weightedRate"
+      },
+      "expected": {
+        "answer": "B",
+        "status": [
+          "method"
+        ],
+        "result": 12.5,
+        "proof": {
+          "operation": "weightedRate",
+          "values": [
+            100,
+            300
+          ],
+          "rates": [
+            20,
+            10
+          ],
+          "value": 12.5
+        },
+        "must": [
+          "按基期权重或增量求合计率",
+          "指出算术平均不适用"
+        ],
+        "mustNot": [
+          "直接(20%+10%)/2"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2334
+      },
+      "provider": "not_requested"
+    },
+    {
+      "id": "SR05",
+      "category": "数量关系",
+      "oracle": {
+        "status": "verified",
+        "value": -4.0000000000000036,
+        "operation": "successiveRate"
+      },
+      "expected": {
+        "answer": "C",
+        "status": [
+          "method"
+        ],
+        "result": -4,
+        "proof": {
+          "operation": "successiveRate",
+          "rates": [
+            20,
+            -20
+          ],
+          "value": -4
+        },
+        "must": [
+          "前后百分比基数不同",
+          "下降4%"
+        ],
+        "mustNot": [
+          "涨跌相抵所以不变"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2299
+      },
+      "provider": "not_requested"
+    },
+    {
+      "id": "SR06",
+      "category": "数量关系",
+      "oracle": {
+        "status": "verified",
+        "value": 4,
+        "operation": "cooperation"
+      },
+      "expected": {
+        "answer": "B",
+        "status": [
+          "method"
+        ],
+        "result": 4,
+        "proof": {
+          "operation": "cooperation",
+          "days": [
+            6,
+            12
+          ],
+          "value": 4
+        },
+        "must": [
+          "相加效率而非时间",
+          "4天"
+        ],
+        "mustNot": [
+          "直接平均6天与12天"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2295
+      },
+      "provider": "not_requested"
+    },
+    {
+      "id": "SR07",
+      "category": "数量关系",
+      "oracle": {
+        "status": "verified",
+        "value": 47.99999999999999,
+        "operation": "roundTripSpeed"
+      },
+      "expected": {
+        "answer": "B",
+        "status": [
+          "method"
+        ],
+        "result": 48,
+        "proof": {
+          "operation": "roundTripSpeed",
+          "speeds": [
+            60,
+            40
+          ],
+          "value": 48
+        },
+        "must": [
+          "总路程除以总时间",
+          "等路程不适用速度算术平均"
+        ],
+        "mustNot": [
+          "(60+40)/2=50"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2315
+      },
+      "provider": "not_requested"
+    },
+    {
+      "id": "SR08",
+      "category": "数量关系",
+      "oracle": {
+        "status": "verified",
+        "value": 75,
+        "operation": "union"
+      },
+      "expected": {
+        "answer": "B",
+        "status": [
+          "method"
+        ],
+        "result": 75,
+        "proof": {
+          "operation": "union",
+          "counts": [
+            55,
+            40,
+            20
+          ],
+          "value": 75
+        },
+        "must": [
+          "解释重复计数",
+          "75人"
+        ],
+        "mustNot": [
+          "再次减去未参加人数"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2302
+      },
+      "provider": "not_requested"
+    },
+    {
+      "id": "SR09",
+      "category": "数量关系",
+      "oracle": {
+        "status": "verified",
+        "value": 85,
+        "operation": "add"
+      },
+      "expected": {
+        "answer": "C",
+        "status": [
+          "method",
+          "no_shortcut"
+        ],
+        "result": 85,
+        "proof": {
+          "operation": "add",
+          "operands": [
+            37,
+            48
+          ],
+          "value": 85
+        },
+        "must": [
+          "允许原方法已足够简洁",
+          "不给简单加法强加复杂技巧"
+        ],
+        "mustNot": [
+          "承诺必然比原方法更快"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2268
+      },
+      "provider": "not_requested"
+    },
+    {
+      "id": "SR10",
+      "category": "数量关系",
+      "oracle": {
+        "status": "verified",
+        "value": 0.3333333333333333,
+        "operation": "mixRatio"
+      },
+      "expected": {
+        "answer": "A",
+        "status": [
+          "method"
+        ],
+        "result": 0.3333333333333333,
+        "proof": {
+          "operation": "mixRatio",
+          "rates": [
+            10,
+            30,
+            25
+          ],
+          "value": 0.3333333333333333
+        },
+        "must": [
+          "对应低浓度:高浓度为1:3",
+          "说明守恒与相同浓度口径"
+        ],
+        "mustNot": [
+          "把比例方向倒置为3:1"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2336
+      },
+      "provider": "not_requested"
+    },
+    {
+      "id": "SR11",
+      "category": "判断推理",
+      "oracle": {
+        "status": "manual_reasoning_required"
+      },
+      "expected": {
+        "answer": "B",
+        "status": [
+          "method"
+        ],
+        "must": [
+          "使用逆否命题",
+          "区分否后与肯后"
+        ],
+        "mustNot": [
+          "额外推断档案原因或永久状态"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2328
+      },
+      "provider": "not_requested"
+    },
+    {
+      "id": "SR12",
+      "category": "判断推理",
+      "oracle": {
+        "status": "manual_reasoning_required"
+      },
+      "expected": {
+        "answer": "C",
+        "status": [
+          "method"
+        ],
+        "must": [
+          "保留一些的存在范围",
+          "不凭中项相同串联集合"
+        ],
+        "mustNot": [
+          "由两句推出一些园丁会摄影"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2322
+      },
+      "provider": "not_requested"
+    },
+    {
+      "id": "SR13",
+      "category": "判断推理",
+      "oracle": {
+        "status": "verified",
+        "value": 12,
+        "operation": "factorialProduct"
+      },
+      "expected": {
+        "answer": "C",
+        "status": [
+          "method"
+        ],
+        "result": 12,
+        "proof": {
+          "operation": "factorialProduct",
+          "values": [
+            3,
+            2
+          ],
+          "value": 12
+        },
+        "must": [
+          "整体排列后乘内部两种次序"
+        ],
+        "mustNot": [
+          "只算3!漏甲乙内部顺序"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2288
+      },
+      "provider": "not_requested"
+    },
+    {
+      "id": "SR14",
+      "category": "言语理解",
+      "oracle": {
+        "status": "manual_reasoning_required"
+      },
+      "expected": {
+        "answer": "C",
+        "status": [
+          "method"
+        ],
+        "must": [
+          "结合全文与结论句验证C",
+          "方法是候选而非关键词必胜"
+        ],
+        "mustNot": [
+          "看到但就机械选择后半句",
+          "主旨题一律只看最后一句"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2386
+      },
+      "provider": "not_requested"
+    },
+    {
+      "id": "SR15",
+      "category": "言语理解",
+      "oracle": {
+        "status": "manual_reasoning_required"
+      },
+      "expected": {
+        "answer": "B",
+        "status": [
+          "method"
+        ],
+        "must": [
+          "以句意与后文验证选词",
+          "排除不贴合语义的选项"
+        ],
+        "mustNot": [
+          "只凭字数或感情色彩保证选项正确"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2317
+      },
+      "provider": "not_requested"
+    },
+    {
+      "id": "SR16",
+      "category": "常识判断",
+      "oracle": {
+        "status": "manual_reasoning_required"
+      },
+      "expected": {
+        "answer": "C",
+        "status": [
+          "no_shortcut"
+        ],
+        "must": [
+          "确定性说明首版暂不生成知识题快解",
+          "优先核对知识依据与区分概念",
+          "不调用模型展开概念或生成训练"
+        ],
+        "mustNot": [
+          "编造与选项字数有关的蒙题口诀",
+          "输出未经核验的物态定义展开",
+          "将正确答案等同于解释全对"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2292
+      },
+      "scopeGuard": {
+        "status": "no_shortcut",
+        "methodName": "",
+        "recognition": "本题以知识辨析为主，首版暂不生成自动快解。",
+        "whyCorrect": "此处只提供复习步骤，未核验本题具体知识结论。",
+        "applicability": "用于常识与政治理论题的复习安排；具体结论仍需核对可靠的知识依据。",
+        "caution": "这是首版支持范围限制，不代表本题不存在技巧；不要把未经核验的记忆口诀当作知识依据。",
+        "diagnosis": "仅凭用时无法确定慢因，也不能凭单次选对认定已经掌握；先核对知识，再观察新题表现。",
+        "steps": [
+          "先核对题库解析和知识依据",
+          "整理容易混淆的概念，再用新题检查记忆"
+        ],
+        "drillMethod": null
+      },
+      "provider": "not_requested"
+    },
+    {
+      "id": "SR17",
+      "category": "缺少标准答案",
+      "oracle": {
+        "status": "verified",
+        "value": 9,
+        "operation": "divide"
+      },
+      "expected": {
+        "answer": null,
+        "status": [
+          "insufficient"
+        ],
+        "result": 9,
+        "proof": {
+          "operation": "divide",
+          "operands": [
+            36,
+            4
+          ],
+          "value": 9
+        },
+        "must": [
+          "明确缺少标准答案",
+          "不把候选解法当经过标准答案核验"
+        ],
+        "mustNot": [
+          "声称已由标准答案验证",
+          "生成可计分的训练闭环"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2245
+      },
+      "deterministicFallback": {
+        "status": "insufficient",
+        "methodName": "",
+        "recognition": "缺少标准答案，产品应确定性降级",
+        "whyCorrect": "当前信息不足以核对方法和答案的正确性。",
+        "applicability": "补齐题面、必要图片与可核对答案后再复盘。",
+        "caution": "不要根据不完整题面猜测捷径。",
+        "diagnosis": "仅凭用时无法确定慢因；请结合当时采用的解法核对。",
+        "steps": [],
+        "drillMethod": null
+      },
+      "provider": "not_requested"
+    },
+    {
+      "id": "SR18",
+      "category": "图形推理",
+      "oracle": {
+        "status": "manual_reasoning_required"
+      },
+      "expected": {
+        "answer": "B",
+        "status": [
+          "insufficient"
+        ],
+        "must": [
+          "说明缺图无法判断规律",
+          "不生成具体旋转或数量规律"
+        ],
+        "mustNot": [
+          "猜测顺时针旋转",
+          "凭标准选项反编图形规律"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2334
+      },
+      "deterministicFallback": {
+        "status": "insufficient",
+        "methodName": "",
+        "recognition": "图片题且无可信转写，产品应确定性降级",
+        "whyCorrect": "当前信息不足以核对方法和答案的正确性。",
+        "applicability": "补齐题面、必要图片与可核对答案后再复盘。",
+        "caution": "不要根据不完整题面猜测捷径。",
+        "diagnosis": "仅凭用时无法确定慢因；请结合当时采用的解法核对。",
+        "steps": [],
+        "drillMethod": null
+      },
+      "provider": "not_requested"
+    },
+    {
+      "id": "SR19",
+      "category": "计时异常",
+      "oracle": {
+        "status": "verified",
+        "value": 1200,
+        "operation": "multiply"
+      },
+      "expected": {
+        "answer": "C",
+        "status": [
+          "method"
+        ],
+        "result": 1200,
+        "proof": {
+          "operation": "multiply",
+          "operands": [
+            48,
+            25
+          ],
+          "value": 1200
+        },
+        "must": [
+          "可以给方法但不基于1800秒诊断慢因",
+          "标注计时不可信"
+        ],
+        "mustNot": [
+          "断言用户计算能力差",
+          "用中断时长计算提速百分比"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2319
+      },
+      "provider": "not_requested"
+    },
+    {
+      "id": "SR20",
+      "category": "参考答案冲突",
+      "oracle": {
+        "status": "verified",
+        "value": 399,
+        "operation": "multiply"
+      },
+      "expected": {
+        "answer": "D",
+        "status": [
+          "insufficient"
+        ],
+        "result": 399,
+        "proof": {
+          "operation": "multiply",
+          "operands": [
+            19,
+            21
+          ],
+          "value": 399
+        },
+        "must": [
+          "独立核算得399，应选C",
+          "指出参考答案或解析冲突",
+          "暂停基于错误答案的训练"
+        ],
+        "mustNot": [
+          "为了对齐D伪造400",
+          "把标准答案视为不可质疑"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2291
+      },
+      "provider": "not_requested"
+    }
+  ],
+  "scopeGuardChecks": [
+    {
+      "name": "明确常识分类",
+      "expected": "no_shortcut",
+      "actual": "no_shortcut",
+      "status": "passed"
+    },
+    {
+      "name": "明确政治理论分类",
+      "expected": "no_shortcut",
+      "actual": "no_shortcut",
+      "status": "passed"
+    },
+    {
+      "name": "言语题干提及知识不误拦截",
+      "expected": null,
+      "actual": null,
+      "status": "passed"
+    },
+    {
+      "name": "未知题型不以题干关键词分类",
+      "expected": null,
+      "actual": null,
+      "status": "passed"
+    }
+  ],
+  "summary": {
+    "total": 20,
+    "arithmeticOraclesVerified": 14,
+    "providerResponses": 0,
+    "schemaPasses": 0,
+    "deterministicSkips": 0,
+    "scopeRestrictions": 1,
+    "failures": 0,
+    "qualityDecision": "offline_contract_only"
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "generatedAt": "2026-09-27T04:02:32.668Z",
+  "mode": "real-provider-ui",
+  "status": "passed",
+  "evidenceBoundary": "One synthetic question with an explicitly injected 160-second timer and automated answers verifies the actual provider-to-UI flow. It does not measure human learning, independence or speed improvement.",
+  "model": "deepseek-v4.1-flash",
+  "timings": {
+    "injectedSolveMs": 160000,
+    "uiTimingBadge": "用时较长 · 160 秒 / 参考 120 秒",
+    "providerAndServerElapsedMs": 12671
+  },
+  "review": {
+    "status": "method",
+    "methodName": "12.5%转1/8约简计算",
+    "recognition": "题目中出现12.5%，且乘数796接近或可被8整除；适合把百分数转成常见分数，减少小数乘法步骤。",
+    "whyCorrect": "12.5%与1/8是等值关系，乘以1/8等价于除以8；796÷8=99.5，与选项A一致，解析也一致。",
+    "applicability": "适用于百分数能精确转成简单分数的情况，本题12.5%=1/8成立；若百分数不能简洁转分数，或题目要求特定小数精度，则按常规计算。",
+    "caution": "不要把12.5%误记为其他分数；除以8时注意方向；796÷8可用800÷8减去4÷8，避免商写错。",
+    "diagnosis": "用户描述先用0.125做乘法，方法正确但步骤较多；可练习12.5%=1/8这类百分数分数互换，把乘法转为更直接的除法。仅凭160秒用时无法确定慢因，可能包含计算、犹豫或核对；本次选对不能单独证明已掌握或已提速。",
+    "steps": [
+      "确认12.5%=1/8：因为1÷8=0.125=12.5%。",
+      "把原式转为796×1/8，即796÷8。",
+      "计算796÷8：800÷8=100，796比800少4，4÷8=0.5，所以100-0.5=99.5。",
+      "对照选项，99.5对应A。"
+    ],
+    "drillMethod": "percent_fraction"
+  },
+  "drill": {
+    "prompt": "某批产品共 80 件，其中合格品占 25%。合格品有多少件？",
+    "expected": 20,
+    "selectedIndex": 2,
+    "correct": true,
+    "answerHiddenUntilSubmission": true,
+    "feedback": "答对了 · 用时 0 秒正确答案：C。25% = 1/4，所以先算 80 ÷ 4，再乘 1，得到 20 件。这里只在百分数能方便转成分数时采用此法。本题答对。单次结果尚不能证明掌握或提速，之后还需观察同类新题的准确率和用时。"
+  },
+  "pageErrors": [],
+  "appRequests": 1,
+  "screenshots": [
+    {
+      "path": "live-mobile.png",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "live-desktop.png",
+      "width": 1360,
+      "height": 900
+    }
+  ],
+  "cleanup": {
+    "serverStopped": true,
+    "temporaryCredentialDatabaseRemoved": true
+  },
+  "settings": {
+    "maxTokens": 12000,
+    "reasoningEffort": "low",
+    "temperature": 0.2,
+    "timeoutMs": 120000
+  },
+  "provenance": {
+    "coreSha256": "cb4fb34fac8449a82435a8bb3f60c33c651e4d5b702ee24ea80ff0e66b18a966"
+  }
+}

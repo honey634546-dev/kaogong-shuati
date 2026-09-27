@@ -318,7 +318,7 @@ export function createLocalHandler({ query, records, store, ai }) {
         const batches = await store.getAll('custom_batches');
         const b = batches.find((x) => Number(x.id) === Number(cr.batch_id)) || {};
         const { contentHtml, materialHtml } = customQuestionHtml({ ...cr, images: parseImages(cr.images) });
-        return { questionId: raw, id: raw, type: 'custom', questionUid: cr.question_uid || '', revision: Number(cr.revision) > 0 ? Number(cr.revision) : 1, content: cr.prompt, contentHtml, material: cr.material || '', materialHtml, options: cr.options || [], answer: cr.answer || '', answerIndex: cr.answer_index ?? -1, analysis: cr.analysis || '', subject: String(b.subject || '').trim() || '自定义', chapter: b.name || '' };
+        return { questionId: raw, id: raw, type: 'custom', questionUid: cr.question_uid || '', revision: Number(cr.revision) > 0 ? Number(cr.revision) : 1, content: cr.prompt, contentHtml, material: cr.material || '', materialHtml, options: cr.options || [], answer: cr.answer || '', answerIndex: cr.answer_index ?? -1, answerStatus: cr.answer_status || 'unconfirmed', analysis: cr.analysis || '', category: cr.category || '', subject: String(b.subject || '').trim() || '自定义', chapter: b.name || '' };
       }
       return query.questionById(qs.get('id'));
     }
@@ -357,7 +357,7 @@ export function createLocalHandler({ query, records, store, ai }) {
           if (r) {
             const images = parseImages(r.images);
             const html = customQuestionHtml({ ...r, images });
-            q = { content: r.prompt, contentHtml: html.contentHtml, material: r.material || '', materialHtml: html.materialHtml, options: r.options || [], answer: r.answer || '', answerIndex: r.answer_index ?? -1, analysis: r.analysis || '', type: 'custom', images };
+            q = { content: r.prompt, contentHtml: html.contentHtml, material: r.material || '', materialHtml: html.materialHtml, options: r.options || [], answer: r.answer || '', answerIndex: r.answer_index ?? -1, answerStatus: r.answer_status || 'unconfirmed', analysis: r.analysis || '', category: r.category || '', type: 'custom', images };
             questionUid = r.question_uid || '';
             questionRevision = Number(r.revision) > 0 ? Number(r.revision) : 1;
           }
@@ -375,11 +375,12 @@ export function createLocalHandler({ query, records, store, ai }) {
             prompt: q.content || q.prompt || '', contentHtml: q.contentHtml || '', material: q.material || '', materialHtml: q.materialHtml || '',
             options: Array.isArray(options) ? options : [], answer: q.answer || '', answerIndex: q.answerIndex ?? -1,
             analysis: q.analysis || '', images: q.images || [],
+            category: q.category || '', answerStatus: q.answerStatus || '',
           };
           body = {
             ...body, correct: judged.ok, questionUid, questionRevision,
             questionSnapshot: JSON.stringify(questionSnapshot),
-            answerSnapshot: JSON.stringify({ selected: judged.selected, correct: judged.correct, correctText: judged.correctText, ok: judged.ok }),
+            answerSnapshot: JSON.stringify({ selected: judged.selected, correct: judged.correct, correctText: judged.correctText, ok: judged.ok, assisted: typeof body.assisted === 'boolean' ? body.assisted : null }),
           };
         }
       }
@@ -446,6 +447,7 @@ export function createLocalHandler({ query, records, store, ai }) {
             type: record.question_type, selected: answer.selected ?? record.selected ?? null,
             correct: record.is_correct == null ? null : Boolean(record.is_correct),
             solveMs: Number(record.cost_ms) || 0, explanationMs: Number(record.explanation_ms) || 0,
+            assisted: typeof answer.assisted === 'boolean' ? answer.assisted : null, submissionKey: record.submission_key || '',
             questionUid: record.question_uid || '', revision: Number(record.question_revision) || 1, question,
             createdAt: Number(record.created_at) || 0,
           };
@@ -546,6 +548,34 @@ export function createLocalHandler({ query, records, store, ai }) {
       const r = await ai.grade({ ...body, answer: body.content });
       if (r.error) return { notice: r.error, score: null };
       return { notice: '批改完成', score: null, result: r.content, fullScore: r.fullScore || null };
+    }
+    if (route === 'POST /ai/speed-review') {
+      if (typeof ai.speedReview !== 'function') return { review: null, notice: '本地提速复盘能力不可用' };
+      let input = { ...(body || {}) };
+      const attemptId = String(input.attemptId || '').trim();
+      if (attemptId) {
+        const attempt = (await store.getAll('attempts')).find((item) => String(item.attempt_id) === attemptId && (item.completed === 1 || item.completed === true));
+        if (!attempt) throw new Error('练习记录不存在或尚未完成');
+        const submissionKey = String(input.submissionKey || '').trim();
+        const matches = (await store.getAll('records')).filter((item) => String(item.attempt_id || '') === attemptId
+          && String(item.question_id) === String(input.questionId)
+          && (!input.questionUid || String(item.question_uid || '') === String(input.questionUid))
+          && (input.questionRevision == null || (Number(item.question_revision) || 1) === Number(input.questionRevision))
+          && (!submissionKey || String(item.submission_key || '') === submissionKey));
+        if (matches.length > 1) throw new Error('本次练习中该题有多次作答，请刷新记录并选择具体作答');
+        const record = matches[0];
+        if (!record) throw new Error('本次练习中未找到该版本的题目');
+        const snapshot = localSnapshot(record.question_snapshot);
+        const answer = localSnapshot(record.answer_snapshot);
+        input = {
+          ...input,
+          questionData: { ...snapshot, subject: record.subject || '', chapter: record.chapter || '' },
+          selected: answer.selected ?? record.selected ?? null,
+          correct: record.is_correct == null ? null : Boolean(record.is_correct), assisted: typeof answer.assisted === 'boolean' ? answer.assisted : null,
+          timing: { ...input.timing, solveMs: Number(record.cost_ms) || 0, assisted: typeof answer.assisted === 'boolean' ? answer.assisted : null },
+        };
+      }
+      return ai.speedReview(input, { signal: opts.signal });
     }
     if (route === 'POST /ai/explain') {
       const r = await ai.explain(body);
@@ -871,6 +901,7 @@ export function createLocalHandler({ query, records, store, ai }) {
           subjectName: bSubj,
           batchId: bid,
           chapter: b.name,
+          category: r.category || '',
         };
       });
       let out = questions;
@@ -911,7 +942,8 @@ export function createLocalHandler({ query, records, store, ai }) {
         attemptId: body.attemptId,
         questionUid: r.question_uid || '',
         questionRevision: r.revision || 1,
-        questionSnapshot: JSON.stringify({ questionId: body.questionId, questionUid: r.question_uid || '', revision: r.revision || 1, type: 'custom', prompt: r.prompt || '', material: r.material || '', options: r.options || [], answer: r.answer || '', answerIndex: r.answer_index ?? -1, analysis: r.analysis || '' }),
+        questionSnapshot: JSON.stringify({ questionId: body.questionId, questionUid: r.question_uid || '', revision: r.revision || 1, type: 'custom', prompt: r.prompt || '', material: r.material || '', options: r.options || [], answer: r.answer || '', answerIndex: r.answer_index ?? -1, answerStatus: r.answer_status || 'unconfirmed', analysis: r.analysis || '', category: r.category || '' }),
+        answerSnapshot: JSON.stringify({ selected: result.selected, correct: result.correct, correctText: result.correctText, ok: result.ok, assisted: typeof body.assisted === 'boolean' ? body.assisted : null }),
       });
       return result;
     }

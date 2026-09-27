@@ -4,6 +4,7 @@
 //   - 直调 OpenAI 兼容接口（request 注入：浏览器 fetch / Capacitor CapacitorHttp，规避 CORS）
 //   - AI 解析结果缓存到 IndexedDB（ai_cache），断网/未配置时返回可读的降级提示
 // 与 server.mjs 的 /api/ai/* 返回结构保持一致，app.js 零改动。
+import { buildSpeedReviewPrompt, normalizeSpeedReview, insufficientSpeedReview, hasKnownSpeedReviewAnswer, conservativeSpeedReview, createSpeedReviewAgent } from './speed-review-core.mjs';
 
 const STORE_KEY = 'ai_agents_v1'; // 本机智能体配置（localStorage）
 const SESSION_KEYS = new Map(); // agent id -> API Key；绝不持久化
@@ -376,6 +377,7 @@ async function callVisionLocal(agent, imageDataUrl, mode = 'ocr', request) {
 // 浏览器版传 fetch 包装；Capacitor 版传 CapacitorHttp 包装（见 local-bootstrap.mjs）。
 
 async function callChat(agent, userContent, request, options = {}) {
+  if (options.signal?.aborted) return { error: 'AI 请求已取消', cancelled: true };
   const mock = options.mock === true || String(agent.provider_mode || '').toLowerCase() === 'mock';
   // opencode.ai 免费网关无需 api_key；其余网关必须填写（NVIDIA/DeepSeek 等）
   const isFreeGateway = /opencode\.ai|zen\/v1/i.test(agent.base_url || '');
@@ -433,8 +435,10 @@ async function callChat(agent, userContent, request, options = {}) {
       method: 'POST',
       headers: reqHeaders,
       body: JSON.stringify(body),
+      signal: options.signal,
     });
   } catch (e) {
+    if (options.signal?.aborted) return { error: 'AI 请求已取消', cancelled: true };
     const msg = String(e.message || e);
     return { error: /abort|timeout|timed ?out|超时|deadline|ECONNABORTED/i.test(msg)
       ? '网络超时：连不上 AI 网关（网络慢或被拦截）。请检查网络，稍后重试'
@@ -450,8 +454,10 @@ async function callChat(agent, userContent, request, options = {}) {
           method: 'POST',
           headers: reqHeaders,
           body: JSON.stringify(body),
+          signal: options.signal,
         });
       } catch (e2) {
+        if (options.signal?.aborted) return { error: 'AI 请求已取消', cancelled: true };
         const m2 = String(e2.message || e2);
         return { error: /abort|timeout|timed ?out|超时|deadline|ECONNABORTED/i.test(m2)
           ? '网络超时：连不上 AI 网关（网络慢或被拦截）。请检查网络，稍后重试'
@@ -585,6 +591,43 @@ export async function createAiApi({ request, tiku, query, defaultsUrl = DEFAULT_
       if (!a) return { error: '未找到该智能体' };
       const r = await callChat(a, content, request, { messages, stream: stream === true, mock: mock === true });
       return r.error ? r : { ok: true, ...r, streamed: false };
+    },
+
+    /** 提速复盘使用独立提示词和本次作答，不命中通用解析缓存。 */
+    async speedReview(input = {}, { signal } = {}) {
+      if (signal?.aborted) return { review: null, notice: 'AI 请求已取消', cancelled: true };
+      const q = input.questionData || input.question;
+      if (!q || !String(q.content || q.prompt || '').trim()) return { review: insufficientSpeedReview('缺少本次作答的完整题面快照，无法核验解法。') };
+      let images = q.images || [];
+      if (typeof images === 'string') { try { images = JSON.parse(images); } catch { images = []; } }
+      if ((Array.isArray(images) && images.length) || /<img\b|!\[[^\]]*\]\(|【图片】/i.test(JSON.stringify(q))) {
+        return { review: insufficientSpeedReview('本题包含图形或图表，提速复盘暂不能可靠读取图片；请先对照原图和题库解析。') };
+      }
+      if (!hasKnownSpeedReviewAnswer(q)) return { review: insufficientSpeedReview('本题缺少可核对的标准答案，先确认题目与答案，再讨论提速方法。') };
+      const conservativeReview = conservativeSpeedReview(q);
+      if (conservativeReview) return { review: conservativeReview, notice: '当前题型采用复习建议' };
+      const baseAgent = loadAgents(defaults).find((a) => a.role === 'xingce-explainer');
+      if (!baseAgent) return { review: null, notice: '行测解析 AI 不存在' };
+      const agent = createSpeedReviewAgent(baseAgent);
+      if (String(agent.provider_mode || '').toLowerCase() === 'mock') return {
+        review: insufficientSpeedReview('本地 Mock 演示未调用真实 AI，不提供解题或提速结论。'),
+        model: agent.model || 'mock', mock: true, notice: '本地 Mock 演示',
+      };
+      let prompt;
+      try { prompt = buildSpeedReviewPrompt({ ...input, question: q }); } catch (e) { return { review: null, notice: e.message }; }
+      let abort;
+      // Capacitor native HTTP may not expose transport cancellation. Settle the UI immediately
+      // and ignore a late native response; fetch-based requests also receive the actual signal.
+      const cancelled = new Promise((resolve) => {
+        abort = () => resolve({ error: 'AI 请求已取消', cancelled: true });
+        signal?.addEventListener('abort', abort, { once: true });
+      });
+      let result;
+      try { result = await Promise.race([callChat(agent, prompt, request, { signal }), cancelled]); }
+      finally { signal?.removeEventListener('abort', abort); }
+      if (result.error) return { review: null, notice: result.error, cancelled: !!result.cancelled };
+      try { return { review: normalizeSpeedReview(result.content), model: result.model || agent.model || '', mock: false }; }
+      catch (e) { return { review: null, notice: `AI 复盘格式校验失败：${e.message}。可重试，未采用该建议。` }; }
     },
 
     /** POST /api/ai/explain — 单题 AI 解析（带本地缓存） */

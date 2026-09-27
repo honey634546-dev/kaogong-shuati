@@ -20,6 +20,7 @@ import { mapChapterToNode } from './lib/xingce-chapter-map.mjs';
 import { customQuestionHtml, parseImages } from './public/lib/custom-parser.js';
 import { ANSWER_STATUSES, normalizeCustomQuestion, normalizeCustomQuestions } from './public/lib/custom-bank.js';
 import { authRequestHandler, getAuthSession, initAuth } from './lib/auth.mjs';
+import { buildSpeedReviewPrompt, normalizeSpeedReview, insufficientSpeedReview, hasKnownSpeedReviewAnswer, conservativeSpeedReview, createSpeedReviewAgent } from './public/speed-review-core.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.argv[2] || process.env.PORT || 3000);
@@ -1080,7 +1081,7 @@ function getCompletedAttempt(ownerId, attemptId) {
   if (!row) return null;
   const records = pdb.prepare(`
     SELECT question_id, subject, chapter, question_type, selected, is_correct, cost_ms, explanation_ms,
-      question_uid, question_revision, question_snapshot, answer_snapshot, created_at
+      question_uid, question_revision, question_snapshot, answer_snapshot, submission_key, created_at
     FROM practice_records WHERE user_id = ? AND attempt_id = ? ORDER BY id
   `).all(String(ownerId || LEGACY_OWNER_ID), id).map((record) => {
     let selected = null, question = {}, answer = {};
@@ -1096,6 +1097,8 @@ function getCompletedAttempt(ownerId, attemptId) {
       correct: record.is_correct == null ? null : Boolean(record.is_correct),
       solveMs: Number(record.cost_ms) || 0,
       explanationMs: Number(record.explanation_ms) || 0,
+      assisted: typeof answer.assisted === 'boolean' ? answer.assisted : null,
+      submissionKey: record.submission_key || '',
       questionUid: record.question_uid || '',
       revision: Number(record.question_revision) || 1,
       question,
@@ -2475,6 +2478,7 @@ const server = http.createServer(async (req, res) => {
             content: cr.prompt, contentHtml, material: cr.material || '', materialHtml,
             options: JSON.parse(cr.options || '[]'), answer: cr.answer || '', answerIndex: cr.answer_index == null ? -1 : Number(cr.answer_index),
             analysis: cr.analysis || '',
+            category: cr.category || '', answerStatus: cr.answer_status || 'unconfirmed',
             subject: (cr.batch_subject || '自定义').trim() || '自定义', chapter: cr.batch_name || '',
           });
         }
@@ -3163,6 +3167,7 @@ const server = http.createServer(async (req, res) => {
             subjectName: bSubj,
             batchId: bid,
             chapter: b.name,
+            category: r.category || '',
           };
         });
         // 自定义题库：单选 chip 直接控制题量时，保留材料组完整（不把一道「第 3/5 小问」单独丢出）
@@ -3258,7 +3263,7 @@ const server = http.createServer(async (req, res) => {
           resolved.questionUid,
           resolved.revision,
           JSON.stringify(resolved.snapshot),
-          JSON.stringify({ selected: result.selected, correct: result.correct, correctText: result.correctText, ok: result.ok }),
+          JSON.stringify({ selected: result.selected, correct: result.correct, correctText: result.correctText, ok: result.ok, assisted: typeof parsed.assisted === 'boolean' ? parsed.assisted : null }),
         );
         return json(res, 200, { ...result, questionUid: resolved.questionUid, revision: resolved.revision, idempotent: false });
       }
@@ -3297,7 +3302,8 @@ const server = http.createServer(async (req, res) => {
           correct: judged.correct,
           correctText: judged.correctText,
           ok: judged.ok,
-        }) : '';
+          assisted: typeof parsed.assisted === 'boolean' ? parsed.assisted : null,
+        }) : JSON.stringify({ assisted: typeof parsed.assisted === 'boolean' ? parsed.assisted : null });
         ensureAttempt(ownerId, attemptId, subject, attemptMode, attemptQuestionCount, startedAtMs);
         // 来源归档：按题目真实来源算大模块/子模块（与错题本/收藏/笔记分组同口径），旧记录靠一键整理回填
         const cls = classifySource(questionId);
@@ -3949,6 +3955,75 @@ const server = http.createServer(async (req, res) => {
           return err(res, 400, `拉取失败：${e.message}`);
         }
       }
+      // 提速复盘独立于通用解析：按本次作答快照生成，绝不复用题目解析缓存。
+      if (pathname === '/api/ai/speed-review' && req.method === 'POST') {
+        let body = '';
+        for await (const chunk of req) {
+          body += chunk;
+          if (body.length > 220000) return err(res, 413, '复盘输入过大');
+        }
+        let parsed;
+        try { parsed = JSON.parse(body || '{}'); } catch { return err(res, 400, '请求体不是有效 JSON'); }
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return err(res, 400, '复盘输入无效');
+        const questionId = String(parsed.questionId ?? '').trim();
+        const attemptId = String(parsed.attemptId || '').trim();
+        if (!questionId || questionId.length > 256 || attemptId.length > 128) return err(res, 400, '题目或练习记录标识无效');
+        let input = { ...parsed, question: parsed.questionData };
+        if (attemptId) {
+          // 所有字段都来自本人已完成练习；错误的 attemptId 不允许回退到客户端题面。
+          const attempt = getCompletedAttempt(ownerId, attemptId);
+          if (!attempt) return err(res, 404, '练习记录不存在或尚未完成');
+          const submissionKey = String(parsed.submissionKey || '').trim();
+          const matches = attempt.records.filter((item) => item.questionId === questionId
+            && (!parsed.questionUid || item.questionUid === String(parsed.questionUid))
+            && (parsed.questionRevision == null || item.revision === Number(parsed.questionRevision))
+            && (!submissionKey || item.submissionKey === submissionKey));
+          if (matches.length > 1) return err(res, 409, '本次练习中该题有多次作答，请刷新记录并选择具体作答');
+          const record = matches[0];
+          if (!record) return err(res, 404, '本次练习中未找到该版本的题目');
+          input = {
+            ...input,
+            question: { ...record.question, subject: record.subject, chapter: record.chapter },
+            selected: record.selected, correct: record.correct, assisted: record.assisted,
+            timing: { ...parsed.timing, solveMs: record.solveMs, assisted: record.assisted },
+          };
+        }
+        const q = input.question;
+        if (!q || typeof q !== 'object' || Array.isArray(q) || !String(q.content || q.prompt || '').trim()) {
+          return json(res, 200, { review: insufficientSpeedReview('缺少本次作答的完整题面快照，无法核验解法。') });
+        }
+        // 当前提速复盘只核验文字题。图片不能靠题库答案反推或猜测。
+        if (parseImages(q.images).length || /<img\b|!\[[^\]]*\]\(|【图片】/i.test(JSON.stringify(q))) {
+          return json(res, 200, { review: insufficientSpeedReview('本题包含图形或图表，提速复盘暂不能可靠读取图片；请先对照原图和题库解析。') });
+        }
+        if (!hasKnownSpeedReviewAnswer(q)) return json(res, 200, {
+          review: insufficientSpeedReview('本题缺少可核对的标准答案，先确认题目与答案，再讨论提速方法。'),
+        });
+        const conservativeReview = conservativeSpeedReview(q);
+        if (conservativeReview) return json(res, 200, { review: conservativeReview, notice: '当前题型采用复习建议' });
+        let prompt;
+        try { prompt = buildSpeedReviewPrompt(input); } catch (e) { return err(res, 400, e.message || '复盘输入无效'); }
+        const baseAgent = requestAgent(req, 'xingce-explainer');
+        if (!baseAgent) return err(res, 404, '行测解析 AI 不存在');
+        const agent = createSpeedReviewAgent(baseAgent);
+        const mock = String(agent.provider_mode || '').toLowerCase() === 'mock' || process.env.AI_MOCK === '1';
+        if (mock) return json(res, 200, {
+          review: insufficientSpeedReview('本地 Mock 演示未调用真实 AI，不提供解题或提速结论。'),
+          model: agent.model || 'mock', mock: true, notice: '本地 Mock 演示',
+        });
+        if (normalizeKeyStorageMode(agent.key_storage_mode, String(agent.api_key || '').trim() ? 'server' : 'browser') === 'browser') {
+          return json(res, 200, { clientCall: { kind: 'speed-review', agentId: agent.id, messages: [{ role: 'user', content: prompt }] } });
+        }
+        const scope = requestAbortSignal(req, res);
+        let result;
+        try { result = await callAgent(agent, prompt, { signal: scope.signal }); } finally { scope.cleanup(); }
+        if (result.error) return json(res, 200, { review: null, notice: result.error });
+        try {
+          return json(res, 200, { review: normalizeSpeedReview(result.content), model: result.model || agent.model || '', mock: false });
+        } catch (e) {
+          return json(res, 200, { review: null, notice: `AI 复盘格式校验失败：${e.message}。可重试，未采用该建议。` });
+        }
+      }
       // 行测 AI 解析（真实调用行测解析 AI，按题目 + 作答情况生成解析）
       if (pathname === '/api/ai/explain' && req.method === 'POST') {
         let body = '';
@@ -4421,7 +4496,7 @@ const server = http.createServer(async (req, res) => {
   fs.createReadStream(file).pipe(res);
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, HOST, () => {
   console.log(`✅ 考公刷题服务已启动: http://${HOST}:${PORT}`);
   console.log(`   数据目录: ${DATA_DIR}`);
   console.log(`   题库: ${DB_FILE || '未提供（可先使用自定义题库）'}`);

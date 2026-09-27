@@ -286,9 +286,22 @@
 
   async function preparedCall(data, rawFetch, signal) {
     const call = data?.clientCall || data;
-    const agent = await getAgent(call.agentId);
+    let agent = await getAgent(call.agentId);
+    let speedCore = null;
+    if (call.kind === 'speed-review') {
+      speedCore = await import('./speed-review-core.mjs');
+      agent = speedCore.createSpeedReviewAgent(agent);
+    }
     const result = await callProvider(agent, call.messages || [], { signal, stream: false });
     if (!result.ok) return result;
+    if (call.kind === 'speed-review') {
+      if (result.mock) return {
+        review: speedCore.insufficientSpeedReview('本地 Mock 演示未调用真实 AI，不提供解题或提速结论。'),
+        model: result.model || 'mock', mock: true, notice: '本地 Mock 演示',
+      };
+      try { return { review: speedCore.normalizeSpeedReview(result.content), model: result.model || agent.model || '', mock: false }; }
+      catch (e) { return { review: null, notice: `AI 复盘格式校验失败：${e.message}。可重试，未采用该建议。` }; }
+    }
     if (call.kind === 'explain') {
       await rawJson('/api/ai/explain/client-result', {
         method: 'POST',

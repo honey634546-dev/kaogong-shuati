@@ -85,6 +85,7 @@ if (isLocalMode()) {
     if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.CapacitorHttp) {
       const CapacitorHttp = window.Capacitor.Plugins.CapacitorHttp;
       request = async function (url, opts) {
+        if (opts.signal?.aborted) throw new DOMException('AI 请求已取消', 'AbortError');
         const r = await CapacitorHttp.request({
           url: url,
           method: opts.method,
@@ -104,11 +105,23 @@ if (isLocalMode()) {
       request = async function (url, opts) {
         const ctrl = new AbortController();
         const timer = setTimeout(() => ctrl.abort(), READ_TIMEOUT_MS);
+        const onAbort = () => ctrl.abort();
+        if (opts.signal?.aborted) ctrl.abort();
+        else opts.signal?.addEventListener('abort', onAbort, { once: true });
+        const cleanup = () => {
+          clearTimeout(timer);
+          opts.signal?.removeEventListener('abort', onAbort);
+        };
         try {
           const r = await fetch(url, { method: opts.method, headers: opts.headers, body: opts.body, signal: ctrl.signal });
-          return { ok: r.ok, status: r.status, json: function () { return r.json(); }, text: function () { return r.text(); } };
-        } finally {
-          clearTimeout(timer);
+          // Keep abort/timeout attached until the response body is consumed as well.
+          return { ok: r.ok, status: r.status,
+            json: async function () { try { return await r.json(); } finally { cleanup(); } },
+            text: async function () { try { return await r.text(); } finally { cleanup(); } },
+          };
+        } catch (e) {
+          cleanup();
+          throw e;
         }
       };
     }

@@ -430,13 +430,13 @@ function startQuestionSolve(idx) {
   const s = store.state;
   const q = s.questions[idx];
   const a = ensureAnswer(idx);
-  if (!q || !s.timing?.running || a.solveStopped || q._solveStartedAt != null) return;
+  if (!q || document.hidden || !s.timing?.running || a.solveStopped || q._solveStartedAt != null) return;
   q._solveStartedAt = monotonicNow();
 }
 function startExplanationTimer(idx) {
   const s = store.state;
   const q = s.questions[idx];
-  if (!q || !s.timing?.running || !q._explanationOpen || q._explanationStartedAt != null) return;
+  if (!q || document.hidden || !s.timing?.running || !q._explanationOpen || q._explanationStartedAt != null) return;
   q._explanationStartedAt = monotonicNow();
 }
 function startTimer(limitSec) {
@@ -563,6 +563,18 @@ function closeQuestionTimers(idx) {
   const q = store.state.questions[idx];
   if (q) q._explanationOpen = false;
 }
+// 切到后台时逐题停留不继续累积；考试总倒计时仍按真实流逝运行。
+document.addEventListener('visibilitychange', () => {
+  const s = store.state;
+  if (!s.timing?.running || s.view !== 'practice') return;
+  if (document.hidden) {
+    stampCost(s.idx);
+    stampExplanation(s.idx);
+  } else {
+    startQuestionSolve(s.idx);
+    startExplanationTimer(s.idx);
+  }
+});
 /** 记录答案并（客观题）自动下一题；背题模式（backMode）判分展示反馈后不跳题 */
 function recordAnswer(q, sel) {
   const s = store.state;
@@ -4259,6 +4271,9 @@ function mountAiTutor(view, q, token) {
       }, controller.signal);
       if (result?.error || result?.ok === false) throw Object.assign(new Error(result.error || 'AI 回复失败'), result || {});
       if (!live()) return;
+      if (store.state.view === 'practice' && store.state.questions[store.state.idx] === q && !ensureAnswer(store.state.idx).solveStopped) {
+        ensureAnswer(store.state.idx).assisted = true;
+      }
       state.messages = Array.isArray(result.messages) ? result.messages : state.messages;
       pending.status = 'complete';
       setStatus(result.mock ? '本地 Mock' : '已保存');
@@ -5020,6 +5035,7 @@ function renderQuestion() {
     const existing = $('#inline-explain');
     if (existing) { stampExplanation(s.idx); q._explanationOpen = false; existing.remove(); return; }
     stampCost(s.idx);
+    if (!ensureAnswer(s.idx).solveStopped) ensureAnswer(s.idx).assisted = true;
     ensureAnswer(s.idx).solveStopped = true;
     q._explanationOpen = true;
     const j = s.answers[s.idx] ? judge(q, s.answers[s.idx].selected) : null;
@@ -5168,6 +5184,7 @@ async function submitExam(force) {
       body: JSON.stringify({
         questionId: q.id, subject: q.subject || s.subject, chapter: q.chapter, type: q.type,
         selected: selSorted || [], correct: finalCorrect, costMs: a.costMs,
+        assisted: a.assisted === true,
         explanationMs: a.explanationMs || 0,
         attemptId: s.attemptId, attemptMode: s.mode, attemptQuestionCount: s.questions.length,
         startedAtMs: s.attemptStartedAt,
@@ -5291,6 +5308,7 @@ async function openAttemptReview(attemptId) {
       revision: record.revision || snap.revision || 1,
       subject: record.subject || attempt.subject || '',
       chapter: record.chapter || snap.category || '',
+      category: snap.category || '',
       type: snap.type ?? record.type ?? 0,
       content: prompt,
       contentHtml,
@@ -5299,6 +5317,7 @@ async function openAttemptReview(attemptId) {
       options,
       answer: snap.answer || '',
       answerIndex: snap.answerIndex ?? -1,
+      answerStatus: snap.answerStatus ?? snap.answer_status ?? '',
       analysis: snap.analysis || '',
       images,
     });
@@ -5307,6 +5326,8 @@ async function openAttemptReview(attemptId) {
       correct: record.correct,
       costMs: Number(record.solveMs) || 0,
       explanationMs: Number(record.explanationMs) || 0,
+      assisted: typeof record.assisted === 'boolean' ? record.assisted : null,
+      submissionKey: record.submissionKey || '',
       solveStopped: true,
     });
   }
@@ -5466,6 +5487,16 @@ function renderReview() {
     else goBack();
   };
   view.appendChild(back);
+  const reviewAttempt = s.attemptId;
+  import('./speed-review-ui.mjs').then(({ mountSpeedReview }) => {
+    if (!back.isConnected || store.state.attemptId !== reviewAttempt) return;
+    mountSpeedReview({ view, cards, questions: s.questions, answers: s.answers, attemptId: reviewAttempt, historical: s.historicalReview, api });
+  }).catch(() => {
+    if (back.isConnected) {
+      const notice = el('p', 'speed-error', '提速复盘组件未能加载，请刷新后重试。');
+      back.before(notice);
+    }
+  });
 }
 
 /** 结果页筛选：all=全部 / wrong=错题 / none=无标准答案 */

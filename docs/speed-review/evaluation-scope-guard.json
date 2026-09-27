@@ -1,0 +1,117 @@
+{
+  "version": 1,
+  "generatedAt": "2026-09-27T04:04:45.548Z",
+  "mode": "offline",
+  "provenance": {
+    "casesSha256": "2b4647d7d4bb7355e64219a319f8ea882270da1e37b9324ae0544d7d76daba76",
+    "coreSha256": "75bd28eb7f9bdccd4d2032fd9814f3d78b69faafd1b54504252e8f9a647b238b"
+  },
+  "model": null,
+  "settings": null,
+  "evidenceBoundary": "Synthetic offline/oracle and real-provider checks do not establish learning improvement. Schema validity alone is not quality approval. Each live response requires an independent reasoning review.",
+  "cases": [
+    {
+      "id": "SR15",
+      "category": "言语理解",
+      "oracle": {
+        "status": "manual_reasoning_required"
+      },
+      "expected": {
+        "answer": "B",
+        "status": [
+          "method"
+        ],
+        "must": [
+          "以句意与后文验证选词",
+          "排除不贴合语义的选项"
+        ],
+        "mustNot": [
+          "只凭字数或感情色彩保证选项正确"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2317
+      },
+      "provider": "not_requested"
+    },
+    {
+      "id": "SR16",
+      "category": "常识判断",
+      "oracle": {
+        "status": "manual_reasoning_required"
+      },
+      "expected": {
+        "answer": "C",
+        "status": [
+          "no_shortcut"
+        ],
+        "must": [
+          "确定性说明首版暂不生成知识题快解",
+          "优先核对知识依据与区分概念",
+          "不调用模型展开概念或生成训练"
+        ],
+        "mustNot": [
+          "编造与选项字数有关的蒙题口诀",
+          "输出未经核验的物态定义展开",
+          "将正确答案等同于解释全对"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2292
+      },
+      "scopeGuard": {
+        "status": "no_shortcut",
+        "methodName": "",
+        "recognition": "本题以知识辨析为主，首版暂不生成自动快解。",
+        "whyCorrect": "此处只提供复习步骤，未核验本题具体知识结论。",
+        "applicability": "用于常识与政治理论题的复习安排；具体结论仍需核对可靠的知识依据。",
+        "caution": "这是首版支持范围限制，不代表本题不存在技巧；不要把未经核验的记忆口诀当作知识依据。",
+        "diagnosis": "仅凭用时无法确定慢因，也不能凭单次选对认定已经掌握；先核对知识，再观察新题表现。",
+        "steps": [
+          "先核对题库解析和知识依据",
+          "整理容易混淆的概念，再用新题检查记忆"
+        ],
+        "drillMethod": null
+      },
+      "provider": "not_requested"
+    }
+  ],
+  "scopeGuardChecks": [
+    {
+      "name": "明确常识分类",
+      "expected": "no_shortcut",
+      "actual": "no_shortcut",
+      "status": "passed"
+    },
+    {
+      "name": "明确政治理论分类",
+      "expected": "no_shortcut",
+      "actual": "no_shortcut",
+      "status": "passed"
+    },
+    {
+      "name": "言语题干提及知识不误拦截",
+      "expected": null,
+      "actual": null,
+      "status": "passed"
+    },
+    {
+      "name": "未知题型不以题干关键词分类",
+      "expected": null,
+      "actual": null,
+      "status": "passed"
+    }
+  ],
+  "summary": {
+    "total": 2,
+    "arithmeticOraclesVerified": 0,
+    "providerResponses": 0,
+    "schemaPasses": 0,
+    "deterministicSkips": 0,
+    "scopeRestrictions": 1,
+    "failures": 0,
+    "qualityDecision": "offline_contract_only"
+  }
+}

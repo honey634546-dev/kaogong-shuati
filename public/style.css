@@ -2310,4 +2310,40 @@ body:has(.scratch-overlay) #ai-ball {
   #view { max-width: 880px; }
 }
 
-
+/* 做题后提速复盘：复用主题色，手机单栏和桌面长内容均可自然展开。 */
+.speed-summary { border-inline-start: 3px solid var(--primary, #356e9d); }
+.speed-eyebrow { font-size: 12px; color: var(--text-3, #77808d); letter-spacing: .04em; }
+.speed-summary h2 { margin: 7px 0 10px; font-size: 21px; }
+.speed-muted { color: var(--text-2, var(--muted, #727886)); line-height: 1.7; }
+.speed-small { font-size: 12px; }
+.speed-controls, .speed-ranking-links { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.speed-controls label { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; }
+.speed-reference { width: 88px; padding: 7px 8px; border: 1px solid var(--border, #d9dce2); border-radius: 8px; background: var(--bg, #fff); color: var(--text, #222); }
+.speed-ranking-title { font-size: 14px; font-weight: 600; margin: 12px 0 8px; }
+.speed-card { border-top: 1px solid var(--border, #e1e4e9); margin-top: 16px; padding-top: 14px; }
+.speed-time { color: var(--text-3, #727886); font-size: 12px; margin-bottom: 7px; }
+.speed-time.is-slow { color: var(--amber, #95622b); font-weight: 600; }
+.speed-panel { margin-top: 12px; }
+.speed-field { display: block; font-size: 13px; margin: 12px 0; }
+.speed-field select, .speed-field textarea { display: block; width: 100%; box-sizing: border-box; margin-top: 6px; padding: 10px; font: inherit; line-height: 1.6; color: var(--text, #222); background: var(--bg, #fff); border: 1px solid var(--border, #d9dce2); border-radius: 9px; }
+.speed-field textarea { resize: vertical; }
+.speed-result { overflow-wrap: anywhere; line-height: 1.8; }
+.speed-result-title { font-size: 18px; font-weight: 650; margin-top: 18px; }
+.speed-explanation { margin-top: 14px; }
+.speed-explanation strong { font-size: 13px; }
+.speed-explanation p { margin: 4px 0; white-space: pre-wrap; }
+.speed-explanation ol { padding-left: 24px; margin-top: 6px; }
+.speed-explanation li { padding-left: 3px; margin-bottom: 6px; white-space: pre-wrap; }
+.speed-error { color: var(--red, #bd4945); font-size: 13px; line-height: 1.7; }
+.speed-drill { border: 1px solid var(--border, #d9dce2); border-radius: 12px; padding: 16px; margin-top: 20px; }
+.speed-drill-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.speed-drill-option { white-space: normal; text-align: left; justify-content: flex-start; }
+.speed-drill-option.is-correct { color: var(--green, #397353); border-color: currentColor; opacity: 1; }
+.speed-drill-feedback { margin-top: 14px; }
+.speed-drill-feedback p { margin: 6px 0; }
+.speed-panel[hidden], .speed-card [hidden] { display: none !important; }
+@media (max-width: 480px) {
+  .speed-drill { padding: 12px; }
+  .speed-drill-options { grid-template-columns: 1fr; }
+  .speed-ranking-links .btn { width: 100%; justify-content: flex-start; }
+}
