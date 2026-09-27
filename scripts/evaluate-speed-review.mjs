@@ -24,7 +24,8 @@ const args = process.argv.slice(2);
 const getArg = (name, fallback) => args.find((arg) => arg.startsWith(`--${name}=`))?.slice(name.length + 3) ?? fallback;
 const live = args.includes('--live');
 const ids = new Set(String(getArg('ids', '')).split(',').filter(Boolean));
-const out = path.resolve(root, getArg('out', `docs/speed-review/evaluation-${live ? 'live' : 'offline'}-capability-v3.json`));
+const out = path.resolve(root, getArg('out', `docs/speed-review/evaluation-${live ? 'live' : 'offline'}-classification-v4.json`));
+if (live) assert.ok(!fs.existsSync(out), 'Live evidence already exists; choose a new report path instead of overwriting it');
 const suite = JSON.parse(fs.readFileSync(path.join(root, 'docs/speed-review/evaluation-cases.json'), 'utf8'));
 const cases = suite.cases.filter((item) => !ids.size || ids.has(item.id));
 assert.ok(cases.length, 'No evaluation cases selected');
@@ -105,10 +106,11 @@ function safeError(error) {
   return text.replace(/https?:\/\/[^\s"<>]+/g, '[REDACTED_URL]').slice(0, 1200);
 }
 const report = {
-  version: 3, casesVersion: suite.version, generatedAt: new Date().toISOString(), mode: live ? 'real-provider' : 'offline',
+  version: 4, casesVersion: suite.version, generatedAt: new Date().toISOString(), mode: live ? 'real-provider' : 'offline',
   provenance: {
     casesSha256: createHash('sha256').update(fs.readFileSync(path.join(root, 'docs/speed-review/evaluation-cases.json'))).digest('hex'),
     coreSha256: createHash('sha256').update(fs.readFileSync(path.join(root, 'public/speed-review-core.mjs'))).digest('hex'),
+    classifierSha256: createHash('sha256').update(fs.readFileSync(path.join(root, 'public/lib/question-method-classifier.mjs'))).digest('hex'),
   },
   model: connection?.model || null,
   settings: connection ? { role: connection.role, temperature: connection.temperature, reasoningEffort: connection.reasoning_effort, maxTokens: connection.max_tokens, timeoutMs: 60000, concurrency: Math.min(2, Math.max(1, Number(getArg('concurrency', 2)) || 2)) } : null,
@@ -120,8 +122,10 @@ report.capabilityChecks = [
   { name: '明确数量关系开放', question: { category: '数量关系' }, expected: 'available' },
   { name: '明确常识分类不可用', question: { category: '常识判断' }, expected: 'category_unsupported' },
   { name: '明确政治理论分类不可用', question: { category: '政治理论' }, expected: 'category_unsupported' },
-  { name: '仅父类判断推理不开放', question: { category: '判断推理' }, expected: 'category_unsupported' },
+  { name: '完整文字父类判断推理开放方法分析', question: { category: '判断推理' }, expected: 'available' },
   { name: '父类与细类逻辑判断共同存在开放', question: { category: '判断推理', subCategory: '逻辑判断' }, expected: 'available' },
+  { name: '定义判断开放要件比较', question: { category: '判断推理/定义判断' }, expected: 'available' },
+  { name: '类比推理开放关系比较', question: { category: '判断推理/类比推理' }, expected: 'available' },
   { name: '言语题干提及知识不误拦截', question: { category: '言语理解', content: '这段材料介绍常识与政治理论。' }, expected: 'available' },
   { name: '未知题型不靠题干猜测分类', question: { content: '判断这条常识是否属于政治理论。' }, expected: 'category_unknown' },
   { name: 'subject不能冒充题型', question: { subject: '数量关系' }, expected: 'category_unknown' },

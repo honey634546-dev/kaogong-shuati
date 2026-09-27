@@ -1,0 +1,623 @@
+{
+  "version": 1,
+  "generatedAt": "2026-09-27T05:20:00.313Z",
+  "mode": "real-provider",
+  "provenance": {
+    "casesSha256": "98250f6bb9a0a6932f86bc9d3de14d33ad4cf30c7f48c9475f710c5ef79fcc83",
+    "coreSha256": "5e9273cb9b5c57a8e85f3ad91f2d9cfa7884d68998fbce2acafe4bd56a585f34",
+    "classifierSha256": "0b5587a6ecb4b0224fdb87743c984d6cc76e47af8c0a72e33048248233ad76c2"
+  },
+  "settings": {
+    "role": "xingce-explainer",
+    "model": "deepseek-v4.1-flash",
+    "temperature": 0.2,
+    "maxTokens": 12000,
+    "reasoningEffort": "low",
+    "concurrency": 2,
+    "timeoutMs": 60000,
+    "retries": 0
+  },
+  "evidenceBoundary": "Six original synthetic cases are a limited admission probe, not real-user usability or learning validation. Schema validity is separate from independent semantic review. Failed first responses remain in this report.",
+  "cases": [
+    {
+      "id": "MC01",
+      "family": "定义判断",
+      "sourceCategory": "定义判断",
+      "expected": {
+        "answer": "A",
+        "capabilityAvailable": true,
+        "acceptedStatuses": [
+          "method",
+          "no_shortcut"
+        ],
+        "standardReasoning": "必须同时满足交付他方保管、约定用途、到期返还原物、所有权不转移。A四项均符合；B转移所有权；C不保证原物返还；D未交付保管。",
+        "expectedMethod": "先列必要条件，再用决定性不满足条件排除；“符合”找全部满足项。",
+        "boundaries": [
+          "不得只凭“保管/借”词语选项",
+          "原物与同型号替代物不同",
+          "只用本题约定定义，不调用日常法律含义"
+        ],
+        "mustNot": [
+          "把C的同型号返还等同原物返还",
+          "认为出现借就一定符合"
+        ],
+        "drillMethod": null
+      },
+      "capability": {
+        "available": true,
+        "code": "available",
+        "category": "定义判断",
+        "label": "定义判断",
+        "focus": "拆出定义的必要条件，逐项核对选项，注意设问要求属于还是不属于。",
+        "classificationSource": "source",
+        "classificationReason": "依据题库提供的逐题分类。"
+      },
+      "sourceUnchanged": true,
+      "prompt": {
+        "length": 3140,
+        "sha256": "1afa730cb01a75b17e2f99daf90349c7e6b8e6fb2979996e7c03a0ddc1dbe132"
+      },
+      "providerAttempted": true,
+      "elapsedMs": 11072,
+      "provider": "completed",
+      "model": "deepseek-v4.1-flash",
+      "usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cached_tokens": 0,
+        "completion_thinking_tokens": 1053,
+        "completion_tokens": 1462,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 0,
+          "reasoning_tokens": 1053,
+          "rejected_prediction_tokens": 0
+        },
+        "credit": 0,
+        "prompt_cache_hit_tokens": 768,
+        "prompt_cache_miss_tokens": 1097,
+        "prompt_cache_write_tokens": 0,
+        "prompt_tokens": 1865,
+        "prompt_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 768,
+          "reasoning_tokens": 0,
+          "rejected_prediction_tokens": 0
+        },
+        "total_tokens": 3327
+      },
+      "rawContent": "{\"status\":\"method\",\"methodName\":\"定义要件逐项核对法\",\"recognition\":\"题干给出一个明确定义并要求判断哪项最符合；本题定义含多个并列必要条件，选项分别在不同条件上设置偏差。\",\"steps\":[\"先从定义中拆出必要条件：①交付他方保管；②保管方只能按约定用途使用；③约定期限届满返还原物；④所有权不转移。\",\"逐项核对选项并标记：A四项均满足；B是买卖，所有权转移；C允许用任意同型号相机抵还，不满足返还原物；D相机一直由甲持有，未交付保管。\",\"按“必须同时满足”取交集，选择四项都符合的A。\"],\"whyCorrect\":\"定义将定向托管限定为四个条件同时成立。A明确约定用途、期限、返还原物且所有权仍归甲，满足全部要件；B转移所有权；C不保证原物返还；D未交付他方保管。因此A正确。\",\"applicability\":\"适用于题干给出明确定义、选项为具体情形的定义判断，尤其适合含多个并列必要条件的定义。若定义要件含模糊词，应按题干原文解释，不能自行增加条件。\",\"caution\":\"不要只凭“保管”“相机”等个别词匹配；注意设问是“最符合”还是“不符合”；选项可能只差一个要件，必须逐项核对。本题参考答案未标注已人工确认，但按题面独立核对A成立。\",\"diagnosis\":\"本题选A正确，但assisted为null，未记录是否接受辅助；userReason/userApproach为空，无法判断实际解法，因此仅凭150秒不能确定慢在阅读、要件拆分、选项核对还是犹豫。可回看时只做一次要件清单与选项标记，验证是否因遗漏某一要件而反复；单次选对也可能包含猜测，不能据此认定已掌握或已提速。\",\"drillMethod\":null}",
+      "normalized": {
+        "status": "method",
+        "methodName": "定义要件逐项核对法",
+        "recognition": "题干给出一个明确定义并要求判断哪项最符合；本题定义含多个并列必要条件，选项分别在不同条件上设置偏差。",
+        "whyCorrect": "定义将定向托管限定为四个条件同时成立。A明确约定用途、期限、返还原物且所有权仍归甲，满足全部要件；B转移所有权；C不保证原物返还；D未交付他方保管。因此A正确。",
+        "applicability": "适用于题干给出明确定义、选项为具体情形的定义判断，尤其适合含多个并列必要条件的定义。若定义要件含模糊词，应按题干原文解释，不能自行增加条件。",
+        "caution": "不要只凭“保管”“相机”等个别词匹配；注意设问是“最符合”还是“不符合”；选项可能只差一个要件，必须逐项核对。本题参考答案未标注已人工确认，但按题面独立核对A成立。",
+        "diagnosis": "本题选A正确，但assisted为null，未记录是否接受辅助；userReason/userApproach为空，无法判断实际解法，因此仅凭150秒不能确定慢在阅读、要件拆分、选项核对还是犹豫。可回看时只做一次要件清单与选项标记，验证是否因遗漏某一要件而反复；单次选对也可能包含猜测，不能据此认定已掌握或已提速。",
+        "steps": [
+          "先从定义中拆出必要条件：①交付他方保管；②保管方只能按约定用途使用；③约定期限届满返还原物；④所有权不转移。",
+          "逐项核对选项并标记：A四项均满足；B是买卖，所有权转移；C允许用任意同型号相机抵还，不满足返还原物；D相机一直由甲持有，未交付保管。",
+          "按“必须同时满足”取交集，选择四项都符合的A。"
+        ],
+        "drillMethod": null
+      },
+      "schema": "passed",
+      "semanticReview": {
+        "status": "method_reasoning_passed",
+        "correctAnswer": "passed",
+        "conditionDirectionAndHierarchy": "passed",
+        "methodBoundary": "passed",
+        "userFacingLanguage": "failed_debug_fields",
+        "verbosityRisk": "Repeated guess/assistance disclaimers can distract from actionable review; independent UX copy check required.",
+        "note": "A满足交付、用途、返还原物、所有权四要件；排除C替代物、D未交付正确。"
+      }
+    },
+    {
+      "id": "MC02",
+      "family": "定义判断",
+      "sourceCategory": "定义判断",
+      "expected": {
+        "answer": "C",
+        "capabilityAvailable": true,
+        "acceptedStatuses": [
+          "method",
+          "no_shortcut"
+        ],
+        "standardReasoning": "问“不属于”，找必要条件被违反的选项。C的乙不承担失败损失，违反各自承担损失。B投入收益不等，但定义明确不要求相等。",
+        "expectedMethod": "先标出否定问法，再核对独立主体、分别投入、共同决定、各自风险四要件。",
+        "boundaries": [
+          "不能把不相等误认作不共同",
+          "共同商定方案不是充分条件",
+          "必须保留“不属于”方向"
+        ],
+        "mustNot": [
+          "误选B因为投入不等",
+          "把C共同商定方案当作全部符合"
+        ],
+        "drillMethod": null
+      },
+      "capability": {
+        "available": true,
+        "code": "available",
+        "category": "定义判断",
+        "label": "定义判断",
+        "focus": "拆出定义的必要条件，逐项核对选项，注意设问要求属于还是不属于。",
+        "classificationSource": "source",
+        "classificationReason": "依据题库提供的逐题分类。"
+      },
+      "sourceUnchanged": true,
+      "prompt": {
+        "length": 3208,
+        "sha256": "33e1a4905a1554d8e1db1c03f01c5c49bf97c4cd779e9a8448f9a18f42edbb84"
+      },
+      "providerAttempted": true,
+      "elapsedMs": 14235,
+      "provider": "completed",
+      "model": "deepseek-v4.1-flash",
+      "usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cached_tokens": 0,
+        "completion_thinking_tokens": 1548,
+        "completion_tokens": 2011,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 0,
+          "reasoning_tokens": 1548,
+          "rejected_prediction_tokens": 0
+        },
+        "credit": 0,
+        "prompt_cache_hit_tokens": 768,
+        "prompt_cache_miss_tokens": 1123,
+        "prompt_cache_write_tokens": 0,
+        "prompt_tokens": 1891,
+        "prompt_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 768,
+          "reasoning_tokens": 0,
+          "rejected_prediction_tokens": 0
+        },
+        "total_tokens": 3902
+      },
+      "rawContent": "{\"status\":\"method\",\"methodName\":\"定义要件逐项核对法\",\"recognition\":\"设问为“不属于某定义”，题干给出可拆分的并列必要条件，选项常以“投入或收益是否相等”等非必要差异作干扰。\",\"steps\":[\"先拆出共同试验的必要条件：两个独立主体、分别投入资源、共同决定试验方案、各自承担结果不理想造成的损失；同时标注题干明确“不要求投入或收益相等”。\",\"按“不属于”逐项核对：A、D均满足独立主体、投入、共同定方案、失败各自承担损失。\",\"B虽投入10万元与30万元、收益按一比三分配，但题干明确不要求投入或收益相等，且失败损失各自承担，因此仍符合。\",\"C中乙不承担失败损失，甲还补足乙全部投入，缺少“各自承担结果不理想造成的损失”这一必要条件，所以不属于共同试验，选C。\"],\"whyCorrect\":\"共同试验的必要条件包括“各自承担结果不理想造成的损失”。C明确乙不承担失败损失，风险由甲承担，故不符合定义。B的投入和收益不等不构成排除理由，因为题干已说明不要求相等。问“不属于”，因此选C。\",\"applicability\":\"适用于题干给出明确、可拆分必要条件的定义判断，尤其是“属于/不属于”设问。若定义要件本身不清或选项信息不足，不能机械套用。本题要件完整，可以逐项核对。\",\"caution\":\"不要把“投入或收益相等”误当成必要条件，本题明确不要求相等；也不要只看到“共同商定方案”就判定属于，还要核对失败损失由谁承担。注意设问是“不属于”，避免选成符合项。\",\"diagnosis\":\"未描述原解法，仅凭150秒相比参考90秒，无法确定慢在阅读、要件拆分、选项核对还是犹豫。assisted为null，未记录辅助情况，不能据此证明独立作答；单次选C正确也可能包含猜测，不能宣称已掌握或已提速。若回看，可条件性检查是否在B的投入收益不等上耗时，但这不是已证实的慢因。\",\"drillMethod\":null}",
+      "normalized": {
+        "status": "method",
+        "methodName": "定义要件逐项核对法",
+        "recognition": "设问为“不属于某定义”，题干给出可拆分的并列必要条件，选项常以“投入或收益是否相等”等非必要差异作干扰。",
+        "whyCorrect": "共同试验的必要条件包括“各自承担结果不理想造成的损失”。C明确乙不承担失败损失，风险由甲承担，故不符合定义。B的投入和收益不等不构成排除理由，因为题干已说明不要求相等。问“不属于”，因此选C。",
+        "applicability": "适用于题干给出明确、可拆分必要条件的定义判断，尤其是“属于/不属于”设问。若定义要件本身不清或选项信息不足，不能机械套用。本题要件完整，可以逐项核对。",
+        "caution": "不要把“投入或收益相等”误当成必要条件，本题明确不要求相等；也不要只看到“共同商定方案”就判定属于，还要核对失败损失由谁承担。注意设问是“不属于”，避免选成符合项。",
+        "diagnosis": "未描述原解法，仅凭150秒相比参考90秒，无法确定慢在阅读、要件拆分、选项核对还是犹豫。assisted为null，未记录辅助情况，不能据此证明独立作答；单次选C正确也可能包含猜测，不能宣称已掌握或已提速。若回看，可条件性检查是否在B的投入收益不等上耗时，但这不是已证实的慢因。",
+        "steps": [
+          "先拆出共同试验的必要条件：两个独立主体、分别投入资源、共同决定试验方案、各自承担结果不理想造成的损失；同时标注题干明确“不要求投入或收益相等”。",
+          "按“不属于”逐项核对：A、D均满足独立主体、投入、共同定方案、失败各自承担损失。",
+          "B虽投入10万元与30万元、收益按一比三分配，但题干明确不要求投入或收益相等，且失败损失各自承担，因此仍符合。",
+          "C中乙不承担失败损失，甲还补足乙全部投入，缺少“各自承担结果不理想造成的损失”这一必要条件，所以不属于共同试验，选C。"
+        ],
+        "drillMethod": null
+      },
+      "schema": "passed",
+      "semanticReview": {
+        "status": "method_reasoning_passed",
+        "correctAnswer": "passed",
+        "conditionDirectionAndHierarchy": "passed",
+        "methodBoundary": "passed",
+        "userFacingLanguage": "failed_debug_fields",
+        "verbosityRisk": "Repeated guess/assistance disclaimers can distract from actionable review; independent UX copy check required.",
+        "note": "识别不属于的否定方向，C缺失败风险；B不等投入不是排除条件。"
+      }
+    },
+    {
+      "id": "MC03",
+      "family": "类比推理",
+      "sourceCategory": "类比推理",
+      "expected": {
+        "answer": "B",
+        "capabilityAvailable": true,
+        "acceptedStatuses": [
+          "method",
+          "no_shortcut"
+        ],
+        "standardReasoning": "题干按“工具→通常用途/动作”排序。B画笔→绘画保持同方向。A动作→工具反向；C对象/装置→配套工具；D工具→作用对象而非动作。",
+        "expectedMethod": "先用完整关系句固定“前项工具用于后项动作”，再核对顺序与关系类型。",
+        "boundaries": [
+          "不能只因词语相关就匹配",
+          "顺序不能颠倒",
+          "作用对象不等于动作"
+        ],
+        "mustNot": [
+          "把A反向顺序当等价",
+          "只比较两词是否相关"
+        ],
+        "drillMethod": null
+      },
+      "capability": {
+        "available": true,
+        "code": "available",
+        "category": "类比推理",
+        "label": "类比推理",
+        "focus": "比较词语间的关系、顺序与层级，用同一种关系逐项检验选项。",
+        "classificationSource": "source",
+        "classificationReason": "依据题库提供的逐题分类。"
+      },
+      "sourceUnchanged": true,
+      "prompt": {
+        "length": 2998,
+        "sha256": "c3e34659d6d8ee1af9d8330da73f53a71bda147a5ae27e71dfa53951025590b8"
+      },
+      "providerAttempted": true,
+      "elapsedMs": 14383,
+      "provider": "completed",
+      "model": "deepseek-v4.1-flash",
+      "usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cached_tokens": 0,
+        "completion_thinking_tokens": 1180,
+        "completion_tokens": 1672,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 0,
+          "reasoning_tokens": 1180,
+          "rejected_prediction_tokens": 0
+        },
+        "credit": 0,
+        "prompt_cache_hit_tokens": 1408,
+        "prompt_cache_miss_tokens": 366,
+        "prompt_cache_write_tokens": 0,
+        "prompt_tokens": 1774,
+        "prompt_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 1408,
+          "reasoning_tokens": 0,
+          "rejected_prediction_tokens": 0
+        },
+        "total_tokens": 3446
+      },
+      "rawContent": "{\"status\":\"method\",\"methodName\":\"工具—用途同向核验法\",\"recognition\":\"题干两词为具体工具与其用途或动作，如“钥匙：开锁”；选项也多为工具、动作、对象、装置之间的配对，需要同时核对关系类型和前后顺序。\",\"steps\":[\"先只看题干，压缩关系为“工具→用途/动作”，并记住方向是工具在前、动作/用途在后。\",\"逐项按同一格式核对：A“扫地：扫帚”是动作→工具，方向反；B“画笔：绘画”是工具→动作/用途，方向一致；C“门锁：钥匙”不是工具→用途，且方向不合；D“剪刀：纸张”是工具→作用对象，后项不是动作/用途。\",\"选择唯一同时满足关系一致和顺序一致的选项，即B。若某项只是“有关联”但后项不是动作/用途，不选。\"],\"whyCorrect\":\"题干“钥匙”是工具，“开锁”是该工具的用途/动作，构成“工具→用途/动作”。B“画笔”是工具，“绘画”是该工具的用途/动作，关系和顺序均与题干一致。A顺序相反；C关系对象不匹配；D后项“纸张”是作用对象而非动作。\",\"applicability\":\"适用于题干两词可明确概括为“工具→用途/动作”且选项需比较关系和顺序的类比题。若题干关系本身不唯一，应先按最直接、最常用的关系判断，不能只凭两词相关就选择。\",\"caution\":\"容易只看到“剪刀能剪纸”就误选D，但“纸张”不是动作或用途，而是作用对象；也要防止把“扫帚能扫地”误选A，因其顺序是动作→工具，与题干相反。\",\"diagnosis\":\"仅凭150秒与参考90秒的差异，只能说明本题值得回看，不能确定慢因；你未描述原解题过程，无法判断是关系识别、逐项核对还是犹豫导致耗时。本次选B正确，但单次选对不能证明已经掌握或提速，assisted为null也不能证明独立作答。复盘时建议固定先写题干关系和方向，再逐项标注关系，重点区分“工具→动作/用途”与“工具→作用对象”。\",\"drillMethod\":null}",
+      "normalized": {
+        "status": "method",
+        "methodName": "工具—用途同向核验法",
+        "recognition": "题干两词为具体工具与其用途或动作，如“钥匙：开锁”；选项也多为工具、动作、对象、装置之间的配对，需要同时核对关系类型和前后顺序。",
+        "whyCorrect": "题干“钥匙”是工具，“开锁”是该工具的用途/动作，构成“工具→用途/动作”。B“画笔”是工具，“绘画”是该工具的用途/动作，关系和顺序均与题干一致。A顺序相反；C关系对象不匹配；D后项“纸张”是作用对象而非动作。",
+        "applicability": "适用于题干两词可明确概括为“工具→用途/动作”且选项需比较关系和顺序的类比题。若题干关系本身不唯一，应先按最直接、最常用的关系判断，不能只凭两词相关就选择。",
+        "caution": "容易只看到“剪刀能剪纸”就误选D，但“纸张”不是动作或用途，而是作用对象；也要防止把“扫帚能扫地”误选A，因其顺序是动作→工具，与题干相反。",
+        "diagnosis": "仅凭150秒与参考90秒的差异，只能说明本题值得回看，不能确定慢因；你未描述原解题过程，无法判断是关系识别、逐项核对还是犹豫导致耗时。本次选B正确，但单次选对不能证明已经掌握或提速，assisted为null也不能证明独立作答。复盘时建议固定先写题干关系和方向，再逐项标注关系，重点区分“工具→动作/用途”与“工具→作用对象”。",
+        "steps": [
+          "先只看题干，压缩关系为“工具→用途/动作”，并记住方向是工具在前、动作/用途在后。",
+          "逐项按同一格式核对：A“扫地：扫帚”是动作→工具，方向反；B“画笔：绘画”是工具→动作/用途，方向一致；C“门锁：钥匙”不是工具→用途，且方向不合；D“剪刀：纸张”是工具→作用对象，后项不是动作/用途。",
+          "选择唯一同时满足关系一致和顺序一致的选项，即B。若某项只是“有关联”但后项不是动作/用途，不选。"
+        ],
+        "drillMethod": null
+      },
+      "schema": "passed",
+      "semanticReview": {
+        "status": "method_reasoning_passed",
+        "correctAnswer": "passed",
+        "conditionDirectionAndHierarchy": "passed",
+        "methodBoundary": "passed",
+        "userFacingLanguage": "failed_debug_fields",
+        "verbosityRisk": "Repeated guess/assistance disclaimers can distract from actionable review; independent UX copy check required.",
+        "note": "工具→动作与反向/作用对象区分正确，选B。"
+      }
+    },
+    {
+      "id": "MC04",
+      "family": "类比推理",
+      "sourceCategory": "类比推理",
+      "expected": {
+        "answer": "A",
+        "capabilityAvailable": true,
+        "acceptedStatuses": [
+          "method",
+          "no_shortcut"
+        ],
+        "standardReasoning": "题干是逐层种属包含：所有正方形都是矩形，所有矩形都是四边形。A同为逐层种属包含。B、D第一层是部分/成员与整体，不是种属；C前两项是并列类别。",
+        "expectedMethod": "逐层写“所有前项都是后项”，核对两段关系类型与方向一致。",
+        "boundaries": [
+          "部分属于整体不等于种属包含",
+          "前两项并列不能套两层包含",
+          "不额外要求各层划分尺度完全相同"
+        ],
+        "mustNot": [
+          "把车轮当汽车的一种",
+          "因都属于同一大领域就选"
+        ],
+        "drillMethod": null
+      },
+      "capability": {
+        "available": true,
+        "code": "available",
+        "category": "类比推理",
+        "label": "类比推理",
+        "focus": "比较词语间的关系、顺序与层级，用同一种关系逐项检验选项。",
+        "classificationSource": "source",
+        "classificationReason": "依据题库提供的逐题分类。"
+      },
+      "sourceUnchanged": true,
+      "prompt": {
+        "length": 3024,
+        "sha256": "4c608892c4dc00995ee7b22b91f5c38dc6a898a6217d8ae2963847aa09120114"
+      },
+      "providerAttempted": true,
+      "elapsedMs": 11072,
+      "provider": "completed",
+      "model": "deepseek-v4.1-flash",
+      "usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cached_tokens": 0,
+        "completion_thinking_tokens": 1307,
+        "completion_tokens": 1717,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 0,
+          "reasoning_tokens": 1307,
+          "rejected_prediction_tokens": 0
+        },
+        "credit": 0,
+        "prompt_cache_hit_tokens": 1408,
+        "prompt_cache_miss_tokens": 380,
+        "prompt_cache_write_tokens": 0,
+        "prompt_tokens": 1788,
+        "prompt_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 1408,
+          "reasoning_tokens": 0,
+          "rejected_prediction_tokens": 0
+        },
+        "total_tokens": 3505
+      },
+      "rawContent": "{\"status\":\"method\",\"methodName\":\"逐层种属匹配法\",\"recognition\":\"三项式类比，题干呈现由小类到大类的连续包含：正方形→矩形→四边形，优先怀疑逐层种属关系。\",\"steps\":[\"先概括题干：所有正方形都是矩形，所有矩形都是四边形，关系方向为“小类⊆大类”，且连续两层成立。\",\"逐项先验第一层：A中麻雀是鸟类，符合种属；B中车轮是汽车的组成部分，不是种属；C中苹果与香蕉是并列关系；D中学生是学校的成员或对象，不是学校的一种。\",\"再验第二层：A中鸟类是动物，符合种属；其余选项第一层已排除，不必强行匹配。因此选A。\"],\"whyCorrect\":\"题干是连续种属包含，且“正方形⊆矩形⊆四边形”两层均为真。A项“麻雀⊆鸟类⊆动物”同样两层均为真，关系、顺序和层级最一致。B是整体与部分，C是并列，D是成员/个体与机构，均不是逐层种属。\",\"applicability\":\"适用于三项类比且题干可明确概括为连续种属包含的题目；若题干不是种属关系，或词项关系涉及交叉、并列、整体部分、因果关系等，不能套用。\",\"caution\":\"不要把整体与部分、成员与整体、并列关系误当种属；也要注意方向是小类到大类，不能把“动物：鸟类：麻雀”这种反向顺序当作与题干一致。\",\"diagnosis\":\"你已选A，但本题未记录是否使用辅助，且你没有描述原解法，因此仅凭150秒与参考90秒不能判断慢在阅读、关系判断还是犹豫，也不能由单次选对认定已掌握或已提速。复盘时重点核对第一层关系即可排除B、C、D，再用第二层确认A。\",\"drillMethod\":null}",
+      "normalized": {
+        "status": "method",
+        "methodName": "逐层种属匹配法",
+        "recognition": "三项式类比，题干呈现由小类到大类的连续包含：正方形→矩形→四边形，优先怀疑逐层种属关系。",
+        "whyCorrect": "题干是连续种属包含，且“正方形⊆矩形⊆四边形”两层均为真。A项“麻雀⊆鸟类⊆动物”同样两层均为真，关系、顺序和层级最一致。B是整体与部分，C是并列，D是成员/个体与机构，均不是逐层种属。",
+        "applicability": "适用于三项类比且题干可明确概括为连续种属包含的题目；若题干不是种属关系，或词项关系涉及交叉、并列、整体部分、因果关系等，不能套用。",
+        "caution": "不要把整体与部分、成员与整体、并列关系误当种属；也要注意方向是小类到大类，不能把“动物：鸟类：麻雀”这种反向顺序当作与题干一致。",
+        "diagnosis": "你已选A，但本题未记录是否使用辅助，且你没有描述原解法，因此仅凭150秒与参考90秒不能判断慢在阅读、关系判断还是犹豫，也不能由单次选对认定已掌握或已提速。复盘时重点核对第一层关系即可排除B、C、D，再用第二层确认A。",
+        "steps": [
+          "先概括题干：所有正方形都是矩形，所有矩形都是四边形，关系方向为“小类⊆大类”，且连续两层成立。",
+          "逐项先验第一层：A中麻雀是鸟类，符合种属；B中车轮是汽车的组成部分，不是种属；C中苹果与香蕉是并列关系；D中学生是学校的成员或对象，不是学校的一种。",
+          "再验第二层：A中鸟类是动物，符合种属；其余选项第一层已排除，不必强行匹配。因此选A。"
+        ],
+        "drillMethod": null
+      },
+      "schema": "passed",
+      "semanticReview": {
+        "status": "method_reasoning_passed",
+        "correctAnswer": "passed",
+        "conditionDirectionAndHierarchy": "passed",
+        "methodBoundary": "passed",
+        "userFacingLanguage": "passed_no_debug_fields",
+        "verbosityRisk": "Repeated guess/assistance disclaimers can distract from actionable review; independent UX copy check required.",
+        "note": "连续两层种属和顺序正确，部分整体/成员整体不混用，选A。"
+      }
+    },
+    {
+      "id": "MC05",
+      "family": "未细分文字判断",
+      "sourceCategory": "判断推理",
+      "expected": {
+        "answer": "B",
+        "capabilityAvailable": true,
+        "acceptedStatuses": [
+          "method",
+          "no_shortcut"
+        ],
+        "standardReasoning": "同期有营业时间延长，不能只凭前后销售变化把全部增长归因于广告。B指出未排除另一变化；A/D断言广告无效缺证据；C过度否定比较指标。",
+        "expectedMethod": "区分观察到的变化与因果归因，检查是否有未排除的同期因素。",
+        "boundaries": [
+          "指出证据不足，不断言广告必然无效",
+          "不把同期变化本身当作已证明的原因",
+          "父类未细分不等于题目无法做方法分析"
+        ],
+        "mustNot": [
+          "因category只有判断推理拒绝",
+          "断言延长营业时间一定导致全部增长"
+        ],
+        "drillMethod": null
+      },
+      "capability": {
+        "available": true,
+        "code": "available",
+        "category": "判断推理",
+        "label": "文字判断",
+        "focus": "依据本题的条件和选项比较解法，再判断适合整理条件、核对定义还是比较关系。",
+        "classificationSource": "source",
+        "classificationReason": "题库标注为判断推理；未确定细类，按本题完整文字条件和选项分析。"
+      },
+      "sourceUnchanged": true,
+      "prompt": {
+        "length": 3133,
+        "sha256": "226e25064106c78069821bcc4232724edec47266e84e4e5d2435ca9f75d4f4f6"
+      },
+      "providerAttempted": true,
+      "elapsedMs": 11424,
+      "provider": "completed",
+      "model": "deepseek-v4.1-flash",
+      "usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cached_tokens": 0,
+        "completion_thinking_tokens": 1152,
+        "completion_tokens": 1579,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 0,
+          "reasoning_tokens": 1152,
+          "rejected_prediction_tokens": 0
+        },
+        "credit": 0,
+        "prompt_cache_hit_tokens": 1408,
+        "prompt_cache_miss_tokens": 424,
+        "prompt_cache_write_tokens": 0,
+        "prompt_tokens": 1832,
+        "prompt_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 1408,
+          "reasoning_tokens": 0,
+          "rejected_prediction_tokens": 0
+        },
+        "total_tokens": 3411
+      },
+      "rawContent": "{\"status\":\"method\",\"methodName\":\"因果论证的他因排除法\",\"recognition\":\"题干先给一个变化结果（日均销售额增加），再把原因归给其中一个同期因素（新广告），并出现“全部增长/足以解释”等绝对归因措辞；选项中若有“未排除其他同期变化”，通常是核心。\",\"steps\":[\"先划结论：店长认定新广告本身足以解释销售额的全部增长；论据只是本月同时延长营业时间和发布广告，销售额比上月增加。\",\"找同期竞争原因：延长营业时间也会影响销售额，题干没有说明它未起作用，因此不能把增长全部归因于广告。\",\"对照选项：选指出“没有排除延长营业时间等同期变化影响”的选项；排除绝对否定广告、绝对否定日均销售额、断言广告没人看到等无依据选项。\"],\"whyCorrect\":\"从题干只能看出新广告与销售额增长同期出现，但延长营业时间也同期变化。要得出“新广告足以解释全部增长”，必须排除延长营业时间等替代原因；题干未排除，所以B准确指出论证缺陷。A、D把广告无效当成事实，题干无依据；C否定日均销售额的可比性，题干未提供不能比较的理由。\",\"applicability\":\"适用于题干由共变或前后变化推出单一原因、且存在其他同期变化的因果归因题；核心是结论是否用了“全部/足以/唯一”等绝对归因。\",\"caution\":\"不要把“存在其他可能原因”扩大成“广告一定无效”；本题只质疑能否全部归因，不否定广告可能有作用。也不要在没有依据时否定比较指标或编造其他原因。\",\"diagnosis\":\"本题已选对B，但userReason和userApproach为空，assisted为null，无法判断你实际卡在阅读、条件核对还是选项犹豫；仅凭150秒用时不能确定慢因，也不能据此说明已掌握或提速。复盘时只记录一句：结论中的“全部增长”是否被其他同期变化排除。\",\"drillMethod\":null}",
+      "normalized": {
+        "status": "method",
+        "methodName": "因果论证的他因排除法",
+        "recognition": "题干先给一个变化结果（日均销售额增加），再把原因归给其中一个同期因素（新广告），并出现“全部增长/足以解释”等绝对归因措辞；选项中若有“未排除其他同期变化”，通常是核心。",
+        "whyCorrect": "从题干只能看出新广告与销售额增长同期出现，但延长营业时间也同期变化。要得出“新广告足以解释全部增长”，必须排除延长营业时间等替代原因；题干未排除，所以B准确指出论证缺陷。A、D把广告无效当成事实，题干无依据；C否定日均销售额的可比性，题干未提供不能比较的理由。",
+        "applicability": "适用于题干由共变或前后变化推出单一原因、且存在其他同期变化的因果归因题；核心是结论是否用了“全部/足以/唯一”等绝对归因。",
+        "caution": "不要把“存在其他可能原因”扩大成“广告一定无效”；本题只质疑能否全部归因，不否定广告可能有作用。也不要在没有依据时否定比较指标或编造其他原因。",
+        "diagnosis": "本题已选对B，但userReason和userApproach为空，assisted为null，无法判断你实际卡在阅读、条件核对还是选项犹豫；仅凭150秒用时不能确定慢因，也不能据此说明已掌握或提速。复盘时只记录一句：结论中的“全部增长”是否被其他同期变化排除。",
+        "steps": [
+          "先划结论：店长认定新广告本身足以解释销售额的全部增长；论据只是本月同时延长营业时间和发布广告，销售额比上月增加。",
+          "找同期竞争原因：延长营业时间也会影响销售额，题干没有说明它未起作用，因此不能把增长全部归因于广告。",
+          "对照选项：选指出“没有排除延长营业时间等同期变化影响”的选项；排除绝对否定广告、绝对否定日均销售额、断言广告没人看到等无依据选项。"
+        ],
+        "drillMethod": null
+      },
+      "schema": "passed",
+      "semanticReview": {
+        "status": "method_reasoning_wording_warning",
+        "correctAnswer": "passed",
+        "conditionDirectionAndHierarchy": "passed",
+        "methodBoundary": "causal_qualification_warning",
+        "userFacingLanguage": "failed_debug_fields",
+        "verbosityRisk": "Repeated guess/assistance disclaimers can distract from actionable review; independent UX copy check required.",
+        "note": "结论B与因果归因检查正确；但steps称延长营业时间“也会影响”，应保留为“可能影响”。其他字段说明未排除替代原因，并未证明该因素实际生效。"
+      }
+    },
+    {
+      "id": "MC06",
+      "family": "父类定义结构与关键词陷阱",
+      "sourceCategory": "判断推理",
+      "expected": {
+        "answer": "B",
+        "capabilityAvailable": true,
+        "acceptedStatuses": [
+          "method",
+          "no_shortcut"
+        ],
+        "standardReasoning": "三要件为身份核验、对象动作具体、请求结束失效，缺一不可。B三项均满足。A有关键词但权限永久通用；C没有明确对象动作；D没有核验身份。",
+        "expectedMethod": "把三个必要条件作为检查表，依据事实逐项核对而非匹配“单次授权”标签。",
+        "boundaries": [
+          "题目给出的约定优先于生活常识或术语直觉",
+          "三个条件是合取，满足两项仍不足",
+          "源题型保持父判断，结构识别只作展示/方法建议"
+        ],
+        "mustNot": [
+          "看见A出现单次授权直接选A",
+          "认为身份核验是可选条件"
+        ],
+        "drillMethod": null
+      },
+      "capability": {
+        "available": true,
+        "code": "available",
+        "category": "判断推理",
+        "label": "文字判断",
+        "focus": "依据本题的条件和选项比较解法，再判断适合整理条件、核对定义还是比较关系。",
+        "classificationSource": "source",
+        "classificationReason": "题库标注为判断推理；未确定细类，按本题完整文字条件和选项分析。"
+      },
+      "sourceUnchanged": true,
+      "prompt": {
+        "length": 3179,
+        "sha256": "4d6ced97fc426160d93bd577fcc8214d83ac60fc144e691fe4a8aedcd3551607"
+      },
+      "providerAttempted": true,
+      "elapsedMs": 9918,
+      "provider": "completed",
+      "model": "deepseek-v4.1-flash",
+      "usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cached_tokens": 0,
+        "completion_thinking_tokens": 1115,
+        "completion_tokens": 1507,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 0,
+          "reasoning_tokens": 1115,
+          "rejected_prediction_tokens": 0
+        },
+        "credit": 0,
+        "prompt_cache_hit_tokens": 1408,
+        "prompt_cache_miss_tokens": 474,
+        "prompt_cache_write_tokens": 0,
+        "prompt_tokens": 1882,
+        "prompt_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 1408,
+          "reasoning_tokens": 0,
+          "rejected_prediction_tokens": 0
+        },
+        "total_tokens": 3389
+      },
+      "rawContent": "{\"status\":\"method\",\"methodName\":\"三要件逐项勾选排除法\",\"recognition\":\"题干把“单次授权”限定为同时满足三项要求，属于定义/条件匹配题，选项分别给出对应事实，适合拆分要件后逐项核对。\",\"steps\":[\"把定义拆成互不替代的三项要件：①已核验操作者身份；②明确本次操作的对象与动作；③许可在本次请求结束后失效。\",\"对每个选项逐项打勾，只有三项全满足才可选；任一缺失或冲突即排除。\",\"核对本题：A“永久通用权限”违反③；C“任何操作”未明确对象与动作，违反②；D“未核验操作者身份”违反①；B三项均满足。\"],\"whyCorrect\":\"题干要求三项同时满足，三者都是属于“单次授权”的必要条件。B同时具备身份核验、对象动作具体、请求结束失效；其余选项至少缺少一项，故B正确。\",\"applicability\":\"适用于题干明确列出若干“同时满足/缺一不可”的要件，且选项能逐项对应这些要件的定义判断题。本题文字条件完整，不依赖缺失图形。\",\"caution\":\"不要因为选项出现“单次授权”或“失效”等关键词就直接选择，也不要只核对其中一两项。特别注意“任何操作”不等于对象与动作具体，“永久通用权限”不等于请求结束失效，“随后失效”也不能替代身份核验。\",\"diagnosis\":\"用户未描述原解法，仅凭150秒用时无法确定慢在阅读、要件拆分、选项比对还是犹豫；本次选B正确，但assisted为null，不能据此判断是否独立作答，也不能宣称已掌握或提速。回看时可用三要件逐项勾选法核对各选项缺哪一项，避免被关键词干扰。\",\"drillMethod\":null}",
+      "normalized": {
+        "status": "method",
+        "methodName": "三要件逐项勾选排除法",
+        "recognition": "题干把“单次授权”限定为同时满足三项要求，属于定义/条件匹配题，选项分别给出对应事实，适合拆分要件后逐项核对。",
+        "whyCorrect": "题干要求三项同时满足，三者都是属于“单次授权”的必要条件。B同时具备身份核验、对象动作具体、请求结束失效；其余选项至少缺少一项，故B正确。",
+        "applicability": "适用于题干明确列出若干“同时满足/缺一不可”的要件，且选项能逐项对应这些要件的定义判断题。本题文字条件完整，不依赖缺失图形。",
+        "caution": "不要因为选项出现“单次授权”或“失效”等关键词就直接选择，也不要只核对其中一两项。特别注意“任何操作”不等于对象与动作具体，“永久通用权限”不等于请求结束失效，“随后失效”也不能替代身份核验。",
+        "diagnosis": "用户未描述原解法，仅凭150秒用时无法确定慢在阅读、要件拆分、选项比对还是犹豫；本次选B正确，但assisted为null，不能据此判断是否独立作答，也不能宣称已掌握或提速。回看时可用三要件逐项勾选法核对各选项缺哪一项，避免被关键词干扰。",
+        "steps": [
+          "把定义拆成互不替代的三项要件：①已核验操作者身份；②明确本次操作的对象与动作；③许可在本次请求结束后失效。",
+          "对每个选项逐项打勾，只有三项全满足才可选；任一缺失或冲突即排除。",
+          "核对本题：A“永久通用权限”违反③；C“任何操作”未明确对象与动作，违反②；D“未核验操作者身份”违反①；B三项均满足。"
+        ],
+        "drillMethod": null
+      },
+      "schema": "passed",
+      "semanticReview": {
+        "status": "method_reasoning_passed",
+        "correctAnswer": "passed",
+        "conditionDirectionAndHierarchy": "passed",
+        "methodBoundary": "passed",
+        "userFacingLanguage": "failed_debug_fields",
+        "verbosityRisk": "Repeated guess/assistance disclaimers can distract from actionable review; independent UX copy check required.",
+        "note": "按身份、对象动作、单次失效三个条件核对，未被A标签诱导，B正确；父判断无需假细类也可分析。"
+      }
+    }
+  ],
+  "summary": {
+    "total": 6,
+    "available": 6,
+    "providerCalls": 6,
+    "providerResponses": 6,
+    "schemaPasses": 6,
+    "failures": 0,
+    "qualityDecision": "method_support_encouraging_copy_revision_required",
+    "correctAnswers": 6,
+    "strictMethodPasses": 5,
+    "methodWordingWarnings": [
+      "MC05"
+    ],
+    "userFacingCopyFailures": [
+      "MC01",
+      "MC02",
+      "MC03",
+      "MC05",
+      "MC06"
+    ],
+    "schemaPassesAreNotDeliveryApproval": true
+  },
+  "reviewedAt": "2026-09-27T05:23:30.939Z"
+}

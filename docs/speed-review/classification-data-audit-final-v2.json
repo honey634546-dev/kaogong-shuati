@@ -1,0 +1,44 @@
+{
+  "generatedAt": "2026-09-27T05:31:17.231Z",
+  "source": "Read-only current local custom question records. No identities or question text exported; no provider calls.",
+  "provenance": {
+    "coreSha256": "4a9ed171ef61737904491cdeacd36fea2dc48a6b592931bea305f183dc11ef95",
+    "classifierSha256": "4879c908449b78836413f4a051016f3ad10000104d7491e39bec2cc2bab0ea37"
+  },
+  "total": 705,
+  "eligible": 406,
+  "eligibleByCategory": {
+    "言语理解": 153,
+    "数量关系": 70,
+    "类比推理": 42,
+    "文字判断": 48,
+    "定义判断": 42,
+    "逻辑判断": 36,
+    "资料分析": 15
+  },
+  "eligibleByClassificationSource": {
+    "source": 286,
+    "structure": 120
+  },
+  "rejectedByCode": {
+    "category_unsupported": 160,
+    "image_required": 139
+  },
+  "parentJudgment": {
+    "total": 220,
+    "eligible": 168,
+    "eligibleByCategory": {
+      "类比推理": 42,
+      "文字判断": 48,
+      "定义判断": 42,
+      "逻辑判断": 36
+    },
+    "rejectedByCode": {
+      "category_unsupported": 40,
+      "image_required": 12
+    },
+    "rejectedWithExplicitMissingImage": 52
+  },
+  "sourceRecordsUnchanged": true,
+  "meaning": "Input qualification for candidate method analysis, not verified shortcuts or proven learning gains. Structural labels may abstain while complete parent judgment text remains usable."
+}

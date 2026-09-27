@@ -1,0 +1,73 @@
+{
+  "generatedAt": "2026-09-27T05:28:24.014Z",
+  "source": "Read-only current local custom question records. No identities or question text exported; no provider calls.",
+  "provenance": {
+    "coreSha256": "4a9ed171ef61737904491cdeacd36fea2dc48a6b592931bea305f183dc11ef95",
+    "classifierSha256": "0b5587a6ecb4b0224fdb87743c984d6cc76e47af8c0a72e33048248233ad76c2"
+  },
+  "total": 705,
+  "eligible": 406,
+  "eligibleByCategory": {
+    "言语理解": 153,
+    "数量关系": 70,
+    "类比推理": 42,
+    "文字判断": 48,
+    "定义判断": 42,
+    "逻辑判断": 36,
+    "资料分析": 15
+  },
+  "eligibleByClassificationSource": {
+    "source": 286,
+    "structure": 120
+  },
+  "rejectedByCode": {
+    "category_unsupported": 155,
+    "image_required": 144
+  },
+  "parentJudgment": {
+    "total": 220,
+    "eligible": 168,
+    "eligibleByCategory": {
+      "类比推理": 42,
+      "文字判断": 48,
+      "定义判断": 42,
+      "逻辑判断": 36
+    },
+    "rejectedByCode": {
+      "category_unsupported": 35,
+      "image_required": 17
+    },
+    "rejectedWithExplicitMissingImage": 52
+  },
+  "sourceRecordsUnchanged": true,
+  "meaning": "Input qualification for candidate method analysis, not verified shortcuts or proven learning gains. Structural labels may abstain while complete parent judgment text remains usable.",
+  "blindHoldout": {
+    "labelFileSha256": "f21e875cf6deeda2ed0d902b5b0fc47dfe94b9efa853c74612b3d61830835447",
+    "size": 36,
+    "procedure": "Separate agent labeled 36 unique local questions before viewing classifier outputs; six per source paper, deduplicated across papers. Agent labels are independent of predictions, not expert ground truth. No private text was sent to a provider.",
+    "expectedByCategory": {
+      "定义判断": 11,
+      "类比推理": 8,
+      "图形推理": 9,
+      "逻辑判断": 8
+    },
+    "fineLabelsAssigned": 24,
+    "fineLabelsCorrect": 24,
+    "retainedParentLabels": 12,
+    "matrix": {
+      "定义判断 → 定义判断": 8,
+      "类比推理 → 类比推理": 6,
+      "图形推理 → 图形推理": 5,
+      "类比推理 → 判断推理": 2,
+      "图形推理 → 判断推理": 4,
+      "逻辑判断 → 逻辑判断": 5,
+      "逻辑判断 → 判断推理": 3,
+      "定义判断 → 判断推理": 3
+    },
+    "textQuestions": 27,
+    "textEligible": 27,
+    "visualQuestions": 9,
+    "visualIneligible": 9,
+    "limitation": "Small bank-specific agent-labeled holdout; no general classifier accuracy claim. Do not tune to missed holdout labels and then report them as fresh validation."
+  }
+}

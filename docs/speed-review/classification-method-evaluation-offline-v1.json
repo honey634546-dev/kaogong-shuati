@@ -1,0 +1,271 @@
+{
+  "version": 1,
+  "generatedAt": "2026-09-27T05:25:13.035Z",
+  "mode": "offline",
+  "selectedCases": [
+    "MC01",
+    "MC02",
+    "MC03",
+    "MC04",
+    "MC05",
+    "MC06"
+  ],
+  "provenance": {
+    "casesSha256": "98250f6bb9a0a6932f86bc9d3de14d33ad4cf30c7f48c9475f710c5ef79fcc83",
+    "coreSha256": "4a9ed171ef61737904491cdeacd36fea2dc48a6b592931bea305f183dc11ef95",
+    "classifierSha256": "0b5587a6ecb4b0224fdb87743c984d6cc76e47af8c0a72e33048248233ad76c2"
+  },
+  "settings": null,
+  "evidenceBoundary": "Six original synthetic cases are a limited admission probe, not real-user usability or learning validation. Schema validity is separate from independent semantic review. Failed first responses remain in this report.",
+  "cases": [
+    {
+      "id": "MC01",
+      "family": "定义判断",
+      "sourceCategory": "定义判断",
+      "expected": {
+        "answer": "A",
+        "capabilityAvailable": true,
+        "acceptedStatuses": [
+          "method",
+          "no_shortcut"
+        ],
+        "standardReasoning": "必须同时满足交付他方保管、约定用途、到期返还原物、所有权不转移。A四项均符合；B转移所有权；C不保证原物返还；D未交付保管。",
+        "expectedMethod": "先列必要条件，再用决定性不满足条件排除；“符合”找全部满足项。",
+        "boundaries": [
+          "不得只凭“保管/借”词语选项",
+          "原物与同型号替代物不同",
+          "只用本题约定定义，不调用日常法律含义"
+        ],
+        "mustNot": [
+          "把C的同型号返还等同原物返还",
+          "认为出现借就一定符合"
+        ],
+        "drillMethod": null
+      },
+      "capability": {
+        "available": true,
+        "code": "available",
+        "category": "定义判断",
+        "label": "定义判断",
+        "focus": "拆出定义的必要条件，逐项核对选项，注意设问要求属于还是不属于。",
+        "classificationSource": "source",
+        "classificationReason": "依据题库提供的逐题分类。"
+      },
+      "sourceUnchanged": true,
+      "prompt": {
+        "length": 3317,
+        "sha256": "d734de01ac93bbd807292195291b53370825d5621f0f1a61facc1099e31c7b51"
+      },
+      "provider": "not_requested"
+    },
+    {
+      "id": "MC02",
+      "family": "定义判断",
+      "sourceCategory": "定义判断",
+      "expected": {
+        "answer": "C",
+        "capabilityAvailable": true,
+        "acceptedStatuses": [
+          "method",
+          "no_shortcut"
+        ],
+        "standardReasoning": "问“不属于”，找必要条件被违反的选项。C的乙不承担失败损失，违反各自承担损失。B投入收益不等，但定义明确不要求相等。",
+        "expectedMethod": "先标出否定问法，再核对独立主体、分别投入、共同决定、各自风险四要件。",
+        "boundaries": [
+          "不能把不相等误认作不共同",
+          "共同商定方案不是充分条件",
+          "必须保留“不属于”方向"
+        ],
+        "mustNot": [
+          "误选B因为投入不等",
+          "把C共同商定方案当作全部符合"
+        ],
+        "drillMethod": null
+      },
+      "capability": {
+        "available": true,
+        "code": "available",
+        "category": "定义判断",
+        "label": "定义判断",
+        "focus": "拆出定义的必要条件，逐项核对选项，注意设问要求属于还是不属于。",
+        "classificationSource": "source",
+        "classificationReason": "依据题库提供的逐题分类。"
+      },
+      "sourceUnchanged": true,
+      "prompt": {
+        "length": 3385,
+        "sha256": "a201a2c5203c9a4ed77c401d0b5bb1d7ccc255d221e6348ade0280d9eae2bb50"
+      },
+      "provider": "not_requested"
+    },
+    {
+      "id": "MC03",
+      "family": "类比推理",
+      "sourceCategory": "类比推理",
+      "expected": {
+        "answer": "B",
+        "capabilityAvailable": true,
+        "acceptedStatuses": [
+          "method",
+          "no_shortcut"
+        ],
+        "standardReasoning": "题干按“工具→通常用途/动作”排序。B画笔→绘画保持同方向。A动作→工具反向；C对象/装置→配套工具；D工具→作用对象而非动作。",
+        "expectedMethod": "先用完整关系句固定“前项工具用于后项动作”，再核对顺序与关系类型。",
+        "boundaries": [
+          "不能只因词语相关就匹配",
+          "顺序不能颠倒",
+          "作用对象不等于动作"
+        ],
+        "mustNot": [
+          "把A反向顺序当等价",
+          "只比较两词是否相关"
+        ],
+        "drillMethod": null
+      },
+      "capability": {
+        "available": true,
+        "code": "available",
+        "category": "类比推理",
+        "label": "类比推理",
+        "focus": "比较词语间的关系、顺序与层级，用同一种关系逐项检验选项。",
+        "classificationSource": "source",
+        "classificationReason": "依据题库提供的逐题分类。"
+      },
+      "sourceUnchanged": true,
+      "prompt": {
+        "length": 3175,
+        "sha256": "54518cb3f463d4d852f9a176a95843c544faa75f789e7290594e80a75e37bb3f"
+      },
+      "provider": "not_requested"
+    },
+    {
+      "id": "MC04",
+      "family": "类比推理",
+      "sourceCategory": "类比推理",
+      "expected": {
+        "answer": "A",
+        "capabilityAvailable": true,
+        "acceptedStatuses": [
+          "method",
+          "no_shortcut"
+        ],
+        "standardReasoning": "题干是逐层种属包含：所有正方形都是矩形，所有矩形都是四边形。A同为逐层种属包含。B、D第一层是部分/成员与整体，不是种属；C前两项是并列类别。",
+        "expectedMethod": "逐层写“所有前项都是后项”，核对两段关系类型与方向一致。",
+        "boundaries": [
+          "部分属于整体不等于种属包含",
+          "前两项并列不能套两层包含",
+          "不额外要求各层划分尺度完全相同"
+        ],
+        "mustNot": [
+          "把车轮当汽车的一种",
+          "因都属于同一大领域就选"
+        ],
+        "drillMethod": null
+      },
+      "capability": {
+        "available": true,
+        "code": "available",
+        "category": "类比推理",
+        "label": "类比推理",
+        "focus": "比较词语间的关系、顺序与层级，用同一种关系逐项检验选项。",
+        "classificationSource": "source",
+        "classificationReason": "依据题库提供的逐题分类。"
+      },
+      "sourceUnchanged": true,
+      "prompt": {
+        "length": 3201,
+        "sha256": "356f8b879aca4ec9bdfe9215358b0c35c84bef4bf617f06d0e1022ded3dabdd4"
+      },
+      "provider": "not_requested"
+    },
+    {
+      "id": "MC05",
+      "family": "未细分文字判断",
+      "sourceCategory": "判断推理",
+      "expected": {
+        "answer": "B",
+        "capabilityAvailable": true,
+        "acceptedStatuses": [
+          "method",
+          "no_shortcut"
+        ],
+        "standardReasoning": "同期有营业时间延长，不能只凭前后销售变化把全部增长归因于广告。B指出未排除另一变化；A/D断言广告无效缺证据；C过度否定比较指标。",
+        "expectedMethod": "区分观察到的变化与因果归因，检查是否有未排除的同期因素。",
+        "boundaries": [
+          "指出证据不足，不断言广告必然无效",
+          "不把同期变化本身当作已证明的原因",
+          "父类未细分不等于题目无法做方法分析"
+        ],
+        "mustNot": [
+          "因category只有判断推理拒绝",
+          "断言延长营业时间一定导致全部增长"
+        ],
+        "drillMethod": null
+      },
+      "capability": {
+        "available": true,
+        "code": "available",
+        "category": "判断推理",
+        "label": "文字判断",
+        "focus": "依据本题的条件和选项比较解法，再判断适合整理条件、核对定义还是比较关系。",
+        "classificationSource": "source",
+        "classificationReason": "题库标注为判断推理；未确定细类，按本题完整文字条件和选项分析。"
+      },
+      "sourceUnchanged": true,
+      "prompt": {
+        "length": 3310,
+        "sha256": "2be936a729e1c1ea8725c7906e07e7f24501276a7f31b39683e772ce54470db4"
+      },
+      "provider": "not_requested"
+    },
+    {
+      "id": "MC06",
+      "family": "父类定义结构与关键词陷阱",
+      "sourceCategory": "判断推理",
+      "expected": {
+        "answer": "B",
+        "capabilityAvailable": true,
+        "acceptedStatuses": [
+          "method",
+          "no_shortcut"
+        ],
+        "standardReasoning": "三要件为身份核验、对象动作具体、请求结束失效，缺一不可。B三项均满足。A有关键词但权限永久通用；C没有明确对象动作；D没有核验身份。",
+        "expectedMethod": "把三个必要条件作为检查表，依据事实逐项核对而非匹配“单次授权”标签。",
+        "boundaries": [
+          "题目给出的约定优先于生活常识或术语直觉",
+          "三个条件是合取，满足两项仍不足",
+          "源题型保持父判断，结构识别只作展示/方法建议"
+        ],
+        "mustNot": [
+          "看见A出现单次授权直接选A",
+          "认为身份核验是可选条件"
+        ],
+        "drillMethod": null
+      },
+      "capability": {
+        "available": true,
+        "code": "available",
+        "category": "判断推理",
+        "label": "文字判断",
+        "focus": "依据本题的条件和选项比较解法，再判断适合整理条件、核对定义还是比较关系。",
+        "classificationSource": "source",
+        "classificationReason": "题库标注为判断推理；未确定细类，按本题完整文字条件和选项分析。"
+      },
+      "sourceUnchanged": true,
+      "prompt": {
+        "length": 3356,
+        "sha256": "f7fa55d1d44a85568dad0c7d29d53bed4dfb53ebbb3cccc38fedca91265ffad2"
+      },
+      "provider": "not_requested"
+    }
+  ],
+  "summary": {
+    "total": 6,
+    "available": 6,
+    "providerCalls": 0,
+    "providerResponses": 0,
+    "schemaPasses": 0,
+    "failures": 0,
+    "qualityDecision": "offline_contract_only"
+  }
+}

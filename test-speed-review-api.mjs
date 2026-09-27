@@ -21,6 +21,13 @@ const fixtureReview = {
   drillMethod: 'percent_fraction',
 };
 const question = { prompt: '快照原题：240 的 12.5% 是多少？', options: ['A. 20', 'B. 30', 'C. 40', 'D. 50'], answer: 'B', answerIndex: 1, category: '资料分析', analysis: '240 × 0.125 = 30。' };
+const reasoningCases = [
+  { category: '判断推理', label: '文字判断', source: 'source', prompt: '甲、乙、丙三人排队，甲不在最后，乙在丙前。以下哪种顺序满足全部条件？', options: ['甲乙丙', '丙甲乙', '乙丙甲', '丙乙甲'], methodName: '逐项核对排队条件', steps: ['排除甲在最后的乙丙甲。', '排除乙在丙后的丙甲乙和丙乙甲，甲乙丙满足全部条件。'], whyCorrect: '甲乙丙中甲不在最后且乙在丙前，其他选项均违反至少一个条件。' },
+  { category: '', label: '定义判断', source: 'structure', prompt: '公共物品是指能够供多人同时使用，且无法轻易排除他人使用的物品。根据上述定义，下列属于公共物品的是？', options: ['开放街道的照明', '个人餐盒', '会员私用储物柜', '售票影院的座位'], methodName: '核对定义的两个条件', steps: ['提取多人共用和难以排除他人两个条件。', '街道照明同时满足两条件；餐盒、私用储物柜和售票座位都能排除他人使用。'], whyCorrect: '按题目给出的定义逐项判断，只有开放街道照明满足两个必要条件。' },
+  { category: '', label: '类比推理', source: 'structure', prompt: '剪刀：裁剪', options: ['锅铲：炒菜', '纸张：剪刀', '衣服：裁剪', '裁剪：剪刀'], methodName: '保持工具与用途的顺序', steps: ['剪刀是用于裁剪的工具，关系为工具到用途。', '锅铲用于炒菜且顺序一致；其他选项的关系或方向不同。'], whyCorrect: '锅铲与炒菜复现题干的工具与用途关系，且前后顺序一致。' },
+  { category: '', label: '逻辑判断', source: 'structure', prompt: '所有参加培训的员工都已通过资格审核。小王参加了培训。由此可以推出哪项？', options: ['小王已通过资格审核', '所有通过审核的人都参加培训', '小王未通过审核', '未参加培训的人都未通过审核'], methodName: '沿充分条件正向推导', steps: ['把条件写成参加培训推出通过审核。', '小王参加培训，因此小王通过审核；不能反向推导。'], whyCorrect: '小王满足题目给定的充分条件，正向应用即可推出通过审核。' },
+].map((item, index) => ({ ...item, answer: 'A', answerIndex: 0, analysis: item.whyCorrect, external_id: `method-classification-${index}` }));
+const reasoningReview = (item) => ({ status: 'method', methodName: item.methodName, recognition: `先明确本题的${item.label}结构。`, steps: item.steps, whyCorrect: item.whyCorrect, applicability: '适用于本题给出的完整文字条件和选项。', caution: '只使用题目给出的条件，不添加常识假设或颠倒关系。', diagnosis: '仅凭用时无法确定慢因，可以对照上述步骤检查自己的过程。', drillMethod: null });
 let app, upstream, dataDir, base, upstreamBase, userA, userB, questionId, questionUid;
 let providerContent = JSON.stringify(fixtureReview);
 const providerCalls = [];
@@ -199,7 +206,7 @@ test('repeated questions require the exact submission and preserve assisted evid
 test('all unsupported or incomplete inputs are refused before any provider or fake review result', async () => {
   const before = providerCalls.length;
   for (const change of [
-    ...['常识判断', '政治理论', '判断推理', '图形推理', '类比推理', '定义判断', '数字推理', '申论', '未知', ''].map((category) => ({ category })),
+    ...['常识判断', '政治理论', '图形推理', '数字推理', '申论', '未知', ''].map((category) => ({ category })),
     { category: '数量关系', subCategory: '数字推理' },
     { category: '数量关系/言语理解' }, { images: '["image.png"]' },
     { prompt: '【本题原卷含题目图片，当前导入文件未包含图片】' },
@@ -218,20 +225,75 @@ test('all unsupported or incomplete inputs are refused before any provider or fa
   assert.equal(providerCalls.length, before);
 });
 
-test('logical detail is supported while historical broad category cannot be overridden by the client', async () => {
-  const available = await request('/api/ai/speed-review', { questionId: 'logic-detail', questionData: { ...question, category: '判断推理', subCategory: '逻辑判断' } });
-  assert.equal(available.body.review.status, 'method');
-  assert.match(JSON.stringify(providerCalls.at(-1).messages), /逻辑判断|条件关系/);
-  const imported = await request('/api/custom/import', { name: '资料分析', questions: [{ ...question, category: '判断推理' }] });
-  const list = await request(`/api/custom/questions?batch_id=${imported.body.id}`);
-  const id = `custom-${list.body.questions[0].id}`;
-  await request('/api/records', { questionId: id, subject: '资料分析', chapter: '资料分析', selected: [1], attemptId: 'broad-category', submissionKey: 'broad-category:0' });
-  await request('/api/attempts/complete', { attemptId: 'broad-category', questionCount: 1 });
+test('source paths and old broad or unlabeled snapshots gain methods without rewriting category, fingerprint or revision', async () => {
+  const { getSpeedReviewCapability } = await import('./public/speed-review-core.mjs');
+  const cases = [...reasoningCases, { ...reasoningCases[1], prompt: reasoningCases[1].prompt.replace('公共物品', '公用物品'), category: '判断推理/定义判断', source: 'source', external_id: 'method-source-path' }];
+  const imported = await request('/api/custom/import', { name: '分类兼容验收', questions: cases });
+  assert.equal(imported.status, 200, JSON.stringify(imported.body));
+  const listBefore = (await request(`/api/custom/questions?batch_id=${imported.body.id}`)).body.questions;
+  const practice = (await request(`/api/custom/practice?batch_id=${imported.body.id}`)).body.questions;
+  for (const [index, item] of cases.entries()) {
+    const current = practice.find((entry) => entry.content === item.prompt);
+    assert.equal(current.category, item.category);
+    assert.equal(current.subCategory, undefined, 'existing imports need no synthetic fine-category field');
+    const capability = getSpeedReviewCapability(current);
+    assert.equal(capability.available, true);
+    assert.equal(capability.label, item.label);
+    assert.equal(capability.classificationSource, item.source);
+    await request('/api/records', { questionId: current.id, selected: [0], attemptId: 'classification-compat', submissionKey: `classification-compat:${index}`, costMs: 180000 });
+  }
+  await request('/api/attempts/complete', { attemptId: 'classification-compat', questionCount: cases.length });
+  const historyBefore = (await request('/api/attempts/classification-compat')).body.records;
   const count = providerCalls.length;
-  const result = await request('/api/ai/speed-review', { attemptId: 'broad-category', questionId: id, questionData: { ...question, category: '判断推理', subCategory: '逻辑判断' } });
-  assert.equal(result.body.unavailable, true);
-  assert.equal(result.body.capability.category, '判断推理');
-  assert.equal(providerCalls.length, count);
+  try {
+    for (const [index, item] of cases.entries()) {
+      const record = historyBefore[index];
+      assert.equal(record.question.category, item.category);
+      assert.equal(record.question.subCategory, undefined, 'legacy snapshot shape is accepted without adding metadata');
+      providerContent = JSON.stringify(reasoningReview(item));
+      const result = await request('/api/ai/speed-review', { attemptId: 'classification-compat', questionId: record.questionId, questionData: { ...question, prompt: '客户端伪造题面', category: '常识判断' } });
+      assert.deepEqual(result.body.review, reasoningReview(item), JSON.stringify(result.body));
+      const sent = JSON.stringify(providerCalls.at(-1).messages);
+      assert.ok(sent.includes(item.prompt));
+      assert.doesNotMatch(sent, /客户端伪造题面/);
+      assert.ok(sent.includes(getSpeedReviewCapability(record.question).focus));
+    }
+  } finally { providerContent = JSON.stringify(fixtureReview); }
+  assert.equal(providerCalls.length, count + cases.length);
+  assert.deepEqual((await request('/api/attempts/classification-compat')).body.records, historyBefore, 'derived method routing never changes saved answers or snapshots');
+  const repeat = await request('/api/custom/import', { name: '分类兼容重复导入', questions: cases });
+  assert.equal(repeat.body.created, 0);
+  assert.equal(repeat.body.unchanged, cases.length);
+  assert.equal(repeat.body.revisions, 0);
+  const listAfter = (await request(`/api/custom/questions?batch_id=${imported.body.id}`)).body.questions;
+  assert.deepEqual(listAfter.map(({ category, question_uid, fingerprint, revision }) => ({ category, question_uid, fingerprint, revision })), listBefore.map(({ category, question_uid, fingerprint, revision }) => ({ category, question_uid, fingerprint, revision })));
+  const noCall = providerCalls.length;
+  for (const change of [{ category: '常识判断' }, { category: '政治理论' }, { category: '判断推理/图形推理' }, { category: '判断推理/言语理解' }, { material: '【共享材料含图片，当前导入文件未包含图片】' }, { answer: '', answerIndex: -1 }]) {
+    const rejected = await request('/api/ai/speed-review', { questionId: 'inferred-scope-boundary', questionData: { ...reasoningCases[1], ...change } });
+    assert.equal(rejected.body.unavailable, true, JSON.stringify(change));
+  }
+  assert.equal(providerCalls.length, noCall, 'clear reasoning structure never overrides source conflicts or incomplete inputs');
+});
+
+test('the import parser receives the fine-category preservation contract without changing saved agent settings', async () => {
+  const agents = await request('/api/ai/agents');
+  const parser = agents.body.find((agent) => agent.role === 'custom-question-parser');
+  assert.ok(parser);
+  const setup = await request(`/api/ai/agents/${parser.id}`, { enabled: 1, key_storage_mode: 'server', api_key: 'fixture-parser-key', base_url: upstreamBase, model: 'fixture-parser', provider_mode: 'openai-compatible', stream_enabled: 0, system_prompt: '解析员自定义提示词应保持原样', skill: '', timeout_ms: 3000 }, { method: 'PUT' });
+  assert.equal(setup.status, 200);
+  const saved = (await request(`/api/ai/agents/${parser.id}`)).body;
+  const count = providerCalls.length;
+  providerContent = JSON.stringify({ questions: [{ ...reasoningCases[1], category: '判断推理/定义判断' }] });
+  try {
+    const result = await request('/api/ai/structure', { text: `定义判断\n${reasoningCases[1].prompt}` });
+    assert.equal(JSON.parse(result.body.text).questions[0].category, '判断推理/定义判断');
+    assert.equal(providerCalls.length, count + 1);
+    const prompt = JSON.stringify(providerCalls.at(-1).messages);
+    assert.match(prompt, /解析员自定义提示词应保持原样/);
+    assert.match(prompt, /category 可以保存.*大类\/细类/);
+    assert.match(prompt, /不确定细类时保留/);
+    assert.deepEqual((await request(`/api/ai/agents/${parser.id}`)).body, saved);
+  } finally { providerContent = JSON.stringify(fixtureReview); }
 });
 
 test('shared-material snapshots restore the same scoped holder, freeze it, and reject missing or image-only material', async () => {
@@ -361,6 +423,11 @@ test('browser-key preparation includes trusted timing and mock is explicitly mar
   assert.match(JSON.stringify(prepared.body.clientCall.messages), /154000|154/);
   assert.doesNotMatch(JSON.stringify(prepared.body), /fixture-test-key|客户端伪造题面/);
   assert.equal(providerCalls.length, before);
+  for (const item of [reasoningCases[0], reasoningCases[1]]) {
+    const compatible = await request('/api/ai/speed-review', { questionId: 'browser-classification', questionData: item });
+    assert.equal(compatible.body.clientCall.kind, 'speed-review');
+    assert.ok(JSON.stringify(compatible.body.clientCall.messages).includes(item.prompt));
+  }
   const unavailable = await request('/api/ai/speed-review', { questionId: 'browser-scope', questionData: { ...question, category: '常识判断' } });
   assert.equal(unavailable.body.unavailable, true);
   assert.equal(unavailable.body.clientCall, undefined);
@@ -380,7 +447,7 @@ test('local mode restores attempt snapshot and rejects an invalid attempt before
     attempts: [{ attempt_id: 'local-attempt', completed: 1 }],
     records: [{ attempt_id: 'local-attempt', question_id: 'local-q', question_uid: 'uid-local', question_revision: 2, question_snapshot: JSON.stringify(question), answer_snapshot: JSON.stringify({ selected: [1], assisted: true }), is_correct: 1, cost_ms: 88000, submission_key: 'local-attempt:final:0' }],
   };
-  const local = createLocalHandler({ query: {}, records: {}, store: { getAll: async (name) => tables[name] || [] }, ai: { speedReview: async (input, options) => { calls.push({ ...input, signal: options?.signal }); return { review: fixtureReview }; } } });
+  const local = createLocalHandler({ query: {}, records: {}, store: { getAll: async (name) => tables[name] || [] }, ai: { speedReview: async (input, options) => { calls.push({ ...input, signal: options?.signal }); const match = reasoningCases.find((item) => item.prompt === input.questionData.prompt); return { review: match ? reasoningReview(match) : fixtureReview }; } } });
   const requestBody = { attemptId: 'local-attempt', questionId: 'local-q', questionUid: 'uid-local', questionRevision: 2, questionData: { prompt: '伪造' }, timing: { solveMs: 1, referenceSeconds: 60 } };
   const controller = new AbortController();
   const result = await local('/api/ai/speed-review', { method: 'POST', body: JSON.stringify(requestBody), signal: controller.signal });
@@ -400,6 +467,14 @@ test('local mode restores attempt snapshot and rejects an invalid attempt before
   await assert.rejects(local('/api/ai/speed-review', { method: 'POST', body: JSON.stringify(requestBody) }), /多次作答/);
   await local('/api/ai/speed-review', { method: 'POST', body: JSON.stringify({ ...requestBody, submissionKey: 'local-attempt:final:1' }) });
   assert.equal(calls[1].timing.solveMs, 123000);
+  for (const [index, item] of reasoningCases.entries()) {
+    const id = `local-reasoning-${index}`;
+    tables.records.push({ ...tables.records[0], question_id: id, question_snapshot: JSON.stringify(item), submission_key: id });
+    const historical = await local('/api/ai/speed-review', { method: 'POST', body: JSON.stringify({ attemptId: 'local-attempt', questionId: id, questionData: { ...question, category: '常识判断' } }) });
+    assert.equal(historical.review.methodName, item.methodName);
+    assert.equal(calls.at(-1).questionData.category, item.category);
+    assert.equal(calls.at(-1).questionData.subCategory, undefined);
+  }
 });
 
 test('local AI adapter uses independent prompt and validates the provider schema', async () => {
@@ -424,13 +499,20 @@ test('local AI adapter uses independent prompt and validates the provider schema
     assert.match(JSON.stringify(calls[0].messages), /91000|91/);
     assert.doesNotMatch(JSON.stringify(calls[0].messages), /must-not-use|must-not-load/);
     assert.ok(calls[0].max_tokens >= 8192);
+    for (const item of reasoningCases) {
+      content = JSON.stringify(reasoningReview(item));
+      assert.equal((await ai.speedReview({ ...input, questionData: item })).review.methodName, item.methodName);
+      assert.ok(JSON.stringify(calls.at(-1).messages).includes(item.prompt));
+    }
+    content = JSON.stringify(fixtureReview);
+    const validCalls = calls.length;
     const noAnswer = await ai.speedReview({ ...input, questionData: { ...question, answer: '', answerIndex: -1 } });
     assert.equal(noAnswer.capability.code, 'invalid_answer');
     const commonKnowledge = await ai.speedReview({ ...input, questionData: { ...question, category: '常识判断' } });
     assert.equal(commonKnowledge.unavailable, true);
     assert.equal(commonKnowledge.review, undefined);
     for (const change of [
-      { category: '' }, { category: '判断推理' }, { category: '数量关系', subCategory: '数字推理' },
+      { category: '' }, { category: '图形推理' }, { category: '数量关系', subCategory: '数字推理' },
       { material: '【共享材料含图片，当前导入文件未包含图片】' }, { images: '["image.png"]' },
       { image_missing: true }, { options: ['<span>A</span>', '<span>B</span>'] },
       { answerStatus: 'disputed' }, { category: '数量关系/言语理解' },
@@ -439,7 +521,13 @@ test('local AI adapter uses independent prompt and validates the provider schema
       assert.equal(refused.unavailable, true, JSON.stringify(change));
       assert.equal(refused.review, undefined);
     }
-    assert.equal(calls.length, 1);
+    assert.equal(calls.length, validCalls);
+    for (const change of [{ category: '常识判断' }, { category: '判断推理/图形推理' }, { category: '判断推理/言语理解' }, { material: '【共享材料含图片，当前导入文件未包含图片】' }, { answer: '', answerIndex: -1 }]) {
+      const refused = await ai.speedReview({ ...input, questionData: { ...reasoningCases[1], ...change } });
+      assert.equal(refused.unavailable, true, JSON.stringify(change));
+      assert.equal(refused.review, undefined);
+    }
+    assert.equal(calls.length, validCalls);
     content = '模型未按格式返回';
     assert.equal((await ai.speedReview(input)).review, null);
     blockUntilAbort = true;
@@ -455,7 +543,7 @@ test('local AI adapter uses independent prompt and validates the provider schema
     const mock = await ai.speedReview(input);
     assert.equal(mock.mock, true);
     assert.equal(mock.review.status, 'insufficient');
-    assert.equal(calls.length, 3);
+    assert.equal(calls.length, validCalls + 2);
   } finally { globalThis.fetch = originalFetch; globalThis.localStorage = originalStorage; }
 });
 

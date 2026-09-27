@@ -49,7 +49,7 @@ export function mountSpeedReview({ view, cards, questions, answers, attemptId, h
   const apply = node('button', 'btn btn-ghost btn-sm', '应用');
   const reset = node('button', 'btn btn-ghost btn-sm', '按题型恢复');
   controls.append(label, apply, reset); summary.append(controls);
-  summary.append(node('p', 'speed-muted speed-small', '初始参考：数量 120 秒、资料 / 逻辑 90 秒、言语 75 秒。可自行调整；这是练习目标，并非考生平均用时。'));
+  summary.append(node('p', 'speed-muted speed-small', '初始参考：数量 120 秒、资料 / 判断 90 秒、言语 75 秒。可自行调整；这是练习目标，并非考生平均用时。'));
   const ranking = node('div', 'speed-ranking'); ranking.setAttribute('aria-live', 'polite');
   summary.append(ranking);
   view.querySelector('.review-toolbar')?.before(summary);
@@ -103,7 +103,9 @@ export function mountSpeedReview({ view, cards, questions, answers, attemptId, h
     const section = node('section', 'speed-card');
     const badge = node('div', 'speed-time');
     const category = node('div', 'speed-capability');
-    category.append(node('span', 'speed-type', capability.label), node('span', 'speed-focus', capability.focus));
+    category.append(node('span', 'speed-type', capability.label));
+    if (capability.classificationSource === 'structure') category.append(node('span', 'speed-origin', '题面识别'));
+    category.append(node('span', 'speed-focus', capability.focus));
     const toggle = node('button', 'btn btn-ghost speed-toggle', '分析解题方法');
     toggle.setAttribute('aria-expanded', 'false');
     const panel = node('div', 'speed-panel'); panel.hidden = true;
@@ -131,7 +133,7 @@ export function mountSpeedReview({ view, cards, questions, answers, attemptId, h
     toggle.onclick = () => { panel.hidden = !panel.hidden; toggle.setAttribute('aria-expanded', String(!panel.hidden)); };
     const cache = new Map(); let running; let clearDrill = () => {};
     cancel.onclick = () => running?.abort();
-    const show = (response) => {
+    const show = (response, input) => {
       clearDrill(); clearDrill = () => {};
       result.replaceChildren();
       // A server snapshot can be older or more complete than the visible copy.
@@ -155,7 +157,12 @@ export function mountSpeedReview({ view, cards, questions, answers, attemptId, h
         const block = node('div', 'speed-explanation');
         block.append(node('strong', '', title), node('p', '', value)); result.append(block);
       };
-      field('用时线索', review.diagnosis);
+      // Without a described process, there is no personal evidence to diagnose.
+      // Keep that boundary predictable instead of asking the model to restate it.
+      const describedProcess = Boolean(input?.userReason?.trim() || input?.userApproach?.trim());
+      field('用时线索', describedProcess ? review.diagnosis
+        : review.status === 'insufficient' ? '仅凭用时无法确定慢因。请先核对下方指出的题目信息。'
+          : '仅凭用时无法确定慢因。对照下面的解题步骤，找出与你当时做法不同的一步。');
       field('看到什么，想到这个方法', review.recognition);
       if (review.steps?.length) {
         const block = node('div', 'speed-explanation'); block.append(node('strong', '', '具体怎么做'));
@@ -175,7 +182,7 @@ export function mountSpeedReview({ view, cards, questions, answers, attemptId, h
       if (running) return;
       const body = requestBody(question, answer, attemptId, index, historical, session.timing, reason.value, approach.value.trim());
       const key = JSON.stringify(body);
-      if (cache.has(key)) { show(cache.get(key)); return; }
+      if (cache.has(key)) { show(cache.get(key), body); return; }
       const request = new AbortController(); running = request;
       const stop = () => request.abort(); lifecycle.signal.addEventListener('abort', stop, { once: true });
       generate.disabled = true; cancel.hidden = false; reason.disabled = true; approach.disabled = true;
@@ -187,7 +194,7 @@ export function mountSpeedReview({ view, cards, questions, answers, attemptId, h
         if (request.signal.aborted) throw new DOMException('已取消', 'AbortError');
         if (!section.isConnected) return;
         if (response.review) cache.set(key, response);
-        show(response);
+        show(response, body);
       } catch (error) {
         if (section.isConnected) result.replaceChildren(node('p', 'speed-error', error.name === 'AbortError' ? '已取消，可重新分析。' : `分析未完成：${error.message || '请稍后重试'}`));
       } finally {

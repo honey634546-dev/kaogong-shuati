@@ -291,6 +291,9 @@
     if (call.kind === 'speed-review') {
       speedCore = await import('./speed-review-core.mjs');
       agent = speedCore.createSpeedReviewAgent(agent);
+    } else if (call.kind === 'structure') {
+      const { createQuestionImportAgent } = await import('./lib/question-import-contract.js');
+      agent = createQuestionImportAgent(agent);
     }
     const result = await callProvider(agent, call.messages || [], { signal, stream: false });
     if (!result.ok) return result;

@@ -21,6 +21,7 @@ import { customQuestionHtml, parseImages } from './public/lib/custom-parser.js';
 import { ANSWER_STATUSES, normalizeCustomQuestion, normalizeCustomQuestions } from './public/lib/custom-bank.js';
 import { authRequestHandler, getAuthSession, initAuth } from './lib/auth.mjs';
 import { buildSpeedReviewPrompt, normalizeSpeedReview, insufficientSpeedReview, getSpeedReviewCapability, createSpeedReviewAgent } from './public/speed-review-core.mjs';
+import { QUESTION_IMPORT_CLASSIFICATION_HINT, createQuestionImportAgent } from './public/lib/question-import-contract.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.argv[2] || process.env.PORT || 3000);
@@ -701,7 +702,7 @@ async function callVision(apiKey, baseUrl, model, imgs, mode = 'describe') {
 	    ? '这是一张考公题目图片（试卷/练习册/资料截图，可能包含一道或多道题，也可能混有笔记、页码、答题App界面元素等非题目内容）。\n\n请仔细观察整张图片，先筛选出真正的题目，再每道题整理为结构化 JSON。\n\n## 一、题型识别\n\n### 1. 图形推理题\n- 题干：引导语如「从所给的四个选项中，选择最合适的一个填入问号处」「左图为给定的多面体」「左边给定的是正方体的外表面展开图」「把下面的六个图形分为两类」等\n- 选项：\n  - 普通图推 → 图片中选项是图形，无法转写文字时写 {"A. A", "B. B", "C. C", "D. D"}\n  - 分类题（题干含「把下面的六个图形分为两类」）→ 选项是编号文字，原样保留如 "A. ①②④，③⑤⑥"\n- prompt 只放引导语原文，不要描述图形内容\n\n### 2. 定义判断题\n- 题干：一段概念定义 + 问题「根据上述定义，下列…」「以下符合…的是」「以下不属于…的是」\n- 选项：4 个完整的事例描述，逐字转写\n\n### 3. 逻辑判断题\n- 题干：一段论述 + 问题\n- 选项：4 个完整推理\n\n### 4. 判断题（对错题）\n- 选项固定为 ["正确", "错误"]\n- answer 为"正确"或"错误"\n\n### 5. 材料题（资料分析/一拖五）\n- 题干前有材料（图表或文字），材料文字摘要放入 material 字段\n- 每道小题独立一条记录，每条的 material 都填同一材料\n\n## 二、输出格式\n{"questions":[{"prompt":"题干","material":"材料（没有则为空字符串）","options":["A. 选项1","B. 选项2"],"answer":"答案字母，单选如 A / 多选如 ABD / 判断如 正确；图片未显示答案则留空","analysis":"解析（没有则为空字符串）","category":"题目分类（言语理解/判断推理/数量关系/资料分析/常识判断/申论/综应；不确定则留空）"}]}\n\n## 三、要求\n1) 忠实图片内容，不编造、不补全缺失信息；一道题一个对象\n2) 图形推理题选项为占位符 "A. A" "B. B" "C. C" "D. D"，不要编造图形文字\n3) 分类题选项完整保留编号文字，如 "A. ①②④，③⑤⑥"\n4) 材料题的图表文字尽量准确转写进 material\n5) answer 只能从图片中明确标注的答案信息提取；图片未显示答案时必须留空字符串，禁止自行计算\n6) 判断图片中题目的类别并填入 category 字段\n7) 过滤噪音：页码、标题、答题按钮、统计行等非题目内容\n8) 只输出一个 JSON，不要任何其他文字、解释、Markdown 代码块或思考过程'
     : '这是一道考公题目的图片（可能包含题干图形序列和 A/B/C/D 选项图形）。请逐一详细转写图片中的全部内容：题干部分描述每个图形的形状/线条/数量/位置/规律；选项部分标注 A/B/C/D 对应关系。不要遗漏任何图形或文字。';
   const content = [
-    { type: 'text', text },
+    { type: 'text', text: mode === 'structure' ? `${text}\n\n${QUESTION_IMPORT_CLASSIFICATION_HINT}` : text },
     ...imgs.map((i) => ({ type: 'image_url', image_url: { url: `data:${i.mime};base64,${i.b64}` } })),
   ];
   const body = { model, messages: [{ role: 'user', content }], temperature: 0.1, max_tokens: mode === 'structure' ? 8000 : 4000, stream: false };
@@ -4337,7 +4338,7 @@ const server = http.createServer(async (req, res) => {
         let body = '';
         for await (const chunk of req) body += chunk;
         const { text, image } = JSON.parse(body || '{}');
-        const agent = requestAgent(req, 'custom-question-parser');
+        const agent = createQuestionImportAgent(requestAgent(req, 'custom-question-parser'));
         if (!agent) return json(res, 200, { notice: '题目解析员未启用，请到 AI 设置页配置', text: null });
         const hasImage = String(image || '').startsWith('data:image');
         if (!hasImage && !String(text || '').trim()) return err(res, 400, '缺少文本或图片');

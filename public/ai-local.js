@@ -5,6 +5,7 @@
 //   - AI 解析结果缓存到 IndexedDB（ai_cache），断网/未配置时返回可读的降级提示
 // 与 server.mjs 的 /api/ai/* 返回结构保持一致，app.js 零改动。
 import { buildSpeedReviewPrompt, normalizeSpeedReview, insufficientSpeedReview, getSpeedReviewCapability, createSpeedReviewAgent } from './speed-review-core.mjs';
+import { QUESTION_IMPORT_CLASSIFICATION_HINT, createQuestionImportAgent } from './lib/question-import-contract.js';
 
 const STORE_KEY = 'ai_agents_v1'; // 本机智能体配置（localStorage）
 const SESSION_KEYS = new Map(); // agent id -> API Key；绝不持久化
@@ -309,7 +310,7 @@ async function callVisionLocal(agent, imageDataUrl, mode = 'ocr', request) {
   const body = {
     model: agent.model,
     messages: [{ role: 'user', content: [
-      { type: 'text', text },
+      { type: 'text', text: mode === 'structure' ? `${text}\n\n${QUESTION_IMPORT_CLASSIFICATION_HINT}` : text },
       // 支持多图：传数组时一次调用携带多张图（图推题干+选项、图表多图场景）
       ...(Array.isArray(imageDataUrl) ? imageDataUrl : [imageDataUrl]).map((u) => ({ type: 'image_url', image_url: { url: u } })),
     ] }],
@@ -764,7 +765,7 @@ export async function createAiApi({ request, tiku, query, defaultsUrl = DEFAULT_
     /** POST /api/ai/structure — 自定义题库：题目文本/图片筛选整理（custom-question-parser）；与 server 同构
      *  图片：视觉模型直接看图出结构化 JSON（AI 优先），失败自动降级 OCR→文本结构化 */
     async structure({ text, image }) {
-      const agent = loadAgents(defaults).find((x) => x.role === 'custom-question-parser');
+      const agent = createQuestionImportAgent(loadAgents(defaults).find((x) => x.role === 'custom-question-parser'));
       if (!agent) return { error: '题目解析员未启用，请到 AI 设置页配置' };
       if (!text && !image) return { error: '缺少文本或图片' };
       if (image) {

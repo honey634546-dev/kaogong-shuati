@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { getReference, analyzeTiming, buildSpeedReviewPrompt, normalizeSpeedReview, insufficientSpeedReview, generateDrill, DRILL_METHOD_LABELS, hasKnownSpeedReviewAnswer, createSpeedReviewAgent, getSpeedReviewCapability } from './public/speed-review-core.mjs';
+import { classifyQuestionMethod } from './public/lib/question-method-classifier.mjs';
 
 const question = { content: '一个计算题', options: ['20', '40', '60', '80'], answer: '0', answerIndex: 0, chapter: '数量关系' };
 const answer = { selected: [0], correct: true, costMs: 150000 };
@@ -24,6 +25,8 @@ test('method capability recognizes explicit supported metadata and compatible ca
     [{ category: '行测/浙江/数量关系' }, '数量关系'], [{ categoryName: '数学运算' }, '数量关系'],
     [{ module: '资料分析' }, '资料分析'], [{ type: '言语理解与表达' }, '言语理解'],
     [{ category: '判断推理', subCategory: '逻辑判断' }, '逻辑判断'],
+    [{ category: '判断推理', subCategory: '定义判断' }, '定义判断'],
+    [{ category: '判断推理', sub_category: '类比推理' }, '类比推理'],
     [{ category: '行测 > 判断推理 > 逻辑判断' }, '逻辑判断'],
     [{ type: 1, chapter: '数量关系' }, '数量关系'],
   ]) {
@@ -31,20 +34,117 @@ test('method capability recognizes explicit supported metadata and compatible ca
     assert.equal(capability.available, true, JSON.stringify(metadata));
     assert.equal(capability.category, category);
     assert.equal(capability.label, category);
+    assert.equal(capability.classificationSource, 'source');
     assert.ok(capability.focus.length > 10);
   }
 });
 
 test('unsupported specific types cannot inherit availability from a broad parent', () => {
-  for (const category of ['常识判断', '政治理论', '判断推理', '申论', '综应', '图形推理', '类比推理', '定义判断', '数字推理']) {
+  for (const category of ['常识判断', '政治理论', '申论', '综应', '图形推理', '数字推理']) {
     assert.equal(getSpeedReviewCapability({ ...question, category }).available, false, category);
   }
   for (const metadata of [
     { category: '数量关系', subCategory: '数字推理' },
     { category: '判断推理/图形推理' },
-    { category: '判断推理', subCategory: '类比推理' },
-    { category: '判断推理', type: '定义判断' },
   ]) assert.equal(getSpeedReviewCapability({ ...question, ...metadata }).code, 'category_unsupported');
+});
+
+const unclassified = { content: '', options: ['甲', '乙', '丙', '丁'], answer: 'A', answerIndex: 0, type: 'custom' };
+const definition = '信息冗余是指在传递信息时，以不同表达形式重复呈现同一内容的现象。';
+
+test('complete parent judgment questions provide text-method analysis without claiming a known subtype or shortcut', () => {
+  const capability = getSpeedReviewCapability({ ...unclassified, category: '行测/浙江/判断推理', content: '甲乙丙排队，甲不在末位，乙在丙前。哪种顺序符合条件？', options: ['甲乙丙', '乙丙甲', '丙甲乙', '丙乙甲'] });
+  assert.equal(capability.available, true);
+  assert.equal(capability.category, '判断推理');
+  assert.equal(capability.label, '文字判断');
+  assert.equal(capability.classificationSource, 'source');
+  assert.match(capability.focus, /条件和选项/);
+  assert.doesNotMatch(capability.classificationReason, /已验证|快捷|秒杀/);
+});
+
+test('definition inference requires a complete definition and an explicit definition-based final question', () => {
+  for (const q of [
+    { content: definition + '根据上述定义，下列属于信息冗余的是？' },
+    { material: definition, content: '根据上述定义，下列属于信息冗余的是？' },
+    { category: '判断推理', content: definition + '依据该定义，下列不属于信息冗余的是？' },
+  ]) {
+    const capability = getSpeedReviewCapability({ ...unclassified, ...q });
+    assert.equal(capability.available, true, JSON.stringify(q));
+    assert.equal(capability.category, '定义判断');
+    assert.equal(capability.classificationSource, 'structure');
+    assert.match(capability.focus, /必要条件/);
+  }
+  for (const q of [
+    { content: '根据上述定义，下列属于信息冗余的是？' },
+    { content: '定义是什么？', options: [definition + '根据上述定义，下列属于冗余的是？', '其他选项'] },
+    { content: definition + '这段话的意思是什么？', material: '根据上述定义，下列属于信息冗余的是？' },
+    { content: '课堂作业要求学生根据定义思考问题。这段话的主旨是什么？' },
+  ]) assert.equal(getSpeedReviewCapability({ ...unclassified, ...q }).available, false, JSON.stringify(q));
+});
+
+test('analogy inference requires matching lexical relation structure and rejects numbers, ratios, times and mismatched options', () => {
+  for (const q of [
+    { content: '剪刀：裁剪', options: ['钥匙：开锁', '雨伞：下雨', '纸张：书本', '花朵：树林'] },
+    { content: '种子：发芽：幼苗', options: ['鸡蛋：孵化：雏鸡', '雨水：降落：天气', '树木：修剪：森林', '书本：阅读：纸张'] },
+    { content: '（ ）对于森林相当于砖对于（ ）', options: ['树木：建筑', '河流：房间', '木材：砌筑', '土壤：水泥'] },
+  ]) {
+    const capability = getSpeedReviewCapability({ ...unclassified, ...q });
+    assert.equal(capability.available, true, JSON.stringify(q));
+    assert.equal(capability.category, '类比推理');
+    assert.equal(capability.classificationSource, 'structure');
+  }
+  for (const q of [
+    { content: '12：30', options: ['10：20', '11：30', '10：40', '12：40'] },
+    { content: '3：2', options: ['6：4', '4：6', '5：3', '2：5'] },
+    { content: '三：二', options: ['六：四', '四：六', '五：三', '二：五'] },
+    { content: '三比二：六比四', options: ['四比三：八比六', '五比二：十比四', '六比五：十二比十', '七比三：十四比六'] },
+    { content: '十二小时：两天', options: ['一小时：两小时', '三小时：四小时', '一周：两周', '一年：两年'] },
+    { content: '上午九点：下午三点', options: ['上午八点：下午两点', '上午七点：下午一点', '中午十二点：晚上六点', '早上六点：中午十二点'] },
+    { content: '剪刀：裁剪', options: ['钥匙：开锁', '选项是一个完整句子', '纸张：书本', '花朵：树林'] },
+    { content: '剪刀：裁剪', options: ['钥匙：开锁：房门', '雨伞：遮雨：衣物', '纸张：装订：书本', '花朵：生长：树林'] },
+    { content: '这两个词的含义是什么？', material: '剪刀：裁剪', options: ['钥匙：开锁', '雨伞：下雨', '纸张：书本', '花朵：树林'] },
+  ]) assert.equal(getSpeedReviewCapability({ ...unclassified, ...q }).available, false, JSON.stringify(q));
+});
+
+test('logical inference requires a final inference task with prior context, not isolated keywords or option text', () => {
+  const context = '所有参加培训的人都通过了审核，小王参加了本次培训。';
+  for (const q of [
+    { content: context + '由此可以推出哪项结论？' },
+    { content: '以下哪项如果为真，最能削弱上述结论？', material: '研究者发现运动者睡眠较好，因此断定只要增加运动就能改善所有人的睡眠。' },
+  ]) {
+    const capability = getSpeedReviewCapability({ ...unclassified, ...q });
+    assert.equal(capability.available, true);
+    assert.equal(capability.category, '逻辑判断');
+    assert.equal(capability.classificationSource, 'structure');
+  }
+  for (const q of [
+    { content: '以下哪项能够支持上述结论？' },
+    { content: '这段话介绍了逻辑判断、支持与削弱等学习主题。请选择最合适的标题。' },
+    { content: context + '这段文字有几个字？', options: ['由此可以推出某结论', '以下可以支持某结论', '丙', '丁'] },
+  ]) assert.equal(getSpeedReviewCapability({ ...unclassified, ...q }).available, false, JSON.stringify(q));
+});
+
+test('source labels and metadata conflicts outrank structural inference while figure dependency remains excluded', () => {
+  const q = { ...unclassified, content: definition + '根据上述定义，下列属于信息冗余的是？' };
+  for (const category of ['常识判断', '政治理论', '图形推理', '数字推理']) {
+    const capability = getSpeedReviewCapability({ ...q, category });
+    assert.equal(capability.available, false);
+    assert.equal(capability.category, category);
+    assert.equal(capability.classificationSource, 'source');
+  }
+  const fine = getSpeedReviewCapability({ ...q, category: '判断推理', subCategory: '逻辑判断' });
+  assert.equal(fine.category, '逻辑判断');
+  assert.equal(fine.classificationSource, 'source');
+  assert.equal(getSpeedReviewCapability({ ...q, category: '常识判断', subCategory: '定义判断' }).code, 'category_conflict');
+  for (const category of ['', '判断推理']) {
+    const figure = getSpeedReviewCapability({ ...unclassified, category, content: '从所给的四个选项中，选择最合适的一个填入问号处，使之呈现一定规律。' });
+    assert.equal(figure.available, false);
+    assert.equal(figure.category, '图形推理');
+  }
+  assert.equal(getSpeedReviewCapability({ ...q, image_missing: true }).code, 'image_required');
+  assert.equal(getSpeedReviewCapability({ ...q, answerStatus: 'disputed' }).code, 'invalid_answer');
+  assert.equal(getSpeedReviewCapability({ ...q, options: ['A', 'B', 'C', 'D'] }).code, 'incomplete_question');
+  assert.equal(classifyQuestionMethod(null).classificationSource, 'unknown');
 });
 
 test('classification ambiguity and untrusted naming never open method review', () => {
@@ -78,6 +178,20 @@ test('complete question input excludes every image location and actual importer 
     { contentHtml: '<img src="figure.png">' }, { material: '![](figure.png)' },
     { options: ['<img src="figure.png">', '20'] }, { image_missing: true }, { imageMissing: true },
   ]) assert.equal(getSpeedReviewCapability({ ...question, ...change }).code, 'image_required');
+  // Real importer templates can retain only the instruction and numbered options.
+  // Neither an image marker nor letter placeholders are present in these synthetic inputs.
+  const figureStems = [
+    ...['下列', '下面', '以下', '所给'].flatMap((location) => ['', '的'].map((suffix) =>
+      `把${location}${suffix}六个图形分为两类，使每一类图形都有各自的共同特征或规律，分类正确的一项是：`)),
+    '左图为给定的多面体，请从以下选项中选出正确的一项。',
+    '左边给定的是正方体的外表面展开图，右边哪一项能由它折叠而成？',
+  ];
+  for (const content of figureStems) {
+    const input = { content, options: ['①②③，④⑤⑥', '①②④，③⑤⑥', '①③⑤，②④⑥', '①④⑥，②③⑤'], answer: 'A' };
+    for (const category of ['', '判断推理', '逻辑判断']) {
+      assert.equal(getSpeedReviewCapability({ ...input, category }).available, false, `${category}: ${content}`);
+    }
+  }
   assert.equal(getSpeedReviewCapability({ ...question, images: '[]', image_missing: false }).available, true);
 });
 

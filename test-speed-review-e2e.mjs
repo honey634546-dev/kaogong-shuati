@@ -17,7 +17,7 @@ const review = {
   steps: ['把 796 × 12.5% 改写成 796 ÷ 8。', '先算 800 ÷ 8，再减去 4 ÷ 8，得到 99.5。'],
   whyCorrect: '12.5%=1/8，这是精确等价变形，结果为 99.5。',
   applicability: '百分数能准确转成简单分数时适用。', caution: '12.8% 不等于 1/8，不能直接套用。',
-  diagnosis: '用时超过练习参考线，仅凭时间无法判断慢因。', drillMethod: 'percent_fraction',
+  diagnosis: '你提到先把百分数转成小数再乘，可以对照 796 ÷ 8，检查是否减少了中间计算步骤。', drillMethod: 'percent_fraction',
 };
 const noShortcutReview = {
   status: 'no_shortcut', methodName: '', recognition: '普通两位数加法，用按位相加即可，不需要引入新公式。',
@@ -26,6 +26,16 @@ const noShortcutReview = {
   applicability: '适用于本题的两位数加法。', caution: '注意个位进位，不能为省步骤漏算。',
   diagnosis: '仅凭用时无法判断慢因；可检查是否卡在进位或反复验算。', drillMethod: null,
 };
+const reasoningFixtures = [
+  { category: '判断推理', expectedLabel: '文字判断', expectedSource: 'source', prompt: '甲、乙、丙三人排队，甲不在最后，乙在丙前。以下哪种顺序满足全部条件？', options: ['甲乙丙', '丙甲乙', '乙丙甲', '丙乙甲'], methodName: '逐项核对排队条件', steps: ['排除甲在最后的乙丙甲。', '排除乙在丙后的丙甲乙和丙乙甲，甲乙丙满足全部条件。'], whyCorrect: '甲乙丙中甲不在最后且乙在丙前，其他选项均违反至少一个条件。' },
+  { category: '', expectedLabel: '定义判断', expectedSource: 'structure', prompt: '公共物品是指能够供多人同时使用，且无法轻易排除他人使用的物品。根据上述定义，下列属于公共物品的是？', options: ['开放街道的照明', '个人餐盒', '会员私用储物柜', '售票影院的座位'], methodName: '核对定义的两个条件', steps: ['提取多人共用和难以排除他人两个条件。', '街道照明同时满足两条件；餐盒、私用储物柜和售票座位都能排除他人使用。'], whyCorrect: '按题目给出的定义逐项判断，只有开放街道照明满足两个必要条件。' },
+  { category: '', expectedLabel: '类比推理', expectedSource: 'structure', prompt: '剪刀：裁剪', options: ['锅铲：炒菜', '纸张：剪刀', '衣服：裁剪', '裁剪：剪刀'], methodName: '保持工具与用途的顺序', steps: ['剪刀是用于裁剪的工具，关系为工具到用途。', '锅铲用于炒菜且顺序一致；其他选项的关系或方向不同。'], whyCorrect: '锅铲与炒菜复现题干的工具与用途关系，且前后顺序一致。' },
+  { category: '', expectedLabel: '逻辑判断', expectedSource: 'structure', prompt: '所有参加培训的员工都已通过资格审核。小王参加了培训。由此可以推出哪项？', options: ['小王已通过资格审核', '所有通过审核的人都参加培训', '小王未通过审核', '未参加培训的人都未通过审核'], methodName: '沿充分条件正向推导', steps: ['把条件写成参加培训推出通过审核。', '小王参加培训，因此小王通过审核；不能反向推导。'], whyCorrect: '小王满足题目给定的充分条件，正向应用即可推出通过审核。' },
+].map((item) => ({ ...item, answer: 'A', answer_index: 0, analysis: item.whyCorrect }));
+// Reproduce the real provider's verbose internal-field disclaimer. The UI must
+// replace it when the learner has supplied no account of their solving process.
+const reasoningReview = (item) => ({ status: 'method', methodName: item.methodName, recognition: `先明确本题的${item.expectedLabel}结构。`, steps: item.steps, whyCorrect: item.whyCorrect, applicability: '适用于本题给出的完整文字条件和选项。', caution: '只使用题目给出的条件，不添加常识假设或颠倒关系。', diagnosis: 'timing.assisted 为 null，userApproach 为空，无法判断是否独立作答。仅凭 solveMs 不能判断用户能力、速度或掌握程度，也不能排除应用外辅助。不要据此推测用户卡点或宣称已经提速。', drillMethod: null });
+const noProcessDiagnosis = '仅凭用时无法确定慢因。对照下面的解题步骤，找出与你当时做法不同的一步。';
 async function listen(server) { return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve(server.address().port))); }
 async function api(path, body, method = 'POST') {
   const response = await fetch(base + path, { method, headers: { 'content-type': 'application/json' }, body: body == null ? undefined : JSON.stringify(body) });
@@ -35,8 +45,9 @@ before(async () => {
   provider = http.createServer(async (req, res) => {
     let raw = ''; for await (const chunk of req) raw += chunk;
     requests.push(JSON.parse(raw));
+    const matchingReasoning = reasoningFixtures.find((item) => JSON.stringify(requests.at(-1).messages).includes(item.prompt));
     res.writeHead(200, { 'content-type': 'application/json' });
-    const content = upstreamMode === 'valid' ? JSON.stringify(review)
+    const content = upstreamMode === 'valid' ? JSON.stringify(matchingReasoning ? reasoningReview(matchingReasoning) : review)
       : upstreamMode === 'no_shortcut' ? JSON.stringify(noShortcutReview) : '并非结构化结果';
     res.end(JSON.stringify({ choices: [{ message: { content } }] }));
   });
@@ -110,13 +121,15 @@ const supportedFixtures = [
 const unsupportedFixtures = [
   eligibilityFixture({ prompt: '常识负例：蒸发时物质从周围吸收还是放出热量？', category: '常识判断' }),
   eligibilityFixture({ prompt: '政治负例：下列哪项属于政治理论基础知识？', category: '政治理论' }),
-  eligibilityFixture({ prompt: '父类负例：此题只有判断推理父类元数据。', category: '判断推理' }),
+  eligibilityFixture({ prompt: '图形负例：观察下列图形，选择能填入问号处的选项。', category: '判断推理/图形推理' }),
   eligibilityFixture({ prompt: '未知负例：这道题没有可靠的题型元数据。' }),
   eligibilityFixture({ prompt: '缺答案负例：计算 18 加 25 的结果。', category: '数量关系', answer: '' }),
   eligibilityFixture({ prompt: '字母占位负例：选择图形规律对应的选项。', category: '数量关系', options: ['A. A', 'B. B', 'C. C', 'D. D'] }),
   eligibilityFixture({ prompt: '题图缺失负例：【本题原卷含题目图片，当前导入文件未包含图片】', category: '数量关系' }),
   eligibilityFixture({ prompt: '材料缺图负例：依据材料回答增长率。', category: '资料分析', material: '【共享材料含图片，当前导入文件未包含图片】' }),
   eligibilityFixture({ prompt: '选项缺图负例：选择满足条件的选项。', category: '数量关系', options: ['（原卷图形选项，图片未随导入提供）', '选项乙', '选项丙', '选项丁'] }),
+  eligibilityFixture({ prompt: '父判断图形操作负例：将下列图形分为两组，每组包含三个图形。', category: '判断推理' }),
+  eligibilityFixture({ prompt: '分类冲突负例：下列选项中哪个成立？', category: '数量关系/言语理解' }),
 ];
 
 async function assertCapabilityEntrance(page, supported, unsupported) {
@@ -126,8 +139,13 @@ async function assertCapabilityEntrance(page, supported, unsupported) {
     const card = page.locator('.review-card').filter({ has: page.locator('.q-content').filter({ hasText: question.prompt }) });
     assert.equal(await card.locator('.speed-toggle').textContent(), '分析解题方法');
     const capability = (await card.locator('.speed-capability').textContent()).trim();
-    assert.match(capability, new RegExp(question.category), '入口前显示已识别题型');
-    assert.ok(capability.length > question.category.length + 4, '题型旁包含本类可分析的方法方向');
+    const label = question.expectedLabel || question.category;
+    assert.match(capability, new RegExp(label), '入口前显示已识别题型');
+    assert.ok(capability.length > label.length + 4, '题型旁包含本类可分析的方法方向');
+    if (question.expectedSource) {
+      assert.equal(await card.locator('.speed-origin').count(), question.expectedSource === 'structure' ? 1 : 0);
+      if (question.expectedSource === 'structure') assert.equal(await card.locator('.speed-origin').textContent(), '题面识别');
+    }
     assert.doesNotMatch(capability, /已提速|秒杀|已验证快解/, '可分析不得变成已经发现捷径的承诺');
   }
   for (const question of unsupported) {
@@ -163,6 +181,7 @@ test('完整练习→慢题→真实HTTP协议→新题独立作答→历史回�
   await panel.getByRole('button', { name: 'AI 分析本题方法' }).click();
   await panel.locator('.speed-result-title').waitFor();
   assert.equal(await panel.locator('.speed-result-title').textContent(), review.methodName);
+  assert.equal(await panel.locator('.speed-explanation').filter({ hasText: '用时线索' }).locator('p').textContent(), review.diagnosis, '用户描述了原解法时保留针对该过程的模型建议');
   const upstream = JSON.stringify(requests.at(-1)); assert.match(upstream, /160\d{3}/); assert.match(upstream, /我先把百分数/);
   assert.equal(await panel.locator('.speed-drill-feedback').count(), 0);
   await panel.getByRole('button', { name: '独立练一道新题' }).click();
@@ -189,6 +208,7 @@ test('完整练习→慢题→真实HTTP协议→新题独立作答→历史回�
   await page.locator('.speed-toggle').first().click();
   await page.locator('.speed-generate').first().click();
   await page.locator('.speed-result-title').first().waitFor();
+  assert.equal(await page.locator('.speed-explanation').filter({ hasText: '用时线索' }).first().locator('p').textContent(), noProcessDiagnosis, '历史回看未重填自述时不能沿用先前的个性诊断');
   assert.equal(pageErrors.length, 0, pageErrors.join('\n'));
   await page.close();
 });
@@ -269,6 +289,68 @@ test('混合卷仅推荐可分析慢题，题型与方法方向在点击前可�
   assert.equal(methodCalls, 0, '查看成绩与历史资格不应自动发起方法请求');
   assert.equal(requests.length, callsBefore, '不调用模型也能在入口前排除已知不支持题');
   assert.deepEqual(pageErrors, []);
+  await page.close();
+});
+
+test('父判断与无细类历史无需补标签即可分析；结构识别明确标注来源且返回对应题型的方法', async () => {
+  const batchName = '旧分类与结构识别验收';
+  const imported = await api('/api/custom/import', { name: batchName, questions: reasoningFixtures });
+  const rawBefore = await api(`/api/custom/questions?batch_id=${imported.id}`, null, 'GET');
+  const page = await context.newPage();
+  const errors = []; page.on('pageerror', (error) => errors.push(error.message));
+  const callsBefore = requests.length;
+  await openPractice(page, batchName);
+  const attemptId = await finishPractice(page);
+  await assertCapabilityEntrance(page, reasoningFixtures, []);
+  assert.match(await page.locator('.speed-ranking-title').textContent(), /4 道/);
+  const savedBefore = await api(`/api/attempts/${encodeURIComponent(attemptId)}`, null, 'GET');
+  for (const [index, item] of reasoningFixtures.entries()) {
+    assert.equal(savedBefore.records[index].question.category, item.category);
+    assert.equal(savedBefore.records[index].question.subCategory, undefined, '旧快照形状没有细类字段也必须可用');
+  }
+  await page.reload(); await page.locator('.custom-entry').waitFor();
+  await page.evaluate((id) => openAttemptReview(id), attemptId);
+  await waitForReview(page, reasoningFixtures.length);
+  await assertCapabilityEntrance(page, reasoningFixtures, []);
+  assert.equal(requests.length, callsBefore, '分类与入口展示不应消耗模型请求');
+  for (const [index, item] of reasoningFixtures.entries()) {
+    const card = page.locator('.review-card').filter({ has: page.locator('.q-content').filter({ hasText: item.prompt }) });
+    await card.locator('.speed-toggle').click();
+    await card.locator('.speed-generate').click();
+    await card.locator('.speed-result-title').waitFor();
+    assert.equal(await card.locator('.speed-result-title').textContent(), item.methodName);
+    assert.equal(await card.locator('.speed-explanation').filter({ hasText: '用时线索' }).locator('p').textContent(), noProcessDiagnosis, '空自述必须显示固定的两句可操作提示');
+    assert.ok((await card.locator('.speed-result').textContent()).includes(item.steps[0]));
+    assert.doesNotMatch(await card.locator('.speed-result').textContent(), /百分数转分数|首版暂不生成|本题以知识辨析|timing\.assisted|assisted|null|userApproach|solveMs|不能判断用户能力/);
+    assert.equal(await card.locator('.speed-drill').count(), 0, '文字判断不能套用数学基础练习');
+    assert.ok(JSON.stringify(requests.at(-1).messages).includes(item.prompt));
+    if (index < 2) {
+      await card.locator('.speed-capability').evaluate((element) => window.scrollTo(0, element.getBoundingClientRect().top + window.scrollY - 90));
+      await page.screenshot({ path: join(screenshots, index === 0 ? 'capability-broad-history-mobile.png' : 'capability-inferred-definition-history-mobile.png') });
+    }
+  }
+  assert.equal(requests.length, callsBefore + reasoningFixtures.length, '仅用户主动展开并生成的四题发起请求');
+  assert.deepEqual((await api(`/api/attempts/${encodeURIComponent(attemptId)}`, null, 'GET')).records, savedBefore.records);
+  const rawAfter = await api(`/api/custom/questions?batch_id=${imported.id}`, null, 'GET');
+  assert.deepEqual(rawAfter.questions.map(({ category, fingerprint, revision }) => ({ category, fingerprint, revision })), rawBefore.questions.map(({ category, fingerprint, revision }) => ({ category, fingerprint, revision })));
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
+test('导入题目编辑保留已存在的细类路径及任意来源分类', async () => {
+  const batchName = '编辑分类保留验收';
+  const categories = ['判断推理/定义判断', '国考真题/判断推理/定义判断'];
+  const imported = await api('/api/custom/import', { name: batchName, questions: categories.map((category, index) => ({ ...reasoningFixtures[1], category, prompt: `编辑样本${index}：${reasoningFixtures[1].prompt}` })) });
+  const rows = (await api(`/api/custom/questions?batch_id=${imported.id}`, null, 'GET')).questions;
+  const page = await context.newPage();
+  await page.goto(base); await page.locator('.custom-entry').waitFor();
+  for (const question of rows) {
+    await page.evaluate(({ question, name }) => customEditQuestion(question, name), { question, name: batchName });
+    await page.locator('#eq-category').waitFor();
+    assert.equal(await page.locator('#eq-category').inputValue(), question.category);
+    assert.equal(await page.locator('#eq-category option:checked').textContent(), question.category);
+    await page.locator('#eq-cancel').click();
+  }
   await page.close();
 });
 

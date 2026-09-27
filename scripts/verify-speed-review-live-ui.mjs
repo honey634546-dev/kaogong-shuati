@@ -137,6 +137,11 @@ try {
   await page.locator('.option').first().click();
   await page.locator('.speed-summary').waitFor();
   assert.match(await page.locator('.speed-ranking-title').textContent(), /1 道/);
+  assert.equal(await page.locator('.speed-toggle').first().textContent(), '分析解题方法');
+  assert.equal(await page.locator('.speed-type').first().textContent(), '数量关系');
+  assert.equal(await page.locator('.speed-origin').count(), 0, '本例使用来源分类，不应误标为题面识别');
+  assert.equal(report.appRequests, 0, '显示方法入口和参考用时不应自动调用模型');
+  report.capability = { label: await page.locator('.speed-type').first().textContent(), focus: await page.locator('.speed-focus').first().textContent(), source: 'source' };
   report.timings = { injectedSolveMs: 160000, uiTimingBadge: await page.locator('.speed-time').first().textContent() };
   await page.locator('.speed-ranking-links button').first().click();
   const panel = page.locator('.speed-panel').first();
