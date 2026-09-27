@@ -136,7 +136,7 @@ try {
   await page.locator('.q-progress-text').filter({ hasText: '2' }).waitFor();
   await page.locator('.option').first().click();
   await page.locator('.speed-summary').waitFor();
-  assert.match(await page.locator('.speed-ranking-title').textContent(), /1 道题/);
+  assert.match(await page.locator('.speed-ranking-title').textContent(), /1 道/);
   report.timings = { injectedSolveMs: 160000, uiTimingBadge: await page.locator('.speed-time').first().textContent() };
   await page.locator('.speed-ranking-links button').first().click();
   const panel = page.locator('.speed-panel').first();

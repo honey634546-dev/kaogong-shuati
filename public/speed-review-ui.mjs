@@ -1,4 +1,4 @@
-import { analyzeTiming, getReference, generateDrill, DRILL_METHOD_LABELS } from './speed-review-core.mjs';
+import { analyzeTiming, getReference, getSpeedReviewCapability, generateDrill, DRILL_METHOD_LABELS } from './speed-review-core.mjs';
 
 const node = (tag, className, text) => {
   const out = document.createElement(tag);
@@ -17,6 +17,9 @@ const requestBody = (question, answer, attemptId, index, historical, timing, rea
     options: question.options || [], answer: question.answer, answerIndex: question.answerIndex,
     answerStatus: question.answerStatus ?? question.answer_status ?? '',
     analysis: question.analysis || '', chapter: question.chapter || '', category: question.category || '', images: question.images || [],
+    subCategory: question.subCategory || '', categoryName: question.categoryName || '', module: question.module || '',
+    type: question.type || '', image_missing: question.image_missing ?? question.imageMissing,
+    materialId: question.materialId || question.material_id || question.groupId || '', sharedMaterial: Boolean(question.sharedMaterial || question.groupId),
   },
   selected: answer.selected, correct: answer.correct, timing: { ...timing, assisted: typeof answer.assisted === 'boolean' ? answer.assisted : null },
   userReason: reason, userApproach: approach,
@@ -25,15 +28,18 @@ const requestBody = (question, answer, attemptId, index, historical, timing, rea
 /** Results-only controller; every request/result belongs to this mounted review. */
 export function mountSpeedReview({ view, cards, questions, answers, attemptId, historical = false, api }) {
   if (!view.isConnected || view.querySelector('.speed-summary')) return;
+  const capabilities = questions.map((question) => getSpeedReviewCapability(question));
+  if (!capabilities.some((capability) => capability.available)) return;
   const lifecycle = new AbortController();
   const observer = new MutationObserver(() => {
     if (!summary.isConnected) { lifecycle.abort(); observer.disconnect(); }
   });
   const summary = node('section', 'card speed-summary');
-  summary.setAttribute('aria-label', '提速复盘');
-  summary.append(node('div', 'speed-eyebrow', '做完，再找到更省力的方法'));
-  summary.append(node('h2', '', '提速复盘'));
-  summary.append(node('p', 'speed-muted', '先关注做对但用时较长的题；做错的题先理清思路。用时只提供线索，不能直接说明你为什么慢。'));
+  summary.setAttribute('aria-label', '解题方法复盘');
+  summary.append(node('h2', '', '解题方法复盘'));
+  const scope = node('p', 'speed-scope speed-muted');
+  summary.append(scope);
+  summary.append(node('p', 'speed-muted', '先回看用时较长的题，比较能否减少计算、理清推理或更快排除选项。具体方法需逐题分析；用时本身不能说明慢因。'));
   const controls = node('div', 'speed-controls');
   const label = node('label', '', '练习参考用时');
   const reference = node('input', 'speed-reference');
@@ -43,7 +49,7 @@ export function mountSpeedReview({ view, cards, questions, answers, attemptId, h
   const apply = node('button', 'btn btn-ghost btn-sm', '应用');
   const reset = node('button', 'btn btn-ghost btn-sm', '按题型恢复');
   controls.append(label, apply, reset); summary.append(controls);
-  summary.append(node('p', 'speed-muted speed-small', '初始参考：数量 120 秒、资料 / 判断 90 秒、言语 75 秒、常识 / 政治 30 秒、其他 90 秒。可自行调整；这是练习目标，并非考生平均用时。'));
+  summary.append(node('p', 'speed-muted speed-small', '初始参考：数量 120 秒、资料 / 逻辑 90 秒、言语 75 秒。可自行调整；这是练习目标，并非考生平均用时。'));
   const ranking = node('div', 'speed-ranking'); ranking.setAttribute('aria-live', 'polite');
   summary.append(ranking);
   view.querySelector('.review-toolbar')?.before(summary);
@@ -51,7 +57,10 @@ export function mountSpeedReview({ view, cards, questions, answers, attemptId, h
   let override;
   const sessions = [];
   const update = () => {
-    const entries = sessions.map((session) => {
+    const available = sessions.filter((session) => session.capability.available);
+    if (!available.length) { summary.remove(); return; }
+    scope.textContent = `本次 ${available.length} 道题可分析解题方法 · ${[...new Set(available.map((session) => session.capability.label))].join(' / ')}`;
+    const entries = available.map((session) => {
       const timing = analyzeTiming(session.question, session.answer, override);
       session.timing = timing;
       const target = timing.referenceSeconds || getReference(session.question).seconds;
@@ -64,11 +73,11 @@ export function mountSpeedReview({ view, cards, questions, answers, attemptId, h
     }).filter((session) => session.timing.slow && session.timing.eligible)
       .sort((a, b) => b.timing.ratio - a.timing.ratio);
     ranking.replaceChildren(node('p', 'speed-ranking-title', entries.length
-      ? `${entries.length} 道题超过练习参考用时，先看这 ${Math.min(3, entries.length)} 道`
-      : '当前没有可确定超过参考用时的已答题。你仍可逐题查看是否有更简洁的方法。'));
+      ? `可分析的题中，${entries.length} 道超过练习参考用时，先看这 ${Math.min(3, entries.length)} 道`
+      : '可分析的题中，暂无可确定超过参考用时的已答题。也可到题目下方比较解题方法。'));
     const links = node('div', 'speed-ranking-links');
     entries.slice(0, 3).forEach((session) => {
-      const button = node('button', 'btn btn-ghost btn-sm', `第 ${session.index + 1} 题 · ${session.answer.correct ? '答对' : '答错'} · ${seconds(session.timing.solveMs)}`);
+      const button = node('button', 'btn btn-ghost btn-sm', `第 ${session.index + 1} 题 · ${session.capability.label} · ${session.answer.correct ? '答对' : '答错'} · ${seconds(session.timing.solveMs)}`);
       button.onclick = () => {
         if (session.card.style.display === 'none') view.querySelector('.rv-tab[data-f="all"]')?.click();
         session.open();
@@ -89,9 +98,13 @@ export function mountSpeedReview({ view, cards, questions, answers, attemptId, h
 
   cards.forEach((card, index) => {
     const question = questions[index]; const answer = answers[index] || {};
+    const capability = capabilities[index];
+    if (!capability?.available) return;
     const section = node('section', 'speed-card');
     const badge = node('div', 'speed-time');
-    const toggle = node('button', 'btn btn-ghost speed-toggle', '提速复盘');
+    const category = node('div', 'speed-capability');
+    category.append(node('span', 'speed-type', capability.label), node('span', 'speed-focus', capability.focus));
+    const toggle = node('button', 'btn btn-ghost speed-toggle', '分析解题方法');
     toggle.setAttribute('aria-expanded', 'false');
     const panel = node('div', 'speed-panel'); panel.hidden = true;
     panel.id = `speed-panel-${index}`; toggle.setAttribute('aria-controls', panel.id);
@@ -111,8 +124,8 @@ export function mountSpeedReview({ view, cards, questions, answers, attemptId, h
     const actions = node('div', 'action-row'); actions.append(generate, cancel);
     const result = node('div', 'speed-result'); result.setAttribute('aria-live', 'polite');
     panel.append(reasonLabel, approachLabel, actions, result);
-    section.append(badge, toggle, panel); card.append(section);
-    const session = { card, question, answer, index, badge, detail, timing: null,
+    section.append(category, badge, toggle, panel); card.append(section);
+    const session = { card, question, answer, index, badge, detail, capability, timing: null,
       open() { panel.hidden = false; toggle.setAttribute('aria-expanded', 'true'); } };
     sessions.push(session);
     toggle.onclick = () => { panel.hidden = !panel.hidden; toggle.setAttribute('aria-expanded', String(!panel.hidden)); };
@@ -121,12 +134,21 @@ export function mountSpeedReview({ view, cards, questions, answers, attemptId, h
     const show = (response) => {
       clearDrill(); clearDrill = () => {};
       result.replaceChildren();
+      // A server snapshot can be older or more complete than the visible copy.
+      // Remove a stale action instead of presenting a fake educational result.
+      if (response.unavailable) {
+        session.capability = { ...capability, available: false };
+        section.remove(); update();
+        const notice = node('p', 'speed-muted speed-small', '题目资料已更新，方法入口已收起。请查看本题解析。');
+        notice.setAttribute('role', 'status'); card.append(notice);
+        return;
+      }
       if (!response.review) {
         result.append(node('p', 'speed-error', response.notice || response.error || '本次未获得可靠的复盘，请稍后重试。'));
         return;
       }
       const review = response.review;
-      result.append(node('div', 'speed-result-title', review.status === 'method' ? review.methodName : review.status === 'no_shortcut' ? '先巩固基础与常规方法' : '信息不足，暂不推荐快解'));
+      result.append(node('div', 'speed-result-title', review.status === 'method' ? review.methodName : review.status === 'no_shortcut' ? '本题的稳妥解法' : '本题存在待核对的信息'));
       result.append(node('p', 'speed-muted speed-small', response.mock ? '演示响应 · 未调用真实模型' : response.model ? 'AI 方法建议 · 需要结合题目核对' : '复盘提示 · 本次未调用模型'));
       const field = (title, value) => {
         if (!value) return;
@@ -146,7 +168,7 @@ export function mountSpeedReview({ view, cards, questions, answers, attemptId, h
       if (review.status === 'method' && review.drillMethod && DRILL_METHOD_LABELS[review.drillMethod]) {
         clearDrill = mountDrill(result, review.drillMethod, lifecycle.signal);
       } else if (review.status === 'method') {
-        result.append(node('p', 'speed-muted speed-small', '本题暂没有经过验算的配套练习。下次独立做同类新题时，再观察准确率与用时。'));
+        result.append(node('p', 'speed-muted speed-small', '下次独立做一道没见过的同类题，再观察这个方法的准确率与用时。'));
       }
     };
     generate.onclick = async () => {

@@ -5290,7 +5290,9 @@ async function openAttemptReview(attemptId) {
     const snap = record.question || {};
     const options = Array.isArray(snap.options) ? snap.options : [];
     const qid = snap.questionId || record.questionId;
-    const images = Array.isArray(snap.images) ? snap.images : [];
+    let images = snap.images;
+    if (typeof images === 'string') { try { images = JSON.parse(images); } catch { images = []; } }
+    if (!Array.isArray(images)) images = [];
     const prompt = snap.prompt || snap.content || '';
     const materialText = snap.material || '';
     const contentHtml = snap.contentHtml || (snap.type === 'custom'
@@ -5307,8 +5309,14 @@ async function openAttemptReview(attemptId) {
       questionUid: record.questionUid || snap.questionUid || '',
       revision: record.revision || snap.revision || 1,
       subject: record.subject || attempt.subject || '',
-      chapter: record.chapter || snap.category || '',
+      chapter: snap.chapter || '',
       category: snap.category || '',
+      subCategory: snap.subCategory || '',
+      categoryName: snap.categoryName || '',
+      module: snap.module || '',
+      image_missing: snap.image_missing ?? snap.imageMissing,
+      materialId: snap.materialId || snap.material_id || snap.groupId || '',
+      sharedMaterial: Boolean(snap.sharedMaterial || snap.groupId),
       type: snap.type ?? record.type ?? 0,
       content: prompt,
       contentHtml,
@@ -5319,7 +5327,7 @@ async function openAttemptReview(attemptId) {
       answerIndex: snap.answerIndex ?? -1,
       answerStatus: snap.answerStatus ?? snap.answer_status ?? '',
       analysis: snap.analysis || '',
-      images,
+      images: snap.images ?? images,
     });
     answers.push({
       selected: Array.isArray(selected) ? selected : (selected == null ? null : [selected]).map(Number),
@@ -5488,12 +5496,12 @@ function renderReview() {
   };
   view.appendChild(back);
   const reviewAttempt = s.attemptId;
-  import('./speed-review-ui.mjs').then(({ mountSpeedReview }) => {
+  import('./speed-review-ui.mjs?v=20260927-2').then(({ mountSpeedReview }) => {
     if (!back.isConnected || store.state.attemptId !== reviewAttempt) return;
     mountSpeedReview({ view, cards, questions: s.questions, answers: s.answers, attemptId: reviewAttempt, historical: s.historicalReview, api });
   }).catch(() => {
     if (back.isConnected) {
-      const notice = el('p', 'speed-error', '提速复盘组件未能加载，请刷新后重试。');
+      const notice = el('p', 'speed-error', '方法复盘组件未能加载，请刷新后重试。');
       back.before(notice);
     }
   });

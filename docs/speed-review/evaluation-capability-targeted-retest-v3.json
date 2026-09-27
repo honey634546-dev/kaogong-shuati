@@ -1,0 +1,344 @@
+{
+  "version": 3,
+  "casesVersion": 3,
+  "generatedAt": "2026-09-27T04:51:07.311Z",
+  "mode": "real-provider",
+  "provenance": {
+    "casesSha256": "59c956b7a8b818db110e97ba1a3da738302c5889be25e1c8242762cd755bf7c7",
+    "coreSha256": "e5194b83d46ca5f0ea1b03c3361b1ba6efb50c5349ad8cb85153aa77ca1f3ba5"
+  },
+  "model": "deepseek-v4.1-flash",
+  "settings": {
+    "role": "xingce-explainer",
+    "temperature": 0.2,
+    "reasoningEffort": "low",
+    "maxTokens": 12000,
+    "timeoutMs": 60000,
+    "concurrency": 2
+  },
+  "evidenceBoundary": "Synthetic offline/oracle and real-provider checks do not establish learning improvement. Schema validity alone is not quality approval. Each live response requires an independent reasoning review.",
+  "cases": [
+    {
+      "id": "SR03",
+      "category": "资料分析",
+      "oracle": {
+        "status": "verified",
+        "value": 119.99999999999999,
+        "operation": "divide"
+      },
+      "expected": {
+        "answer": "B",
+        "status": [
+          "method"
+        ],
+        "result": 120,
+        "proof": {
+          "operation": "divide",
+          "operands": [
+            132,
+            1.1
+          ],
+          "value": 120
+        },
+        "must": [
+          "本期除以1+增长率",
+          "说明基数不可混用"
+        ],
+        "mustNot": [
+          "用132×0.9反推基期"
+        ],
+        "capability": {
+          "available": true,
+          "category": "资料分析",
+          "code": "available"
+        }
+      },
+      "capability": {
+        "available": true,
+        "code": "available",
+        "category": "资料分析",
+        "label": "资料分析",
+        "focus": "核对文字材料、统计口径与列式，比较估算或精算方法。"
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2765
+      },
+      "elapsedMs": 12203,
+      "provider": "completed",
+      "model": "deepseek-v4.1-flash",
+      "usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cached_tokens": 0,
+        "completion_thinking_tokens": 1247,
+        "completion_tokens": 1629,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 0,
+          "reasoning_tokens": 1247,
+          "rejected_prediction_tokens": 0
+        },
+        "credit": 0,
+        "prompt_cache_hit_tokens": 128,
+        "prompt_cache_miss_tokens": 1533,
+        "prompt_cache_write_tokens": 0,
+        "prompt_tokens": 1661,
+        "prompt_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 128,
+          "reasoning_tokens": 0,
+          "rejected_prediction_tokens": 0
+        },
+        "total_tokens": 3290
+      },
+      "rawContent": "{\"status\":\"method\",\"methodName\":\"增长求基期：现期除以1+r\",\"recognition\":\"出现“今年产量”“同比增长10%”并求“去年产量”，即已知现期量和同比增长率，求基期量。\",\"steps\":[\"先确认“同比增长10%”的比较基数是去年，不能把10%套在今年132万件上。\",\"列式：去年=今年÷(1+增长率)=132÷(1+10%)=132÷1.1。\",\"计算得120；用120×1.1=132回代验证，对应选项B。\"],\"whyCorrect\":\"独立核对题干与计算：今年=去年×(1+10%)。因此去年=132÷1.1=120，且120×1.1=132，与“今年132万件”一致。选项118.8是用132−132×10%得到，它把增长基数错当成今年，不符合题意。\",\"applicability\":\"适用于同一统计口径下，已知现期量和同比增长率，求基期量；本题增长率r=10%，1+r=1.1，计算可直接成立。\",\"caution\":\"公式中r是带正负号的变化率；若增长则除以1+r，若下降且d为正的下降幅度，则除以1−d。不要把“今年减今年×增长率”当作求去年。\",\"diagnosis\":\"用户选B正确，但未描述原解法，assisted为null，不能据此判断是否独立作答、是否掌握或慢因。仅凭150秒只能说明该题值得回看，不能单独证明慢在阅读、计算或犹豫。可回看时重点固定“求去年/基期先列现期÷(1+r)”，再用120×1.1回代检查。\",\"drillMethod\":\"growth_base\"}",
+      "normalized": {
+        "status": "method",
+        "methodName": "增长求基期：现期除以1+r",
+        "recognition": "出现“今年产量”“同比增长10%”并求“去年产量”，即已知现期量和同比增长率，求基期量。",
+        "whyCorrect": "独立核对题干与计算：今年=去年×(1+10%)。因此去年=132÷1.1=120，且120×1.1=132，与“今年132万件”一致。选项118.8是用132−132×10%得到，它把增长基数错当成今年，不符合题意。",
+        "applicability": "适用于同一统计口径下，已知现期量和同比增长率，求基期量；本题增长率r=10%，1+r=1.1，计算可直接成立。",
+        "caution": "公式中r是带正负号的变化率；若增长则除以1+r，若下降且d为正的下降幅度，则除以1−d。不要把“今年减今年×增长率”当作求去年。",
+        "diagnosis": "用户选B正确，但未描述原解法，assisted为null，不能据此判断是否独立作答、是否掌握或慢因。仅凭150秒只能说明该题值得回看，不能单独证明慢在阅读、计算或犹豫。可回看时重点固定“求去年/基期先列现期÷(1+r)”，再用120×1.1回代检查。",
+        "steps": [
+          "先确认“同比增长10%”的比较基数是去年，不能把10%套在今年132万件上。",
+          "列式：去年=今年÷(1+增长率)=132÷(1+10%)=132÷1.1。",
+          "计算得120；用120×1.1=132回代验证，对应选项B。"
+        ],
+        "drillMethod": "growth_base"
+      },
+      "schema": "passed",
+      "semanticReview": {
+        "status": "passed_targeted_retest",
+        "mathematicalOrLogicalCorrectness": "passed",
+        "forcedShortcut": "not_observed",
+        "unsupportedSlowCause": "not_observed",
+        "applicabilityBoundary": "passed",
+        "assistanceEvidence": "unknown_not_independent",
+        "note": "132÷1.1=120、120×1.1=132独立复算；caution明确带符号r与正下降幅度d，未再宣称接近-100%公式失效；3步符合上限。本样本未穷举全部下降率情境。"
+      }
+    },
+    {
+      "id": "SR14",
+      "category": "言语理解",
+      "oracle": {
+        "status": "manual_reasoning_required"
+      },
+      "expected": {
+        "answer": "C",
+        "status": [
+          "method"
+        ],
+        "must": [
+          "结合全文与结论句验证C",
+          "方法是候选而非关键词必胜"
+        ],
+        "mustNot": [
+          "看到但就机械选择后半句",
+          "主旨题一律只看最后一句"
+        ],
+        "capability": {
+          "available": true,
+          "category": "言语理解",
+          "code": "available"
+        }
+      },
+      "capability": {
+        "available": true,
+        "code": "available",
+        "category": "言语理解",
+        "label": "言语理解",
+        "focus": "梳理文段或语境，比较选项依据与排除顺序。"
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2839
+      },
+      "elapsedMs": 10632,
+      "provider": "completed",
+      "model": "deepseek-v4.1-flash",
+      "usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cached_tokens": 0,
+        "completion_thinking_tokens": 905,
+        "completion_tokens": 1309,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 0,
+          "reasoning_tokens": 905,
+          "rejected_prediction_tokens": 0
+        },
+        "credit": 0,
+        "prompt_cache_hit_tokens": 128,
+        "prompt_cache_miss_tokens": 1574,
+        "prompt_cache_write_tokens": 0,
+        "prompt_tokens": 1702,
+        "prompt_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 128,
+          "reasoning_tokens": 0,
+          "rejected_prediction_tokens": 0
+        },
+        "total_tokens": 3011
+      },
+      "rawContent": "{\"status\":\"method\",\"methodName\":\"观点句定位与选项排除\",\"recognition\":\"文段先讲延长开放后的成效与局限，出现“但”，末句用“管理部门认为”提出应结合交通与读者需求；选项中有“所有”“唯一”等绝对化表述。\",\"steps\":[\"锁定“但”后及末句观点：开放时间调整应结合各馆周边交通与读者需求。\",\"将观点同义概括为：图书馆开放安排应结合具体条件。\",\"对比选项：A“所有图书馆都应通宵开放”绝对且无依据；B把部分分馆利用率低扩大为延长开放导致利用率下降，且忽略夜间读者增加；D“唯一任务”绝对且窄。\",\"确认C是对末句观点的同义替换，选C。\"],\"whyCorrect\":\"主旨题应选能覆盖文段核心观点的选项。末句综合了夜间读者增加和部分分馆因交通不便利用率低的局限，提出开放调整要结合周边交通与读者需求，C正是这一观点的概括；其余选项绝对、片面或偏离。\",\"applicability\":\"适用于有“但”“认为”“应”等观点句、选项含绝对化表述的主旨概括题。若文段纯陈述事实而无观点，需改抓高频词和结构；若材料或图形缺失，则不能按本题直接套用。\",\"caution\":\"不要把“交通不便”本身当成主旨，它只是限制条件；也不要因“夜间读者人数增加”就推出应一律延长开放。C中的“具体条件”包含交通与读者需求，不限于交通。\",\"diagnosis\":\"用户选C正确，但未描述原解法且辅助情况未记录，不能判断是否独立作答，也不能仅凭150秒确定慢在阅读、比较还是犹豫。若回看，可练习定位末句观点并用绝对词排除；单题正确不能宣称已掌握或提速。\",\"drillMethod\":null}",
+      "normalized": {
+        "status": "method",
+        "methodName": "观点句定位与选项排除",
+        "recognition": "文段先讲延长开放后的成效与局限，出现“但”，末句用“管理部门认为”提出应结合交通与读者需求；选项中有“所有”“唯一”等绝对化表述。",
+        "whyCorrect": "主旨题应选能覆盖文段核心观点的选项。末句综合了夜间读者增加和部分分馆因交通不便利用率低的局限，提出开放调整要结合周边交通与读者需求，C正是这一观点的概括；其余选项绝对、片面或偏离。",
+        "applicability": "适用于有“但”“认为”“应”等观点句、选项含绝对化表述的主旨概括题。若文段纯陈述事实而无观点，需改抓高频词和结构；若材料或图形缺失，则不能按本题直接套用。",
+        "caution": "不要把“交通不便”本身当成主旨，它只是限制条件；也不要因“夜间读者人数增加”就推出应一律延长开放。C中的“具体条件”包含交通与读者需求，不限于交通。",
+        "diagnosis": "用户选C正确，但未描述原解法且辅助情况未记录，不能判断是否独立作答，也不能仅凭150秒确定慢在阅读、比较还是犹豫。若回看，可练习定位末句观点并用绝对词排除；单题正确不能宣称已掌握或提速。",
+        "steps": [
+          "锁定“但”后及末句观点：开放时间调整应结合各馆周边交通与读者需求。",
+          "将观点同义概括为：图书馆开放安排应结合具体条件。",
+          "对比选项：A“所有图书馆都应通宵开放”绝对且无依据；B把部分分馆利用率低扩大为延长开放导致利用率下降，且忽略夜间读者增加；D“唯一任务”绝对且窄。",
+          "确认C是对末句观点的同义替换，选C。"
+        ],
+        "drillMethod": null
+      },
+      "schema": "passed",
+      "semanticReview": {
+        "status": "passed_targeted_retest",
+        "mathematicalOrLogicalCorrectness": "passed",
+        "forcedShortcut": "not_observed",
+        "unsupportedSlowCause": "not_observed",
+        "applicabilityBoundary": "passed",
+        "assistanceEvidence": "unknown_not_independent",
+        "note": "4步符合严格上限；C与文段结论一致，选项排除有依据，不再产出7步；未将点击入口等同于一定有更快方法。"
+      }
+    }
+  ],
+  "capabilityChecks": [
+    {
+      "name": "明确数量关系开放",
+      "expected": "available",
+      "actual": "available",
+      "available": true,
+      "status": "passed"
+    },
+    {
+      "name": "明确常识分类不可用",
+      "expected": "category_unsupported",
+      "actual": "category_unsupported",
+      "available": false,
+      "status": "passed"
+    },
+    {
+      "name": "明确政治理论分类不可用",
+      "expected": "category_unsupported",
+      "actual": "category_unsupported",
+      "available": false,
+      "status": "passed"
+    },
+    {
+      "name": "仅父类判断推理不开放",
+      "expected": "category_unsupported",
+      "actual": "category_unsupported",
+      "available": false,
+      "status": "passed"
+    },
+    {
+      "name": "父类与细类逻辑判断共同存在开放",
+      "expected": "available",
+      "actual": "available",
+      "available": true,
+      "status": "passed"
+    },
+    {
+      "name": "言语题干提及知识不误拦截",
+      "expected": "available",
+      "actual": "available",
+      "available": true,
+      "status": "passed"
+    },
+    {
+      "name": "未知题型不靠题干猜测分类",
+      "expected": "category_unknown",
+      "actual": "category_unknown",
+      "available": false,
+      "status": "passed"
+    },
+    {
+      "name": "subject不能冒充题型",
+      "expected": "category_unknown",
+      "actual": "category_unknown",
+      "available": false,
+      "status": "passed"
+    },
+    {
+      "name": "题型冲突不可用",
+      "expected": "category_conflict",
+      "actual": "category_conflict",
+      "available": false,
+      "status": "passed"
+    },
+    {
+      "name": "完整文字资料开放",
+      "expected": "available",
+      "actual": "available",
+      "available": true,
+      "status": "passed"
+    },
+    {
+      "name": "资料图片缺失标记不可用",
+      "expected": "image_required",
+      "actual": "image_required",
+      "available": false,
+      "status": "passed"
+    },
+    {
+      "name": "资料缺图文本标记不可用",
+      "expected": "image_required",
+      "actual": "image_required",
+      "available": false,
+      "status": "passed"
+    },
+    {
+      "name": "占位选项不可用",
+      "expected": "incomplete_question",
+      "actual": "incomplete_question",
+      "available": false,
+      "status": "passed"
+    },
+    {
+      "name": "缺少答案不可用",
+      "expected": "invalid_answer",
+      "actual": "invalid_answer",
+      "available": false,
+      "status": "passed"
+    },
+    {
+      "name": "明确争议答案不可用",
+      "expected": "invalid_answer",
+      "actual": "invalid_answer",
+      "available": false,
+      "status": "passed"
+    }
+  ],
+  "summary": {
+    "total": 2,
+    "arithmeticOraclesVerified": 1,
+    "providerResponses": 2,
+    "schemaPasses": 2,
+    "deterministicSkips": 0,
+    "unavailableInputs": 0,
+    "failures": 0,
+    "qualityDecision": "two_targeted_retests_passed_original_failures_preserved",
+    "semanticPasses": 2
+  },
+  "reviewedAt": "2026-09-27T04:52:36.393Z",
+  "remediation": {
+    "priorReport": "evaluation-capability-pilot-v3.json",
+    "changes": "增长/下降符号和适用条件提示统一；步骤优先2至4、保持最多6及strictparser。",
+    "attemptsPerCase": 1,
+    "scope": "Only SR03 and SR14 retested after specific prompt changes; prior 3/4 schema result remains unchanged."
+  }
+}

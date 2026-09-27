@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "createdAt": "2026-09-27",
   "purpose": "提速复盘功能的合成题离线约束检查与真实模型小样本质量评估；不是用户学习效果试验。",
   "qualityGates": {
@@ -26,7 +26,8 @@
         "correct": "B",
         "analysis": "12.5%=1/8，796÷8=(800−4)÷8=99.5。",
         "type": "single",
-        "subject": "数量关系"
+        "subject": "数量关系",
+        "category": "数量关系"
       },
       "attempt": {
         "selected": "B",
@@ -57,7 +58,12 @@
         "mustNot": [
           "断言用户不会分数",
           "保证下次30秒完成"
-        ]
+        ],
+        "capability": {
+          "available": true,
+          "category": "数量关系",
+          "code": "available"
+        }
       }
     },
     {
@@ -78,7 +84,8 @@
         "correct": "C",
         "analysis": "12.8%=128/1000；625×128/1000=80。也可625×(12.5%+0.3%)=78.125+1.875=80。",
         "type": "single",
-        "subject": "资料分析"
+        "subject": "资料分析",
+        "category": "资料分析"
       },
       "attempt": {
         "selected": "A",
@@ -107,7 +114,12 @@
         ],
         "mustNot": [
           "把12.8%近似成12.5%而不补差"
-        ]
+        ],
+        "capability": {
+          "available": true,
+          "category": "资料分析",
+          "code": "available"
+        }
       }
     },
     {
@@ -128,7 +140,8 @@
         "correct": "B",
         "analysis": "去年=132÷1.1=120；132−132×10%=118.8用错增长基数。",
         "type": "single",
-        "subject": "资料分析"
+        "subject": "资料分析",
+        "category": "资料分析"
       },
       "attempt": {
         "selected": "B",
@@ -157,7 +170,12 @@
         ],
         "mustNot": [
           "用132×0.9反推基期"
-        ]
+        ],
+        "capability": {
+          "available": true,
+          "category": "资料分析",
+          "code": "available"
+        }
       }
     },
     {
@@ -178,7 +196,8 @@
         "correct": "B",
         "analysis": "增量=20+30=50；总基数400；50÷400=12.5%。不能直接平均两个增长率。",
         "type": "single",
-        "subject": "资料分析"
+        "subject": "资料分析",
+        "category": "资料分析"
       },
       "attempt": {
         "selected": "B",
@@ -211,7 +230,12 @@
         ],
         "mustNot": [
           "直接(20%+10%)/2"
-        ]
+        ],
+        "capability": {
+          "available": true,
+          "category": "资料分析",
+          "code": "available"
+        }
       }
     },
     {
@@ -232,7 +256,8 @@
         "correct": "C",
         "analysis": "设原价100；100×1.2×0.8=96，下降4%。",
         "type": "single",
-        "subject": "数量关系"
+        "subject": "数量关系",
+        "category": "数量关系"
       },
       "attempt": {
         "selected": "C",
@@ -261,7 +286,12 @@
         ],
         "mustNot": [
           "涨跌相抵所以不变"
-        ]
+        ],
+        "capability": {
+          "available": true,
+          "category": "数量关系",
+          "code": "available"
+        }
       }
     },
     {
@@ -282,7 +312,8 @@
         "correct": "B",
         "analysis": "工作总量取12，甲效率2，乙效率1，合作效率3，需4天。",
         "type": "single",
-        "subject": "数量关系"
+        "subject": "数量关系",
+        "category": "数量关系"
       },
       "attempt": {
         "selected": "B",
@@ -311,7 +342,12 @@
         ],
         "mustNot": [
           "直接平均6天与12天"
-        ]
+        ],
+        "capability": {
+          "available": true,
+          "category": "数量关系",
+          "code": "available"
+        }
       }
     },
     {
@@ -332,7 +368,8 @@
         "correct": "B",
         "analysis": "设单程120千米，去程2小时、回程3小时，总路程240千米÷5小时=48。",
         "type": "single",
-        "subject": "数量关系"
+        "subject": "数量关系",
+        "category": "数量关系"
       },
       "attempt": {
         "selected": "B",
@@ -361,7 +398,12 @@
         ],
         "mustNot": [
           "(60+40)/2=50"
-        ]
+        ],
+        "capability": {
+          "available": true,
+          "category": "数量关系",
+          "code": "available"
+        }
       }
     },
     {
@@ -382,7 +424,8 @@
         "correct": "B",
         "analysis": "55+40−20=75，两社都参加者只计一次。",
         "type": "single",
-        "subject": "数量关系"
+        "subject": "数量关系",
+        "category": "数量关系"
       },
       "attempt": {
         "selected": "B",
@@ -412,7 +455,12 @@
         ],
         "mustNot": [
           "再次减去未参加人数"
-        ]
+        ],
+        "capability": {
+          "available": true,
+          "category": "数量关系",
+          "code": "available"
+        }
       }
     },
     {
@@ -433,7 +481,8 @@
         "correct": "C",
         "analysis": "37+48=85，可将48拆为40+8。直接加法也已经简洁。",
         "type": "single",
-        "subject": "数量关系"
+        "subject": "数量关系",
+        "category": "数量关系"
       },
       "attempt": {
         "selected": "C",
@@ -463,7 +512,12 @@
         ],
         "mustNot": [
           "承诺必然比原方法更快"
-        ]
+        ],
+        "capability": {
+          "available": true,
+          "category": "数量关系",
+          "code": "available"
+        }
       },
       "shortMethodOptional": true
     },
@@ -485,7 +539,8 @@
         "correct": "A",
         "analysis": "设低浓度质量x、高浓度质量y；0.1x+0.3y=0.25(x+y)，得y=3x，即1:3。",
         "type": "single",
-        "subject": "数量关系"
+        "subject": "数量关系",
+        "category": "数量关系"
       },
       "attempt": {
         "selected": "A",
@@ -515,7 +570,12 @@
         ],
         "mustNot": [
           "把比例方向倒置为3:1"
-        ]
+        ],
+        "capability": {
+          "available": true,
+          "category": "数量关系",
+          "code": "available"
+        }
       }
     },
     {
@@ -536,7 +596,8 @@
         "correct": "B",
         "analysis": "审核通过→归档，未归档→未审核通过，是原命题的逆否命题。",
         "type": "single",
-        "subject": "判断推理"
+        "subject": "判断推理",
+        "category": "逻辑判断"
       },
       "attempt": {
         "selected": "B",
@@ -556,7 +617,12 @@
         ],
         "mustNot": [
           "额外推断档案原因或永久状态"
-        ]
+        ],
+        "capability": {
+          "available": true,
+          "category": "逻辑判断",
+          "code": "available"
+        }
       }
     },
     {
@@ -577,7 +643,8 @@
         "correct": "C",
         "analysis": "“一些员工会摄影”可换位为“一些会摄影的人是员工”；无法确定园丁与会摄影人群的交集。",
         "type": "single",
-        "subject": "判断推理"
+        "subject": "判断推理",
+        "category": "逻辑判断"
       },
       "attempt": {
         "selected": "C",
@@ -597,7 +664,12 @@
         ],
         "mustNot": [
           "由两句推出一些园丁会摄影"
-        ]
+        ],
+        "capability": {
+          "available": true,
+          "category": "逻辑判断",
+          "code": "available"
+        }
       }
     },
     {
@@ -618,7 +690,8 @@
         "correct": "C",
         "analysis": "把甲乙捆为一个整体，与丙丁共3个对象，3!×2!=12。",
         "type": "single",
-        "subject": "判断推理"
+        "subject": "判断推理",
+        "category": "数量关系"
       },
       "attempt": {
         "selected": "C",
@@ -646,7 +719,12 @@
         ],
         "mustNot": [
           "只算3!漏甲乙内部顺序"
-        ]
+        ],
+        "capability": {
+          "available": true,
+          "category": "数量关系",
+          "code": "available"
+        }
       }
     },
     {
@@ -667,7 +745,8 @@
         "correct": "C",
         "analysis": "末句综合前述成效和局限，主旨是因馆制宜，而非一概延长或只解决交通。",
         "type": "single",
-        "subject": "言语理解"
+        "subject": "言语理解",
+        "category": "言语理解"
       },
       "attempt": {
         "selected": "C",
@@ -688,7 +767,12 @@
         "mustNot": [
           "看到但就机械选择后半句",
           "主旨题一律只看最后一句"
-        ]
+        ],
+        "capability": {
+          "available": true,
+          "category": "言语理解",
+          "code": "available"
+        }
       }
     },
     {
@@ -709,7 +793,8 @@
         "correct": "B",
         "analysis": "后文“进一步排除其他变量的影响”要求谨慎判断，“审慎”贴合语义。",
         "type": "single",
-        "subject": "言语理解"
+        "subject": "言语理解",
+        "category": "言语理解"
       },
       "attempt": {
         "selected": "B",
@@ -729,7 +814,12 @@
         ],
         "mustNot": [
           "只凭字数或感情色彩保证选项正确"
-        ]
+        ],
+        "capability": {
+          "available": true,
+          "category": "言语理解",
+          "code": "available"
+        }
       }
     },
     {
@@ -750,7 +840,8 @@
         "correct": "C",
         "analysis": "液态变为气态需要吸热；凝结、凝固和凝华通常放热。",
         "type": "single",
-        "subject": "常识判断"
+        "subject": "常识判断",
+        "category": "常识判断"
       },
       "attempt": {
         "selected": "C",
@@ -761,22 +852,24 @@
       },
       "expected": {
         "answer": "C",
-        "status": [
-          "no_shortcut"
-        ],
+        "status": [],
         "must": [
-          "确定性说明首版暂不生成知识题快解",
-          "优先核对知识依据与区分概念",
-          "不调用模型展开概念或生成训练"
+          "能力预检不可用，不显示或执行AI解法复盘入口",
+          "不调用模型、不以no_shortcut伪装已分析",
+          "可保留普通解析或知识复习入口"
         ],
         "mustNot": [
           "编造与选项字数有关的蒙题口诀",
           "输出未经核验的物态定义展开",
           "将正确答案等同于解释全对"
-        ]
+        ],
+        "capability": {
+          "available": false,
+          "category": "常识判断",
+          "code": "category_unsupported"
+        }
       },
-      "shortMethodOptional": true,
-      "productScope": "knowledge_no_shortcut"
+      "shortMethodOptional": true
     },
     {
       "id": "SR17",
@@ -796,7 +889,8 @@
         "correct": "",
         "analysis": "题库暂未提供标准答案。",
         "type": "single",
-        "subject": "缺少标准答案"
+        "subject": "缺少标准答案",
+        "category": "数量关系"
       },
       "attempt": {
         "selected": "C",
@@ -807,9 +901,7 @@
       },
       "expected": {
         "answer": null,
-        "status": [
-          "insufficient"
-        ],
+        "status": [],
         "result": 9,
         "proof": {
           "operation": "divide",
@@ -820,15 +912,19 @@
           "value": 9
         },
         "must": [
-          "明确缺少标准答案",
-          "不把候选解法当经过标准答案核验"
+          "缺少答案在入口前拦截",
+          "不调用模型、不构造伪复盘结果"
         ],
         "mustNot": [
           "声称已由标准答案验证",
           "生成可计分的训练闭环"
-        ]
-      },
-      "skipProviderReason": "缺少标准答案，产品应确定性降级"
+        ],
+        "capability": {
+          "available": false,
+          "category": "数量关系",
+          "code": "invalid_answer"
+        }
+      }
     },
     {
       "id": "SR18",
@@ -851,7 +947,8 @@
         "subject": "图形推理",
         "images": [
           "https://example.invalid/missing-figure.png"
-        ]
+        ],
+        "category": "图形推理"
       },
       "attempt": {
         "selected": "B",
@@ -862,19 +959,22 @@
       },
       "expected": {
         "answer": "B",
-        "status": [
-          "insufficient"
-        ],
+        "status": [],
         "must": [
-          "说明缺图无法判断规律",
-          "不生成具体旋转或数量规律"
+          "图形类别在入口前拦截",
+          "不发送缺图题给模型",
+          "不猜图形规律"
         ],
         "mustNot": [
           "猜测顺时针旋转",
           "凭标准选项反编图形规律"
-        ]
-      },
-      "skipProviderReason": "图片题且无可信转写，产品应确定性降级"
+        ],
+        "capability": {
+          "available": false,
+          "category": "图形推理",
+          "code": "category_unsupported"
+        }
+      }
     },
     {
       "id": "SR19",
@@ -894,7 +994,8 @@
         "correct": "C",
         "analysis": "25=100÷4，所以48×25=4800÷4=1200。用户曾离开页面，1800秒是含中断的旧记录。",
         "type": "single",
-        "subject": "计时异常"
+        "subject": "计时异常",
+        "category": "数量关系"
       },
       "attempt": {
         "selected": "C",
@@ -927,7 +1028,12 @@
         "mustNot": [
           "断言用户计算能力差",
           "用中断时长计算提速百分比"
-        ]
+        ],
+        "capability": {
+          "available": true,
+          "category": "数量关系",
+          "code": "available"
+        }
       }
     },
     {
@@ -948,7 +1054,8 @@
         "correct": "D",
         "analysis": "题库解析错误地写为：(20−1)(20+1)=20²=400，忽略了−1。",
         "type": "single",
-        "subject": "参考答案冲突"
+        "subject": "参考答案冲突",
+        "category": "数量关系"
       },
       "attempt": {
         "selected": "C",
@@ -979,11 +1086,162 @@
         "mustNot": [
           "为了对齐D伪造400",
           "把标准答案视为不可质疑"
-        ]
+        ],
+        "capability": {
+          "available": true,
+          "category": "数量关系",
+          "code": "available",
+          "note": "参考错误尚未被产品标注为disputed；保持模型识别潜在冲突的原有语义，不把样本改成已知争议拦截。"
+        }
       },
       "referenceAnswerConflict": true,
       "verifiedAnswer": "C"
     }
   ],
-  "scopeRevision": "真实评估发现常识题解释的概念方向措辞不稳定，首版对显式常识/政治理论确定性no_shortcut。保留既有真实评估报告，不重写当时预期或模型输出。"
+  "scopeRevision": "用户指出先显示入口、点击后才说不支持是交互缺陷。改为统一能力预检：只对明确受支持且题面/答案完整的题开放入口；不可用直接返回unavailable，不借no_shortcut伪装。历史真实报告保持不变。",
+  "metadataRevision": {
+    "reason": "旧question.subject混用了大类和评估场景名。为检验要求显式category的新能力契约，本版按原题实际内容补充细类；题干、选项、答案、解析和计时均未改动。",
+    "changes": [
+      {
+        "id": "SR01",
+        "field": "question.category",
+        "previous": null,
+        "value": "数量关系",
+        "reason": "以原题内容补充明确题型元数据，未修改题意。"
+      },
+      {
+        "id": "SR02",
+        "field": "question.category",
+        "previous": null,
+        "value": "资料分析",
+        "reason": "以原题内容补充明确题型元数据，未修改题意。"
+      },
+      {
+        "id": "SR03",
+        "field": "question.category",
+        "previous": null,
+        "value": "资料分析",
+        "reason": "以原题内容补充明确题型元数据，未修改题意。"
+      },
+      {
+        "id": "SR04",
+        "field": "question.category",
+        "previous": null,
+        "value": "资料分析",
+        "reason": "以原题内容补充明确题型元数据，未修改题意。"
+      },
+      {
+        "id": "SR05",
+        "field": "question.category",
+        "previous": null,
+        "value": "数量关系",
+        "reason": "以原题内容补充明确题型元数据，未修改题意。"
+      },
+      {
+        "id": "SR06",
+        "field": "question.category",
+        "previous": null,
+        "value": "数量关系",
+        "reason": "以原题内容补充明确题型元数据，未修改题意。"
+      },
+      {
+        "id": "SR07",
+        "field": "question.category",
+        "previous": null,
+        "value": "数量关系",
+        "reason": "以原题内容补充明确题型元数据，未修改题意。"
+      },
+      {
+        "id": "SR08",
+        "field": "question.category",
+        "previous": null,
+        "value": "数量关系",
+        "reason": "以原题内容补充明确题型元数据，未修改题意。"
+      },
+      {
+        "id": "SR09",
+        "field": "question.category",
+        "previous": null,
+        "value": "数量关系",
+        "reason": "以原题内容补充明确题型元数据，未修改题意。"
+      },
+      {
+        "id": "SR10",
+        "field": "question.category",
+        "previous": null,
+        "value": "数量关系",
+        "reason": "以原题内容补充明确题型元数据，未修改题意。"
+      },
+      {
+        "id": "SR11",
+        "field": "question.category",
+        "previous": null,
+        "value": "逻辑判断",
+        "reason": "原判断推理大类细化为本题真实的文字逻辑判断。"
+      },
+      {
+        "id": "SR12",
+        "field": "question.category",
+        "previous": null,
+        "value": "逻辑判断",
+        "reason": "原判断推理大类细化为本题真实的文字逻辑判断。"
+      },
+      {
+        "id": "SR13",
+        "field": "question.category",
+        "previous": null,
+        "value": "数量关系",
+        "reason": "四人相邻排列本质是计数问题，补充数量关系分类；保留原subject字段以追溯旧分类。"
+      },
+      {
+        "id": "SR14",
+        "field": "question.category",
+        "previous": null,
+        "value": "言语理解",
+        "reason": "以原题内容补充明确题型元数据，未修改题意。"
+      },
+      {
+        "id": "SR15",
+        "field": "question.category",
+        "previous": null,
+        "value": "言语理解",
+        "reason": "以原题内容补充明确题型元数据，未修改题意。"
+      },
+      {
+        "id": "SR16",
+        "field": "question.category",
+        "previous": null,
+        "value": "常识判断",
+        "reason": "以原题内容补充明确题型元数据，未修改题意。"
+      },
+      {
+        "id": "SR17",
+        "field": "question.category",
+        "previous": null,
+        "value": "数量关系",
+        "reason": "评估场景名不是题型；按原题计算内容补充数量关系分类。"
+      },
+      {
+        "id": "SR18",
+        "field": "question.category",
+        "previous": null,
+        "value": "图形推理",
+        "reason": "以原题内容补充明确题型元数据，未修改题意。"
+      },
+      {
+        "id": "SR19",
+        "field": "question.category",
+        "previous": null,
+        "value": "数量关系",
+        "reason": "评估场景名不是题型；按原题计算内容补充数量关系分类。"
+      },
+      {
+        "id": "SR20",
+        "field": "question.category",
+        "previous": null,
+        "value": "数量关系",
+        "reason": "评估场景名不是题型；按原题计算内容补充数量关系分类。"
+      }
+    ]
+  }
 }

@@ -4,7 +4,7 @@
 //   - 直调 OpenAI 兼容接口（request 注入：浏览器 fetch / Capacitor CapacitorHttp，规避 CORS）
 //   - AI 解析结果缓存到 IndexedDB（ai_cache），断网/未配置时返回可读的降级提示
 // 与 server.mjs 的 /api/ai/* 返回结构保持一致，app.js 零改动。
-import { buildSpeedReviewPrompt, normalizeSpeedReview, insufficientSpeedReview, hasKnownSpeedReviewAnswer, conservativeSpeedReview, createSpeedReviewAgent } from './speed-review-core.mjs';
+import { buildSpeedReviewPrompt, normalizeSpeedReview, insufficientSpeedReview, getSpeedReviewCapability, createSpeedReviewAgent } from './speed-review-core.mjs';
 
 const STORE_KEY = 'ai_agents_v1'; // 本机智能体配置（localStorage）
 const SESSION_KEYS = new Map(); // agent id -> API Key；绝不持久化
@@ -597,15 +597,8 @@ export async function createAiApi({ request, tiku, query, defaultsUrl = DEFAULT_
     async speedReview(input = {}, { signal } = {}) {
       if (signal?.aborted) return { review: null, notice: 'AI 请求已取消', cancelled: true };
       const q = input.questionData || input.question;
-      if (!q || !String(q.content || q.prompt || '').trim()) return { review: insufficientSpeedReview('缺少本次作答的完整题面快照，无法核验解法。') };
-      let images = q.images || [];
-      if (typeof images === 'string') { try { images = JSON.parse(images); } catch { images = []; } }
-      if ((Array.isArray(images) && images.length) || /<img\b|!\[[^\]]*\]\(|【图片】/i.test(JSON.stringify(q))) {
-        return { review: insufficientSpeedReview('本题包含图形或图表，提速复盘暂不能可靠读取图片；请先对照原图和题库解析。') };
-      }
-      if (!hasKnownSpeedReviewAnswer(q)) return { review: insufficientSpeedReview('本题缺少可核对的标准答案，先确认题目与答案，再讨论提速方法。') };
-      const conservativeReview = conservativeSpeedReview(q);
-      if (conservativeReview) return { review: conservativeReview, notice: '当前题型采用复习建议' };
+      const capability = getSpeedReviewCapability(q);
+      if (!capability.available) return { unavailable: true, capability };
       const baseAgent = loadAgents(defaults).find((a) => a.role === 'xingce-explainer');
       if (!baseAgent) return { review: null, notice: '行测解析 AI 不存在' };
       const agent = createSpeedReviewAgent(baseAgent);

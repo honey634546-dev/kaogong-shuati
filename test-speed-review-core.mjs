@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getReference, analyzeTiming, buildSpeedReviewPrompt, normalizeSpeedReview, insufficientSpeedReview, generateDrill, DRILL_METHOD_LABELS, hasKnownSpeedReviewAnswer, createSpeedReviewAgent, conservativeSpeedReview } from './public/speed-review-core.mjs';
+import { getReference, analyzeTiming, buildSpeedReviewPrompt, normalizeSpeedReview, insufficientSpeedReview, generateDrill, DRILL_METHOD_LABELS, hasKnownSpeedReviewAnswer, createSpeedReviewAgent, getSpeedReviewCapability } from './public/speed-review-core.mjs';
 
 const question = { content: '一个计算题', options: ['20', '40', '60', '80'], answer: '0', answerIndex: 0, chapter: '数量关系' };
 const answer = { selected: [0], correct: true, costMs: 150000 };
@@ -19,12 +19,91 @@ test('references identify categories without presenting population standards', (
   assert.equal(getReference({ category: '自定义', chapter: '资料分析训练' }).seconds, 90);
 });
 
-test('knowledge scope guard is metadata-based and does not block another explicit category', () => {
-  assert.deepEqual(['常识判断', '政治理论'].map((category) => {
-    const result = conservativeSpeedReview({ category });
-    return [result.status, result.drillMethod, result.steps.length, result.whyCorrect];
-  }), Array(2).fill(['no_shortcut', null, 2, '此处只提供复习步骤，未核验本题具体知识结论。']));
-  assert.equal(conservativeSpeedReview({ category: '言语理解', chapter: '常识政治训练集', content: '这段话涉及政治理论与常识判断。' }), null);
+test('method capability recognizes explicit supported metadata and compatible category hierarchies', () => {
+  for (const [metadata, category] of [
+    [{ category: '行测/浙江/数量关系' }, '数量关系'], [{ categoryName: '数学运算' }, '数量关系'],
+    [{ module: '资料分析' }, '资料分析'], [{ type: '言语理解与表达' }, '言语理解'],
+    [{ category: '判断推理', subCategory: '逻辑判断' }, '逻辑判断'],
+    [{ category: '行测 > 判断推理 > 逻辑判断' }, '逻辑判断'],
+    [{ type: 1, chapter: '数量关系' }, '数量关系'],
+  ]) {
+    const capability = getSpeedReviewCapability({ ...question, chapter: '', ...metadata });
+    assert.equal(capability.available, true, JSON.stringify(metadata));
+    assert.equal(capability.category, category);
+    assert.equal(capability.label, category);
+    assert.ok(capability.focus.length > 10);
+  }
+});
+
+test('unsupported specific types cannot inherit availability from a broad parent', () => {
+  for (const category of ['常识判断', '政治理论', '判断推理', '申论', '综应', '图形推理', '类比推理', '定义判断', '数字推理']) {
+    assert.equal(getSpeedReviewCapability({ ...question, category }).available, false, category);
+  }
+  for (const metadata of [
+    { category: '数量关系', subCategory: '数字推理' },
+    { category: '判断推理/图形推理' },
+    { category: '判断推理', subCategory: '类比推理' },
+    { category: '判断推理', type: '定义判断' },
+  ]) assert.equal(getSpeedReviewCapability({ ...question, ...metadata }).code, 'category_unsupported');
+});
+
+test('classification ambiguity and untrusted naming never open method review', () => {
+  for (const metadata of [
+    { category: '数量关系', subCategory: '言语理解' },
+    { category: '数量关系/常识判断' },
+    { category: '判断推理/逻辑判断/图形推理' },
+    { category: '资料分析', type: 21 },
+  ]) assert.equal(getSpeedReviewCapability({ ...question, ...metadata }).code, 'category_conflict');
+  for (const metadata of [
+    { category: '', chapter: '数量关系训练合集', subject: '资料分析' },
+    { category: '自定义', chapter: '', content: '政治理论与数量关系常识' },
+    { category: '', chapter: '数量关系', type: 'custom' },
+    { category: '', chapter: '数量关系', questionId: 'custom-42' },
+    { category: '数量关系训练', chapter: '' },
+  ]) assert.equal(getSpeedReviewCapability({ ...question, ...metadata }).code, 'category_unknown');
+  assert.equal(getSpeedReviewCapability({ ...question, category: '言语理解', chapter: '常识政治训练集', content: '这段话涉及政治理论与常识判断。' }).available, true);
+  assert.equal(getSpeedReviewCapability(null).available, false);
+});
+
+test('complete question input excludes every image location and actual importer missing-image markers', () => {
+  const markers = ['【本题原卷含题目图片，当前导入文件未包含图片】', '【共享材料含图片，当前导入文件未包含图片】', '（原卷图形选项，图片未随导入提供）'];
+  for (const marker of markers) {
+    for (const field of ['content', 'prompt', 'material', 'materialHtml']) {
+      assert.equal(getSpeedReviewCapability({ ...question, [field]: marker }).code, 'image_required', field + marker);
+    }
+    assert.equal(getSpeedReviewCapability({ ...question, options: [marker, '20'] }).code, 'image_required');
+  }
+  for (const change of [
+    { images: ['figure.png'] }, { images: '["figure.png"]' }, { images: '{invalid' },
+    { contentHtml: '<img src="figure.png">' }, { material: '![](figure.png)' },
+    { options: ['<img src="figure.png">', '20'] }, { image_missing: true }, { imageMissing: true },
+  ]) assert.equal(getSpeedReviewCapability({ ...question, ...change }).code, 'image_required');
+  assert.equal(getSpeedReviewCapability({ ...question, images: '[]', image_missing: false }).available, true);
+});
+
+test('incomplete stems, empty or placeholder options and unknown or conflicting answers are unavailable', () => {
+  for (const change of [
+    { content: '' }, { content: '<p>&nbsp;</p>' }, { options: ['A', 'B', 'C', 'D'] },
+    { options: ['<span>A</span>', '<span>B</span>'] }, { options: ['<span>&nbsp;</span>', '30'] },
+    { options: ['A. ', 'B. 30'] },
+  ]) assert.equal(getSpeedReviewCapability({ ...question, ...change }).code, 'incomplete_question');
+  for (const change of [
+    { options: [] }, { answer: '', answerIndex: -1 }, { answer: 'B', answerIndex: 0 },
+    { answerStatus: 'missing' }, { answerStatus: 'disputed' }, { answerStatus: 'conflict' },
+    { answerIndex: 9 },
+  ]) assert.equal(getSpeedReviewCapability({ ...question, ...change }).code, 'invalid_answer');
+  assert.equal(getSpeedReviewCapability({ ...question, answerStatus: 'unconfirmed' }).available, true);
+});
+
+test('explicit shared-material membership requires the actual material while ordinary standalone questions remain supported', () => {
+  for (const metadata of [{ groupId: 'shared-1' }, { materialId: 'shared-1' }, { material_id: 'shared-1' }, { sharedMaterial: true }]) {
+    assert.equal(getSpeedReviewCapability({ ...question, ...metadata }).code, 'missing_material');
+    assert.equal(getSpeedReviewCapability({ ...question, ...metadata, material: '<p>&nbsp;</p>', materialHtml: '<br>' }).code, 'missing_material');
+    assert.equal(getSpeedReviewCapability({ ...question, ...metadata, material: '共享材料中的数据：现期132，增长10%。' }).available, true);
+    assert.equal(getSpeedReviewCapability({ ...question, ...metadata, materialHtml: '<p>共享材料中的数据：现期132，增长10%。</p>' }).available, true);
+    assert.equal(getSpeedReviewCapability({ ...question, ...metadata, materialHtml: '<img src="chart.png">' }).code, 'image_required');
+  }
+  assert.equal(getSpeedReviewCapability({ ...question, groupId: null, sharedMaterial: false }).available, true);
 });
 
 test('slow means strictly over practice reference and does not diagnose a cause', () => {
@@ -84,6 +163,13 @@ test('prompt includes independent correctness-first contract and untrusted struc
   assert.match(buildSpeedReviewPrompt({ question, assisted: false, timing: { assisted: true } }), /"assisted":false/);
   assert.match(prompt, /false 仅表示系统未记录到应用内辅助/);
   assert.match(prompt, /逐项核对真值关系/);
+  assert.match(prompt, /"category":"数量关系"/);
+  assert.match(prompt, /"methodFocus":"比较列式/);
+  assert.match(prompt, /no_shortcut，也必须用本题的条件/);
+  assert.match(prompt, /steps 优先2至4条.*绝不超过6条/);
+  assert.match(prompt, /基期=现期\/\(1\+r\)，r 是带正负号的变化率/);
+  assert.match(prompt, /r接近-100%只会放大数值误差，不代表公式失效/);
+  assert.match(prompt, /caution 必须使用一致的符号与条件/);
 });
 
 test('known answers must resolve to actual options; default import status is still reviewable', () => {

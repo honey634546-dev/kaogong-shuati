@@ -5,8 +5,8 @@
  * connection; no profile initialization, migrations, saves, or key creation occur.
  *
  * node scripts/evaluate-speed-review.mjs
- * node scripts/evaluate-speed-review.mjs --live --ids=SR01,SR02,SR14,SR20 --out=docs/speed-review/evaluation-pilot.json
- * node scripts/evaluate-speed-review.mjs --live --out=docs/speed-review/evaluation-live.json
+ * node scripts/evaluate-speed-review.mjs --live --ids=SR01,SR03,SR14,SR11 --out=docs/speed-review/evaluation-capability-pilot-v3.json
+ * node scripts/evaluate-speed-review.mjs --live --out=docs/speed-review/evaluation-live-capability-v3.json
  * Optional: --db=/absolute/ai-config.db --user=<owner-id> --concurrency=2
  * Reports contain synthetic questions/model output; never credentials or endpoints.
  */
@@ -16,7 +16,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createDecipheriv, createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-import { buildSpeedReviewPrompt, normalizeSpeedReview, insufficientSpeedReview, conservativeSpeedReview, createSpeedReviewAgent } from '../public/speed-review-core.mjs';
+import { buildSpeedReviewPrompt, normalizeSpeedReview, getSpeedReviewCapability, createSpeedReviewAgent } from '../public/speed-review-core.mjs';
 import { callAgent } from '../lib/ai-agents.mjs';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -24,7 +24,7 @@ const args = process.argv.slice(2);
 const getArg = (name, fallback) => args.find((arg) => arg.startsWith(`--${name}=`))?.slice(name.length + 3) ?? fallback;
 const live = args.includes('--live');
 const ids = new Set(String(getArg('ids', '')).split(',').filter(Boolean));
-const out = path.resolve(root, getArg('out', `docs/speed-review/evaluation-${live ? 'live' : 'offline'}.json`));
+const out = path.resolve(root, getArg('out', `docs/speed-review/evaluation-${live ? 'live' : 'offline'}-capability-v3.json`));
 const suite = JSON.parse(fs.readFileSync(path.join(root, 'docs/speed-review/evaluation-cases.json'), 'utf8'));
 const cases = suite.cases.filter((item) => !ids.size || ids.has(item.id));
 assert.ok(cases.length, 'No evaluation cases selected');
@@ -105,7 +105,7 @@ function safeError(error) {
   return text.replace(/https?:\/\/[^\s"<>]+/g, '[REDACTED_URL]').slice(0, 1200);
 }
 const report = {
-  version: 1, generatedAt: new Date().toISOString(), mode: live ? 'real-provider' : 'offline',
+  version: 3, casesVersion: suite.version, generatedAt: new Date().toISOString(), mode: live ? 'real-provider' : 'offline',
   provenance: {
     casesSha256: createHash('sha256').update(fs.readFileSync(path.join(root, 'docs/speed-review/evaluation-cases.json'))).digest('hex'),
     coreSha256: createHash('sha256').update(fs.readFileSync(path.join(root, 'public/speed-review-core.mjs'))).digest('hex'),
@@ -115,16 +115,28 @@ const report = {
   evidenceBoundary: 'Synthetic offline/oracle and real-provider checks do not establish learning improvement. Schema validity alone is not quality approval. Each live response requires an independent reasoning review.',
   cases: [],
 };
-report.scopeGuardChecks = [
-  { name: '明确常识分类', question: { subject: '常识判断' }, expected: 'no_shortcut' },
-  { name: '明确政治理论分类', question: { category: '政治理论' }, expected: 'no_shortcut' },
-  { name: '言语题干提及知识不误拦截', question: { category: '言语理解', content: '这段材料介绍常识与政治理论。' }, expected: null },
-  { name: '未知题型不以题干关键词分类', question: { content: '判断这条常识是否属于政治理论。' }, expected: null },
+const completeQuestion = { content: '根据完整题干选择正确答案。', options: ['成立', '不成立'], answer: 'A' };
+report.capabilityChecks = [
+  { name: '明确数量关系开放', question: { category: '数量关系' }, expected: 'available' },
+  { name: '明确常识分类不可用', question: { category: '常识判断' }, expected: 'category_unsupported' },
+  { name: '明确政治理论分类不可用', question: { category: '政治理论' }, expected: 'category_unsupported' },
+  { name: '仅父类判断推理不开放', question: { category: '判断推理' }, expected: 'category_unsupported' },
+  { name: '父类与细类逻辑判断共同存在开放', question: { category: '判断推理', subCategory: '逻辑判断' }, expected: 'available' },
+  { name: '言语题干提及知识不误拦截', question: { category: '言语理解', content: '这段材料介绍常识与政治理论。' }, expected: 'available' },
+  { name: '未知题型不靠题干猜测分类', question: { content: '判断这条常识是否属于政治理论。' }, expected: 'category_unknown' },
+  { name: 'subject不能冒充题型', question: { subject: '数量关系' }, expected: 'category_unknown' },
+  { name: '题型冲突不可用', question: { category: '数量关系', subCategory: '言语理解' }, expected: 'category_conflict' },
+  { name: '完整文字资料开放', question: { category: '资料分析', material: '上年100件，本年120件。', content: '本年比上年增长多少？', options: ['20%', '25%'] }, expected: 'available' },
+  { name: '资料图片缺失标记不可用', question: { category: '资料分析', image_missing: true }, expected: 'image_required' },
+  { name: '资料缺图文本标记不可用', question: { category: '资料分析', content: '【共享材料含图片，当前导入文件未包含图片】' }, expected: 'image_required' },
+  { name: '占位选项不可用', question: { category: '数量关系', options: ['A', 'B'] }, expected: 'incomplete_question' },
+  { name: '缺少答案不可用', question: { category: '数量关系', answer: '' }, expected: 'invalid_answer' },
+  { name: '明确争议答案不可用', question: { category: '数量关系', answerStatus: 'disputed' }, expected: 'invalid_answer' },
 ].map((probe) => {
-  const result = conservativeSpeedReview(probe.question);
-  assert.equal(result?.status ?? null, probe.expected, probe.name);
-  if (result) assert.equal(result.drillMethod, null);
-  return { name: probe.name, expected: probe.expected, actual: result?.status ?? null, status: 'passed' };
+  const result = getSpeedReviewCapability({ ...completeQuestion, ...probe.question });
+  assert.equal(result.code, probe.expected, probe.name);
+  assert.equal(result.available, probe.expected === 'available', probe.name);
+  return { name: probe.name, expected: probe.expected, actual: result.code, available: result.available, status: 'passed' };
 });
 function save() {
   report.cases.sort((a, b) => a.id.localeCompare(b.id));
@@ -134,7 +146,7 @@ function save() {
     providerResponses: report.cases.filter((x) => x.provider === 'completed').length,
     schemaPasses: report.cases.filter((x) => x.schema === 'passed').length,
     deterministicSkips: report.cases.filter((x) => x.provider === 'skipped').length,
-    scopeRestrictions: report.cases.filter((x) => x.scopeGuard).length,
+    unavailableInputs: report.cases.filter((x) => x.scopeGuard?.unavailable).length,
     failures: report.cases.filter((x) => x.error).length,
     qualityDecision: live ? 'pending_manual_review' : 'offline_contract_only',
   };
@@ -143,41 +155,34 @@ function save() {
 async function evaluate(item) {
   const record = { id: item.id, category: item.category, oracle: prove(item.expected.proof), expected: item.expected };
   try {
-    const prompt = buildSpeedReviewPrompt(inputFor(item));
-    assert.equal(typeof prompt, 'string');
-    assert.ok(prompt.includes(item.question.prompt), 'Prompt must include original question');
-    record.prompt = { status: 'built', length: prompt.length };
-    const scopeGuard = conservativeSpeedReview(item.question);
-    assert.equal(Boolean(scopeGuard), item.productScope === 'knowledge_no_shortcut', 'Product scope must match the declared case expectation');
-    if (scopeGuard) {
-      record.scopeGuard = normalizeSpeedReview(scopeGuard);
-      assert.equal(record.scopeGuard.status, 'no_shortcut');
-      assert.equal(record.scopeGuard.drillMethod, null);
-    }
-    if (item.skipProviderReason) {
-      record.deterministicFallback = normalizeSpeedReview(insufficientSpeedReview(item.skipProviderReason));
-      assert.equal(record.deterministicFallback.status, 'insufficient');
-      assert.equal(record.deterministicFallback.drillMethod, null);
-    }
-    if (!live) {
-      record.provider = 'not_requested';
-    } else if (scopeGuard) {
-      record.provider = 'skipped'; record.reason = '首版常识/政治理论范围限制，使用产品确定性 no_shortcut，不请求模型。';
-    } else if (item.skipProviderReason) {
-      record.provider = 'skipped'; record.reason = item.skipProviderReason;
+    const capability = getSpeedReviewCapability(item.question);
+    record.capability = capability;
+    assert.equal(capability.available, item.expected.capability.available, 'Availability must match the declared case expectation');
+    assert.equal(capability.code, item.expected.capability.code, 'Capability reason must match the declared case expectation');
+    if (!capability.available) {
+      record.scopeGuard = { unavailable: true, capability };
+      record.provider = 'skipped';
+      record.reason = '能力预检不可用，不显示或执行 AI 解法复盘入口；不构造 no_shortcut 或模型分析结果。';
     } else {
-      const started = Date.now();
-      const response = await callAgent(connection, prompt, { timeoutMs: 60000 });
-      record.elapsedMs = Date.now() - started;
-      if (response.error) throw new Error(response.error);
-      assert.equal(response.mock, false, 'Live response must be from real provider');
-      record.provider = 'completed';
-      record.model = response.model;
-      record.usage = response.usage || null;
-      record.rawContent = response.content;
-      record.normalized = normalizeSpeedReview(response.content);
-      record.schema = 'passed';
-      record.semanticReview = { status: 'pending', mathematicalOrLogicalCorrectness: 'pending', forcedShortcut: 'pending', unsupportedSlowCause: 'pending', applicabilityBoundary: 'pending', note: 'Read the actual answer before assigning pass/fail; do not count valid JSON as pedagogical correctness.' };
+      const prompt = buildSpeedReviewPrompt(inputFor(item));
+      assert.equal(typeof prompt, 'string');
+      assert.ok(prompt.includes(item.question.prompt), 'Prompt must include original question');
+      record.prompt = { status: 'built', length: prompt.length };
+      if (!live) { record.provider = 'not_requested'; }
+      else {
+        const started = Date.now();
+        const response = await callAgent(connection, prompt, { timeoutMs: 60000 });
+        record.elapsedMs = Date.now() - started;
+        if (response.error) throw new Error(response.error);
+        assert.equal(response.mock, false, 'Live response must be from real provider');
+        record.provider = 'completed';
+        record.model = response.model;
+        record.usage = response.usage || null;
+        record.rawContent = response.content;
+        record.normalized = normalizeSpeedReview(response.content);
+        record.schema = 'passed';
+        record.semanticReview = { status: 'pending', mathematicalOrLogicalCorrectness: 'pending', forcedShortcut: 'pending', unsupportedSlowCause: 'pending', applicabilityBoundary: 'pending', note: 'Read the actual answer before assigning pass/fail; do not count valid JSON as pedagogical correctness.' };
+      }
     }
   } catch (error) {
     record.error = safeError(error);

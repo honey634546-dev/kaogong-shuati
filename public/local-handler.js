@@ -38,13 +38,30 @@ function groupCustomPracticeRows(rows, mapper) {
       const q = mapper(m);
       q.material = String(holder.material || '').trim();
       q.materialHtml = holderHtml;
+      q.images = [...parseImages(m.images).filter((image) => image.role !== 'material'), ...holderMatImgs];
       q.groupId = gid;
+      q.materialId = gid;
+      q.sharedMaterial = true;
       q.groupIndex = i;
       q.groupTotal = members.length;
       out.push(q);
     });
   }
   return out;
+}
+
+// Store the material the learner actually saw, including inherited image markers.
+// Resolve within the same batch so equal group names cannot cross question banks.
+function withCustomSharedMaterial(row, rows) {
+  const materialId = String(row.material_id || '').trim();
+  if (!materialId) return row;
+  const members = rows.filter((item) => Number(item.batch_id) === Number(row.batch_id)
+    && Number(item.is_current ?? 1) !== 0 && String(item.material_id || '').trim() === materialId).sort((a, b) => Number(a.id) - Number(b.id));
+  const holder = members.find((item) => String(item.material || '').trim()) || members[0] || row;
+  return {
+    ...row, material: String(holder.material || '').trim(),
+    images: [...parseImages(row.images).filter((image) => image.role !== 'material'), ...parseImages(holder.images).filter((image) => image.role === 'material')],
+  };
 }
 
 const LOCAL_AI_HISTORY_LIMIT = 40;
@@ -313,12 +330,13 @@ export function createLocalHandler({ query, records, store, ai }) {
       if (raw.startsWith('custom-')) {
         const cid = Number(raw.replace(/^custom-/, ''));
         const all = await store.getAll('custom_questions');
-        const cr = all.find((x) => Number(x.id) === cid);
-        if (!cr) throw new Error('题目不存在');
+        const found = all.find((x) => Number(x.id) === cid);
+        if (!found) throw new Error('题目不存在');
+        const cr = withCustomSharedMaterial(found, all);
         const batches = await store.getAll('custom_batches');
         const b = batches.find((x) => Number(x.id) === Number(cr.batch_id)) || {};
         const { contentHtml, materialHtml } = customQuestionHtml({ ...cr, images: parseImages(cr.images) });
-        return { questionId: raw, id: raw, type: 'custom', questionUid: cr.question_uid || '', revision: Number(cr.revision) > 0 ? Number(cr.revision) : 1, content: cr.prompt, contentHtml, material: cr.material || '', materialHtml, options: cr.options || [], answer: cr.answer || '', answerIndex: cr.answer_index ?? -1, answerStatus: cr.answer_status || 'unconfirmed', analysis: cr.analysis || '', category: cr.category || '', subject: String(b.subject || '').trim() || '自定义', chapter: b.name || '' };
+        return { questionId: raw, id: raw, type: 'custom', questionUid: cr.question_uid || '', revision: Number(cr.revision) > 0 ? Number(cr.revision) : 1, content: cr.prompt, contentHtml, material: cr.material || '', materialHtml, materialId: cr.material_id || '', images: parseImages(cr.images), options: cr.options || [], answer: cr.answer || '', answerIndex: cr.answer_index ?? -1, answerStatus: cr.answer_status || 'unconfirmed', analysis: cr.analysis || '', category: cr.category || '', subject: String(b.subject || '').trim() || '自定义', chapter: b.name || '' };
       }
       return query.questionById(qs.get('id'));
     }
@@ -353,11 +371,12 @@ export function createLocalHandler({ query, records, store, ai }) {
         if (String(body.questionId).startsWith('custom-')) {
           const cid = Number(String(body.questionId).replace(/^custom-/, ''));
           const all = await store.getAll('custom_questions');
-          const r = all.find((x) => Number(x.id) === cid);
-          if (r) {
+          const found = all.find((x) => Number(x.id) === cid);
+          if (found) {
+            const r = withCustomSharedMaterial(found, all);
             const images = parseImages(r.images);
             const html = customQuestionHtml({ ...r, images });
-            q = { content: r.prompt, contentHtml: html.contentHtml, material: r.material || '', materialHtml: html.materialHtml, options: r.options || [], answer: r.answer || '', answerIndex: r.answer_index ?? -1, answerStatus: r.answer_status || 'unconfirmed', analysis: r.analysis || '', category: r.category || '', type: 'custom', images };
+            q = { content: r.prompt, contentHtml: html.contentHtml, material: r.material || '', materialHtml: html.materialHtml, materialId: r.material_id || '', options: r.options || [], answer: r.answer || '', answerIndex: r.answer_index ?? -1, answerStatus: r.answer_status || 'unconfirmed', analysis: r.analysis || '', category: r.category || '', type: 'custom', images };
             questionUid = r.question_uid || '';
             questionRevision = Number(r.revision) > 0 ? Number(r.revision) : 1;
           }
@@ -375,7 +394,10 @@ export function createLocalHandler({ query, records, store, ai }) {
             prompt: q.content || q.prompt || '', contentHtml: q.contentHtml || '', material: q.material || '', materialHtml: q.materialHtml || '',
             options: Array.isArray(options) ? options : [], answer: q.answer || '', answerIndex: q.answerIndex ?? -1,
             analysis: q.analysis || '', images: q.images || [],
-            category: q.category || '', answerStatus: q.answerStatus || '',
+            category: q.category || '', answerStatus: q.answerStatus ?? q.answer_status ?? '',
+            subCategory: q.subCategory || '', categoryName: q.categoryName || '', module: q.module || '',
+            chapter: q.chapter || '', image_missing: q.image_missing ?? q.imageMissing,
+            materialId: q.materialId || q.material_id || q.groupId || '', sharedMaterial: Boolean(q.sharedMaterial || q.groupId || q.materialId || q.material_id),
           };
           body = {
             ...body, correct: judged.ok, questionUid, questionRevision,
@@ -569,7 +591,7 @@ export function createLocalHandler({ query, records, store, ai }) {
         const answer = localSnapshot(record.answer_snapshot);
         input = {
           ...input,
-          questionData: { ...snapshot, subject: record.subject || '', chapter: record.chapter || '' },
+          questionData: { ...snapshot, subject: record.subject || '' },
           selected: answer.selected ?? record.selected ?? null,
           correct: record.is_correct == null ? null : Boolean(record.is_correct), assisted: typeof answer.assisted === 'boolean' ? answer.assisted : null,
           timing: { ...input.timing, solveMs: Number(record.cost_ms) || 0, assisted: typeof answer.assisted === 'boolean' ? answer.assisted : null },
@@ -879,7 +901,7 @@ export function createLocalHandler({ query, records, store, ai }) {
       if (!b) throw new Error('批次不存在');
       const bSubj = String(b.subject || '').trim() || '自定义';
       const all = await store.getAll('custom_questions');
-      const rows = all.filter((q) => Number(q.batch_id) === bid).sort((a, b) => Number(a.id) - Number(b.id));
+      const rows = all.filter((q) => Number(q.batch_id) === bid && Number(q.is_current ?? 1) !== 0).sort((a, b) => Number(a.id) - Number(b.id));
       const count = Math.max(0, Math.min(Number(qs.get('count') || 0), 100));
       const questions = groupCustomPracticeRows(rows, (r) => {
         const { contentHtml, materialHtml } = customQuestionHtml({ ...r, images: parseImages(r.images) });

@@ -321,9 +321,15 @@ function enrichGroups(tiku, practice, rows, subject, diffFilter) {
   let dropped = null; // 难度过滤时被整组剔除的题
   let maps = [];
   if (qids.length) {
-    maps = practice.all(`SELECT question_id, material_id FROM q_material_map WHERE subject = ? AND question_id IN (${qids.map(() => '?').join(',')})`, subject, ...qids);
+    maps = practice.all(`SELECT question_id, material_id FROM q_material_map WHERE subject = ? AND trim(material_id) != '' AND question_id IN (${qids.map(() => '?').join(',')})`, subject, ...qids);
   }
   const gidOf = new Map(maps.filter((m) => m.material_id != null).map((m) => [m.question_id, m.material_id]));
+  const materialIdsByQuestion = new Map();
+  const trackMaterial = (qid, gid) => {
+    if (!materialIdsByQuestion.has(qid)) materialIdsByQuestion.set(qid, new Set());
+    materialIdsByQuestion.get(qid).add(gid);
+  };
+  maps.filter((item) => item.material_id != null).forEach((item) => trackMaterial(item.question_id, item.material_id));
   const gids = [...new Set(gidOf.values())];
   const groupMembers = new Map();
   if (gids.length) {
@@ -349,12 +355,18 @@ function enrichGroups(tiku, practice, rows, subject, diffFilter) {
     }
   }
   for (const [gid, members] of groupMembers) {
-    for (const mid of members) gidOf.set(mid, gid);
+    for (const mid of members) { gidOf.set(mid, gid); trackMaterial(mid, gid); }
   }
   const materials = new Map();
   if (gids.length) {
     const ms = practice.all(`SELECT material_id, content FROM q_materials WHERE subject = ? AND material_id IN (${gids.map(() => '?').join(',')})`, subject, ...gids);
-    for (const m of ms) materials.set(m.material_id, m.content);
+    const contentsById = new Map();
+    for (const m of ms) {
+      if (!contentsById.has(m.material_id)) contentsById.set(m.material_id, new Set());
+      contentsById.get(m.material_id).add(m.content);
+    }
+    // Ambiguous source material is incomplete input, never a last-row-wins guess.
+    for (const [id, contents] of contentsById) materials.set(id, contents.size === 1 ? [...contents][0] : null);
   }
   const allIds = [...new Set([...qids, ...[...groupMembers.values()].flat()])];
   let qs = [];
@@ -373,9 +385,9 @@ function enrichGroups(tiku, practice, rows, subject, diffFilter) {
       const members = (groupMembers.get(gid) || []).sort((a, b) => (orderOf.get(a) || 0) - (orderOf.get(b) || 0));
       gi = members.indexOf(q.questionId);
       gt = members.length;
-      mat = materials.get(gid) || null;
+      mat = materialIdsByQuestion.get(q.questionId)?.size === 1 ? materials.get(gid) || null : null;
     }
-    out.push({ ...toQuestion(q), groupId: gid ?? null, groupIndex: gi, groupTotal: gt, material: mat });
+    out.push({ ...toQuestion(q), groupId: gid ?? null, materialId: gid ?? '', sharedMaterial: gid != null, groupIndex: gi, groupTotal: gt, material: mat });
   }
   const pos = new Map(qids.map((id, i) => [id, i]));
   // 排序规则：同一组内按卷序；组与组/组与单题之间按各自首题（或自身）在原列表位置——
@@ -1079,4 +1091,3 @@ export function classifySource(qid, lookup) {
 }
 
 export { FENBI_TREE, ESSAY_TREE, SHENLUN_TREE, ZONGYING_TREE, mapChapterToNode };
-

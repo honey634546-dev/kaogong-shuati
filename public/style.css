@@ -2312,7 +2312,6 @@ body:has(.scratch-overlay) #ai-ball {
 
 /* 做题后提速复盘：复用主题色，手机单栏和桌面长内容均可自然展开。 */
 .speed-summary { border-inline-start: 3px solid var(--primary, #356e9d); }
-.speed-eyebrow { font-size: 12px; color: var(--text-3, #77808d); letter-spacing: .04em; }
 .speed-summary h2 { margin: 7px 0 10px; font-size: 21px; }
 .speed-muted { color: var(--text-2, var(--muted, #727886)); line-height: 1.7; }
 .speed-small { font-size: 12px; }
@@ -2321,6 +2320,9 @@ body:has(.scratch-overlay) #ai-ball {
 .speed-reference { width: 88px; padding: 7px 8px; border: 1px solid var(--border, #d9dce2); border-radius: 8px; background: var(--bg, #fff); color: var(--text, #222); }
 .speed-ranking-title { font-size: 14px; font-weight: 600; margin: 12px 0 8px; }
 .speed-card { border-top: 1px solid var(--border, #e1e4e9); margin-top: 16px; padding-top: 14px; }
+.speed-capability { display: flex; flex-wrap: wrap; gap: 7px 10px; align-items: center; margin-bottom: 8px; font-size: 13px; line-height: 1.7; }
+.speed-type { color: var(--primary, #356e9d); font-weight: 600; }
+.speed-focus { color: var(--text-2, #727886); }
 .speed-time { color: var(--text-3, #727886); font-size: 12px; margin-bottom: 7px; }
 .speed-time.is-slow { color: var(--amber, #95622b); font-weight: 600; }
 .speed-panel { margin-top: 12px; }

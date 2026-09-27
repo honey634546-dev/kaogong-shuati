@@ -5,8 +5,37 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { getSpeedReviewCapability } from './public/speed-review-core.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+test('本地作答快照保留同批共享材料和缺图标记，不从别的批次或旧版本取材料', async () => {
+  const { createLocalHandler } = await import('./public/local-handler.js');
+  const makeQuestion = (id, batchId, material, extra = {}) => ({ id, batch_id: batchId, material_id: 'shared-1', is_current: 1,
+    prompt: `资料小问${id}`, material, options: ['10', '20'], answer: 'A', answer_index: 0, category: '资料分析', ...extra });
+  const marker = '【共享材料含图片，当前导入文件未包含图片】';
+  const rows = [makeQuestion(1, 9, '其他批次材料'), makeQuestion(2, 1, '旧版本材料', { is_current: 0 }),
+    makeQuestion(3, 1, marker), makeQuestion(4, 1, '')];
+  const mocks = makeMocks();
+  mocks.store.getAll = async (kind) => kind === 'custom_questions' ? rows : kind === 'custom_batches' ? [{ id: 1, name: '共享资料' }] : [];
+  const handler = createLocalHandler(mocks);
+  const submit = () => handler('/api/records', { method: 'POST', body: JSON.stringify({ questionId: 'custom-4', selected: [0] }) });
+  await submit();
+  let snapshot = JSON.parse(mocks.calls.filter(([name]) => name === 'records.addRecord').at(-1)[1].questionSnapshot);
+  assert.equal(snapshot.material, marker);
+  assert.equal(snapshot.materialId, 'shared-1');
+  assert.equal(getSpeedReviewCapability(snapshot).code, 'image_required');
+  assert.equal((await handler('/api/question?id=custom-4', { method: 'GET' })).material, marker);
+  rows[2].material = '本期数量为20，同比增长100%。';
+  await submit();
+  snapshot = JSON.parse(mocks.calls.filter(([name]) => name === 'records.addRecord').at(-1)[1].questionSnapshot);
+  assert.equal(snapshot.material, rows[2].material);
+  assert.equal(getSpeedReviewCapability(snapshot).available, true);
+  rows[2].material = '';
+  await submit();
+  snapshot = JSON.parse(mocks.calls.filter(([name]) => name === 'records.addRecord').at(-1)[1].questionSnapshot);
+  assert.equal(getSpeedReviewCapability(snapshot).code, 'missing_material');
+});
 
 // ---------- mock query / records / store / ai ----------
 function makeMocks() {

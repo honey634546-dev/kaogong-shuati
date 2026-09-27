@@ -19,6 +19,13 @@ const review = {
   applicability: '百分数能准确转成简单分数时适用。', caution: '12.8% 不等于 1/8，不能直接套用。',
   diagnosis: '用时超过练习参考线，仅凭时间无法判断慢因。', drillMethod: 'percent_fraction',
 };
+const noShortcutReview = {
+  status: 'no_shortcut', methodName: '', recognition: '普通两位数加法，用按位相加即可，不需要引入新公式。',
+  steps: ['先算 37 + 40 = 77。', '再加剩余的 8，得到 85。'],
+  whyCorrect: '把 48 拆成 40 与 8，加法结合律保证结果不变。',
+  applicability: '适用于本题的两位数加法。', caution: '注意个位进位，不能为省步骤漏算。',
+  diagnosis: '仅凭用时无法判断慢因；可检查是否卡在进位或反复验算。', drillMethod: null,
+};
 async function listen(server) { return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve(server.address().port))); }
 async function api(path, body, method = 'POST') {
   const response = await fetch(base + path, { method, headers: { 'content-type': 'application/json' }, body: body == null ? undefined : JSON.stringify(body) });
@@ -29,7 +36,9 @@ before(async () => {
     let raw = ''; for await (const chunk of req) raw += chunk;
     requests.push(JSON.parse(raw));
     res.writeHead(200, { 'content-type': 'application/json' });
-    res.end(JSON.stringify({ choices: [{ message: { content: upstreamMode === 'valid' ? JSON.stringify(review) : '并非结构化结果' } }] }));
+    const content = upstreamMode === 'valid' ? JSON.stringify(review)
+      : upstreamMode === 'no_shortcut' ? JSON.stringify(noShortcutReview) : '并非结构化结果';
+    res.end(JSON.stringify({ choices: [{ message: { content } }] }));
   });
   const providerPort = await listen(provider);
   const probe = http.createServer(); const appPort = await listen(probe); await new Promise((resolve) => probe.close(resolve));
@@ -42,7 +51,7 @@ before(async () => {
   await api('/api/ai/agents/1', { api_key: 'synthetic-ui-test', key_storage_mode: 'server', base_url: `http://127.0.0.1:${providerPort}/v1`, model: 'ui-protocol-fixture', provider_mode: 'openai-compatible', enabled: 1, stream_enabled: 0, timeout_ms: 3000 }, 'PUT');
   await api('/api/custom/import', { name: '提速复盘验收测试', questions: [
     { prompt: '计算 796 × 12.5% 的值。', options: ['99.5', '95.5', '100.5', '98.5'], answer: 'A', answer_index: 0, analysis: '12.5%=1/8，796÷8=99.5。', category: '数量关系' },
-    { prompt: '所有鲸都是哺乳动物。蓝鲸是鲸。可推出什么？', options: ['蓝鲸是哺乳动物', '所有哺乳动物是蓝鲸', '鲸不是哺乳动物', '无法推出'], answer: 'A', answer_index: 0, category: '判断推理' },
+    { prompt: '所有鲸都是哺乳动物。蓝鲸是鲸。可推出什么？', options: ['蓝鲸是哺乳动物', '所有哺乳动物是蓝鲸', '鲸不是哺乳动物', '无法推出'], answer: 'A', answer_index: 0, category: '逻辑判断' },
   ] });
   browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: true });
   context = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 });
@@ -54,12 +63,84 @@ after(async () => {
   await new Promise((r) => provider?.close(r)); await rm(dataDir, { recursive: true, force: true });
 });
 
-async function openPractice(page) {
+async function openPractice(page, batchName = '提速复盘验收测试') {
   await page.goto(base);
   await page.locator('.custom-entry').click();
-  await page.locator('[data-act="practice"]').first().click();
+  await page.locator('.custom-batch').filter({ hasText: batchName }).getByRole('button', { name: '刷题', exact: true }).click();
+  await page.locator('#cbm-count').fill('0');
   await page.locator('#btn-cbm-start').click();
   await page.locator('.q-progress-text').waitFor();
+}
+
+// A complete temporary import/practice/history flow exercises persisted category
+// metadata. These are synthetic questions, not a human usability study.
+async function finishPractice(page) {
+  const count = await page.evaluate(() => store.state.questions.length);
+  for (let index = 0; index < count; index++) {
+    await page.waitForFunction((expected) => store.state.idx === expected, index);
+    await page.evaluate(() => { ensureAnswer(store.state.idx).costMs = 180000; });
+    await page.locator('button.option').first().click();
+  }
+  await waitForReview(page, count);
+  return page.evaluate(() => store.state.attemptId);
+}
+
+async function waitForReview(page, count) {
+  await page.locator('.review-card').last().waitFor();
+  assert.equal(await page.locator('.review-card').count(), count);
+  // Unsupported-only papers deliberately have no .speed-summary to wait for.
+  // Wait for the real lazy module and its render callback before checking absence.
+  await page.evaluate(async () => {
+    await import('/speed-review-ui.mjs');
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  });
+}
+
+const eligibilityFixture = ({ prompt, category = '', options = ['选项甲', '选项乙', '选项丙', '选项丁'], answer = 'A', ...extra }) => ({
+  prompt, category, options, answer, answer_index: answer ? 0 : -1,
+  analysis: `验收题库解析：${prompt}。`, ...extra,
+});
+
+const supportedFixtures = [
+  eligibilityFixture({ prompt: '数量正例：计算 796 × 12.5% 的值。', category: '数量关系', options: ['99.5', '95.5', '100.5', '98.5'] }),
+  eligibilityFixture({ prompt: '资料正例：某厂本年产量 132 件，同比增长 10%，上年产量多少件？', category: '资料分析', options: ['120', '122', '125', '130'] }),
+  eligibilityFixture({ prompt: '言语正例：政治常识的学习需要理解，不能只记结论。这段话的主旨是什么？', category: '言语理解', options: ['学习需要理解', '只需记结论', '无需学习', '否定一切结论'] }),
+  eligibilityFixture({ prompt: '逻辑正例：所有鲸都是哺乳动物，蓝鲸是鲸，可推出什么？', category: '逻辑判断', options: ['蓝鲸是哺乳动物', '所有哺乳动物是蓝鲸', '鲸不是哺乳动物', '无法推出'] }),
+];
+const unsupportedFixtures = [
+  eligibilityFixture({ prompt: '常识负例：蒸发时物质从周围吸收还是放出热量？', category: '常识判断' }),
+  eligibilityFixture({ prompt: '政治负例：下列哪项属于政治理论基础知识？', category: '政治理论' }),
+  eligibilityFixture({ prompt: '父类负例：此题只有判断推理父类元数据。', category: '判断推理' }),
+  eligibilityFixture({ prompt: '未知负例：这道题没有可靠的题型元数据。' }),
+  eligibilityFixture({ prompt: '缺答案负例：计算 18 加 25 的结果。', category: '数量关系', answer: '' }),
+  eligibilityFixture({ prompt: '字母占位负例：选择图形规律对应的选项。', category: '数量关系', options: ['A. A', 'B. B', 'C. C', 'D. D'] }),
+  eligibilityFixture({ prompt: '题图缺失负例：【本题原卷含题目图片，当前导入文件未包含图片】', category: '数量关系' }),
+  eligibilityFixture({ prompt: '材料缺图负例：依据材料回答增长率。', category: '资料分析', material: '【共享材料含图片，当前导入文件未包含图片】' }),
+  eligibilityFixture({ prompt: '选项缺图负例：选择满足条件的选项。', category: '数量关系', options: ['（原卷图形选项，图片未随导入提供）', '选项乙', '选项丙', '选项丁'] }),
+];
+
+async function assertCapabilityEntrance(page, supported, unsupported) {
+  assert.equal(await page.locator('.speed-card').count(), supported.length, '只为可以分析的题渲染方法模块');
+  assert.equal(await page.locator('.speed-toggle').count(), supported.length);
+  for (const question of supported) {
+    const card = page.locator('.review-card').filter({ has: page.locator('.q-content').filter({ hasText: question.prompt }) });
+    assert.equal(await card.locator('.speed-toggle').textContent(), '分析解题方法');
+    const capability = (await card.locator('.speed-capability').textContent()).trim();
+    assert.match(capability, new RegExp(question.category), '入口前显示已识别题型');
+    assert.ok(capability.length > question.category.length + 4, '题型旁包含本类可分析的方法方向');
+    assert.doesNotMatch(capability, /已提速|秒杀|已验证快解/, '可分析不得变成已经发现捷径的承诺');
+  }
+  for (const question of unsupported) {
+    const card = page.locator('.review-card').filter({ has: page.locator('.q-content').filter({ hasText: question.prompt }) });
+    assert.equal(await card.count(), 1, question.prompt);
+    assert.equal(await card.locator('.speed-card, .speed-toggle, .speed-generate').count(), 0, `${question.prompt} 不暴露无效方法入口`);
+    const analysis = card.locator('.answer-box').filter({ hasText: `验收题库解析：${question.prompt}` });
+    assert.equal(await analysis.isVisible(), true, '不适用方法分析的题仍可正常查看题库解析');
+    assert.equal(await card.getByRole('button', { name: 'AI 解析本题', exact: true }).isVisible(), true, '普通解析入口保留');
+    assert.equal(await card.locator('.review-time').isVisible(), true, '普通用时信息保留');
+  }
+  assert.equal(await page.getByText('本题以知识辨析为主，首版暂不生成自动快解。', { exact: true }).count(), 0);
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, '页面无横向溢出');
 }
 
 test('完整练习→慢题→真实HTTP协议→新题独立作答→历史回看，手机与桌面布局', async () => {
@@ -71,9 +152,9 @@ test('完整练习→慢题→真实HTTP协议→新题独立作答→历史回�
   await page.locator('.q-progress-text').filter({ hasText: '2' }).waitFor();
   await page.locator('.option').first().click();
   await page.locator('.speed-summary').waitFor();
-  assert.match(await page.locator('.speed-ranking-title').textContent(), /1 道题/);
+  assert.match(await page.locator('.speed-ranking-title').textContent(), /1 道/);
   await page.getByLabel('统一参考秒数').fill('300'); await page.locator('.speed-controls').getByRole('button', { name: '应用', exact: true }).click();
-  assert.match(await page.locator('.speed-ranking-title').textContent(), /没有/);
+  assert.match(await page.locator('.speed-ranking-title').textContent(), /暂无/);
   await page.getByRole('button', { name: '按题型恢复' }).click();
   await page.locator('.speed-ranking-links button').first().click();
   const panel = page.locator('.speed-panel').first();
@@ -104,7 +185,7 @@ test('完整练习→慢题→真实HTTP协议→新题独立作答→历史回�
   await page.reload(); await page.locator('.custom-entry').waitFor();
   await page.evaluate((attemptId) => openAttemptReview(attemptId), id);
   await page.locator('.speed-summary').waitFor();
-  assert.match(await page.locator('.speed-ranking-title').textContent(), /1 道题/);
+  assert.match(await page.locator('.speed-ranking-title').textContent(), /1 道/);
   await page.locator('.speed-toggle').first().click();
   await page.locator('.speed-generate').first().click();
   await page.locator('.speed-result-title').first().waitFor();
@@ -147,12 +228,167 @@ test('先看解析再作答保留辅助标记，当前及历史均不列入慢�
   await page.locator('.option').first().click();
   await page.locator('.q-progress-text').filter({ hasText: '2' }).waitFor();
   await page.locator('.option').first().click(); await page.locator('.speed-summary').waitFor();
-  assert.match(await page.locator('.speed-ranking-title').textContent(), /没有/);
+  assert.match(await page.locator('.speed-ranking-title').textContent(), /暂无/);
   const attemptId = await page.evaluate(() => store.state.attemptId);
   const saved = await api(`/api/attempts/${encodeURIComponent(attemptId)}`, null, 'GET');
   assert.equal(saved.records[0].assisted, true, '辅助状态随作答快照保存');
   await page.evaluate((id) => openAttemptReview(id), attemptId); await page.locator('.speed-summary').waitFor();
-  assert.match(await page.locator('.speed-ranking-title').textContent(), /没有/);
+  assert.match(await page.locator('.speed-ranking-title').textContent(), /暂无/);
   assert.equal(await page.evaluate(() => store.state.answers[0].assisted), true);
+  await page.close();
+});
+
+test('混合卷仅推荐可分析慢题，题型与方法方向在点击前可见；历史保持同样资格', async () => {
+  const batchName = '方法入口混合卷负例验收';
+  await api('/api/custom/import', { name: batchName, questions: [...supportedFixtures, ...unsupportedFixtures] });
+  const page = await context.newPage();
+  const pageErrors = []; page.on('pageerror', (error) => pageErrors.push(error.message));
+  const callsBefore = requests.length;
+  let methodCalls = 0;
+  page.on('request', (request) => { if (request.url() === base + '/api/ai/speed-review') methodCalls++; });
+  await openPractice(page, batchName);
+  const attemptId = await finishPractice(page);
+  await assertCapabilityEntrance(page, supportedFixtures, unsupportedFixtures);
+  assert.match(await page.locator('.speed-ranking-title').textContent(), /4 道/);
+  const links = await page.locator('.speed-ranking-links button').allTextContents();
+  assert.equal(links.length, 3);
+  links.forEach((text) => assert.match(text, /第 [1-4] 题/, '常识等不支持题即使用时更长也不进入方法推荐'));
+  await page.locator('.speed-summary').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: join(screenshots, 'capability-mixed-mobile.png') });
+  const knowledge = page.locator('.review-card').filter({ has: page.locator('.q-content').filter({ hasText: unsupportedFixtures[0].prompt }) });
+  await knowledge.scrollIntoViewIfNeeded();
+  await knowledge.screenshot({ path: join(screenshots, 'capability-knowledge-no-entry-mobile.png') });
+  await page.setViewportSize({ width: 1360, height: 900 });
+  await page.locator('.speed-summary').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: join(screenshots, 'capability-mixed-desktop.png') });
+  await page.reload(); await page.locator('.custom-entry').waitFor();
+  await page.evaluate((id) => openAttemptReview(id), attemptId);
+  await waitForReview(page, supportedFixtures.length + unsupportedFixtures.length);
+  await assertCapabilityEntrance(page, supportedFixtures, unsupportedFixtures);
+  assert.match(await page.locator('.speed-ranking-title').textContent(), /4 道/);
+  assert.equal(methodCalls, 0, '查看成绩与历史资格不应自动发起方法请求');
+  assert.equal(requests.length, callsBefore, '不调用模型也能在入口前排除已知不支持题');
+  assert.deepEqual(pageErrors, []);
+  await page.close();
+});
+
+test('全不支持卷及其历史没有提速模块，也不影响普通题目用时和已有解析', async () => {
+  const batchName = '全部不适用方法入口验收';
+  const questions = unsupportedFixtures.map((question) => {
+    const prompt = `整卷负例：${question.prompt}`;
+    return { ...question, prompt, analysis: `验收题库解析：${prompt}。` };
+  });
+  await api('/api/custom/import', { name: batchName, questions });
+  const page = await context.newPage();
+  const pageErrors = []; page.on('pageerror', (error) => pageErrors.push(error.message));
+  const callsBefore = requests.length;
+  await openPractice(page, batchName);
+  const attemptId = await finishPractice(page);
+  await assertCapabilityEntrance(page, [], questions);
+  assert.equal(await page.locator('.speed-summary, .speed-ranking, .speed-panel').count(), 0, '整卷无可用能力时不显示空模块或改名后的假入口');
+  await page.locator('.review-toolbar').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: join(screenshots, 'capability-all-unsupported-mobile.png') });
+  await page.reload(); await page.locator('.custom-entry').waitFor();
+  await page.evaluate((id) => openAttemptReview(id), attemptId);
+  await waitForReview(page, questions.length);
+  await assertCapabilityEntrance(page, [], questions);
+  assert.equal(await page.locator('.speed-summary, .speed-ranking, .speed-panel').count(), 0, '历史快照不能重新出现失效入口');
+  await page.setViewportSize({ width: 1360, height: 900 });
+  await page.locator('.review-toolbar').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: join(screenshots, 'capability-all-unsupported-history-desktop.png') });
+  assert.equal(requests.length, callsBefore);
+  assert.deepEqual(pageErrors, []);
+  await page.close();
+});
+
+test('可分析题没有额外捷径时仍展示本题具体稳妥解法，不能退成不支持提示', async () => {
+  const batchName = '常规方法结果验收';
+  await api('/api/custom/import', { name: batchName, questions: [eligibilityFixture({
+    prompt: '常规算法验收：计算 37 + 48。', category: '数量关系', options: ['85', '75', '86', '84'],
+  })] });
+  const page = await context.newPage();
+  await openPractice(page, batchName);
+  await finishPractice(page);
+  await page.getByRole('button', { name: '分析解题方法', exact: true }).click();
+  upstreamMode = 'no_shortcut';
+  try {
+    await page.locator('.speed-generate').click();
+    await page.locator('.speed-result-title').waitFor();
+    assert.equal(await page.locator('.speed-result-title').textContent(), '本题的稳妥解法');
+    const result = await page.locator('.speed-result').textContent();
+    assert.match(result, /37 \+ 40 = 77/);
+    assert.match(result, /得到 85/);
+    assert.doesNotMatch(result, /不支持|暂不生成|先巩固基础/);
+    assert.equal(await page.locator('.speed-drill').count(), 0);
+    assert.equal(await page.locator('.speed-toggle').count(), 1, '支持题的常规方法结果不应移除合法入口');
+  } finally {
+    upstreamMode = 'valid';
+    await page.close();
+  }
+});
+
+test('共享材料持有者缺图时，空材料小问在成绩与历史中都不恢复方法入口', async () => {
+  const batchName = '共享缺图材料快照验收';
+  const marker = '【共享材料含图片，当前导入文件未包含图片】';
+  const questions = [
+    eligibilityFixture({ prompt: '共享缺图小问一：根据材料选择正确的增长率。', category: '资料分析', material_id: 'missing-shared-group', material: marker }),
+    eligibilityFixture({ prompt: '共享缺图小问二：根据同一材料选择正确的基期。', category: '资料分析', material_id: 'missing-shared-group', material: '' }),
+  ];
+  await api('/api/custom/import', { name: batchName, questions });
+  const page = await context.newPage();
+  const errors = []; page.on('pageerror', (error) => errors.push(error.message));
+  const callsBefore = requests.length;
+  await openPractice(page, batchName);
+  assert.equal(await page.evaluate(() => store.state.questions[1].material), marker, '空材料小问继承出题时真实显示的材料');
+  const attemptId = await finishPractice(page);
+  await assertCapabilityEntrance(page, [], questions);
+  assert.equal(await page.locator('.speed-summary').count(), 0);
+  const saved = await api(`/api/attempts/${encodeURIComponent(attemptId)}`, null, 'GET');
+  const second = saved.records.find((record) => record.question.prompt === questions[1].prompt);
+  assert.ok(second);
+  assert.equal(second.question.material, marker, '快照必须保留继承的缺图材料，不能只保存本行空material');
+  await page.reload(); await page.locator('.custom-entry').waitFor();
+  await page.evaluate((id) => openAttemptReview(id), attemptId);
+  await waitForReview(page, questions.length);
+  await assertCapabilityEntrance(page, [], questions);
+  assert.equal(await page.locator('.speed-summary').count(), 0);
+  assert.equal(await page.evaluate(() => store.state.questions[1].material), marker);
+  await page.locator('.review-card').nth(1).screenshot({ path: join(screenshots, 'capability-shared-missing-history-mobile.png') });
+  assert.equal(requests.length, callsBefore, '确定缺失共享图片时，不发起模型请求');
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
+test('完整文字共享材料保留至空材料小问历史，历史方法请求携带同一材料', async () => {
+  const batchName = '共享文字材料快照验收';
+  const material = '共享材料验收标记：乙厂全年产量为 796 万件，其中出口量占全年产量的 12.5%。';
+  const questions = [
+    eligibilityFixture({ prompt: '共享文字小问一：乙厂全年产量为多少万件？', category: '资料分析', material_id: 'text-shared-group', material, options: ['796', '795', '799', '798'] }),
+    eligibilityFixture({ prompt: '共享文字小问二：乙厂出口量为多少万件？', category: '资料分析', material_id: 'text-shared-group', material: '', options: ['99.5', '95.5', '100.5', '98.5'] }),
+  ];
+  await api('/api/custom/import', { name: batchName, questions });
+  const page = await context.newPage();
+  const errors = []; page.on('pageerror', (error) => errors.push(error.message));
+  await openPractice(page, batchName);
+  const attemptId = await finishPractice(page);
+  await assertCapabilityEntrance(page, questions, []);
+  const saved = await api(`/api/attempts/${encodeURIComponent(attemptId)}`, null, 'GET');
+  const second = saved.records.find((record) => record.question.prompt === questions[1].prompt);
+  assert.ok(second);
+  assert.equal(second.question.material, material);
+  await page.reload(); await page.locator('.custom-entry').waitFor();
+  await page.evaluate((id) => openAttemptReview(id), attemptId);
+  await waitForReview(page, questions.length);
+  await assertCapabilityEntrance(page, questions, []);
+  const card = page.locator('.review-card').filter({ has: page.locator('.q-content').filter({ hasText: questions[1].prompt }) });
+  assert.match(await card.locator('.mat-body').textContent(), /共享材料验收标记/);
+  const callsBefore = requests.length;
+  await card.locator('.speed-toggle').click();
+  await card.locator('.speed-generate').click();
+  await card.locator('.speed-result-title').waitFor();
+  assert.equal(await card.locator('.speed-result-title').textContent(), review.methodName);
+  assert.equal(requests.length, callsBefore + 1);
+  assert.ok(JSON.stringify(requests.at(-1)).includes(material), '历史API必须发送已冻结的共享材料，不可丢失后依赖模型猜测');
+  assert.deepEqual(errors, []);
   await page.close();
 });

@@ -58,6 +58,14 @@ function reviewInput(extra = {}) {
 
 before(async () => {
   dataDir = await mkdtemp(join(tmpdir(), 'exam-speed-review-'));
+  const nativeFixture = new DatabaseSync(join(dataDir, 'tiku.db'));
+  nativeFixture.exec(`
+    CREATE TABLE papers(id INTEGER PRIMARY KEY, subjectName TEXT, category TEXT, name TEXT, questionCount INTEGER, difficulty INTEGER, chapters TEXT);
+    CREATE TABLE questions(id INTEGER PRIMARY KEY, questionId TEXT, paperId INTEGER, chapter TEXT, type INTEGER, content TEXT, contentHtml TEXT, options TEXT, answer TEXT, answerIndex INTEGER, difficulty INTEGER, analysis TEXT);
+    INSERT INTO papers VALUES(1, '公务员·行测', '真题', '2026年隔离材料测试', 4, 1, '[]');
+  `);
+  for (let i = 1; i <= 4; i++) nativeFixture.prepare('INSERT INTO questions VALUES(?,?,?,?,?,?,?,?,?,?,?,?)').run(i, String(91000 + i), 1, '资料分析', 1, `根据共享材料计算第${i}题。`, '', '["20","30","40","50"]', '1', 1, 1, '');
+  nativeFixture.close();
   upstream = http.createServer(async (req, res) => {
     let raw = '';
     for await (const chunk of req) raw += chunk;
@@ -151,12 +159,14 @@ test('invalid provider schema is refused; unreadable image and missing snapshot 
   providerContent = JSON.stringify(fixtureReview);
   const before = providerCalls.length;
   const missing = await request('/api/ai/speed-review', { questionId: 'no-snapshot' });
-  assert.equal(missing.body.review.status, 'insufficient');
+  assert.equal(missing.body.unavailable, true);
+  assert.equal(missing.body.review, undefined);
   const image = await request('/api/ai/speed-review', { questionId: 'image', questionData: { ...question, contentHtml: '<img src="https://example.invalid/chart.png">' } });
-  assert.equal(image.body.review.status, 'insufficient');
+  assert.equal(image.body.capability.code, 'image_required');
   for (const invalidAnswer of [{ answer: '', answerIndex: -1 }, { answer: 'Z', answerIndex: 26 }, { answer: 'B', answerIndex: 1, answerStatus: 'disputed' }]) {
     const missingAnswer = await request('/api/ai/speed-review', { questionId: 'no-answer', questionData: { ...question, ...invalidAnswer } });
-    assert.equal(missingAnswer.body.review.status, 'insufficient');
+    assert.equal(missingAnswer.body.capability.code, 'invalid_answer');
+    assert.equal(missingAnswer.body.review, undefined);
   }
   assert.equal(providerCalls.length, before);
 });
@@ -186,15 +196,161 @@ test('repeated questions require the exact submission and preserve assisted evid
   assert.equal((await request('/api/ai/speed-review', reviewInput({ attemptId: 'duplicate-attempt', submissionKey: 'wrong' }))).status, 404);
 });
 
-test('explicit common-knowledge and political-theory questions use the transparent deterministic scope boundary', async () => {
+test('all unsupported or incomplete inputs are refused before any provider or fake review result', async () => {
   const before = providerCalls.length;
-  for (const category of ['常识判断', '政治理论']) {
-    const result = await request('/api/ai/speed-review', { questionId: 'scope-boundary', questionData: { ...question, category } });
-    assert.equal(result.body.review.status, 'no_shortcut');
-    assert.equal(result.body.review.drillMethod, null);
-    assert.match(JSON.stringify(result.body.review), /首版|当前|暂不|范围|知识/);
+  for (const change of [
+    ...['常识判断', '政治理论', '判断推理', '图形推理', '类比推理', '定义判断', '数字推理', '申论', '未知', ''].map((category) => ({ category })),
+    { category: '数量关系', subCategory: '数字推理' },
+    { category: '数量关系/言语理解' }, { images: '["image.png"]' },
+    { prompt: '【本题原卷含题目图片，当前导入文件未包含图片】' },
+    { material: '【共享材料含图片，当前导入文件未包含图片】' },
+    { options: ['（原卷图形选项，图片未随导入提供）', '20'] },
+    { image_missing: true }, { options: ['A', 'B', 'C', 'D'] },
+    { options: ['<span>&nbsp;</span>', '30'] },
+    { category: '', type: 'custom', chapter: '资料分析' },
+  ]) {
+    const result = await request('/api/ai/speed-review', { questionId: 'scope-boundary', questionData: { ...question, ...change } });
+    assert.equal(result.body.unavailable, true, JSON.stringify(change));
+    assert.equal(result.body.capability.available, false);
+    assert.equal(result.body.review, undefined);
+    assert.equal(result.body.clientCall, undefined);
   }
   assert.equal(providerCalls.length, before);
+});
+
+test('logical detail is supported while historical broad category cannot be overridden by the client', async () => {
+  const available = await request('/api/ai/speed-review', { questionId: 'logic-detail', questionData: { ...question, category: '判断推理', subCategory: '逻辑判断' } });
+  assert.equal(available.body.review.status, 'method');
+  assert.match(JSON.stringify(providerCalls.at(-1).messages), /逻辑判断|条件关系/);
+  const imported = await request('/api/custom/import', { name: '资料分析', questions: [{ ...question, category: '判断推理' }] });
+  const list = await request(`/api/custom/questions?batch_id=${imported.body.id}`);
+  const id = `custom-${list.body.questions[0].id}`;
+  await request('/api/records', { questionId: id, subject: '资料分析', chapter: '资料分析', selected: [1], attemptId: 'broad-category', submissionKey: 'broad-category:0' });
+  await request('/api/attempts/complete', { attemptId: 'broad-category', questionCount: 1 });
+  const count = providerCalls.length;
+  const result = await request('/api/ai/speed-review', { attemptId: 'broad-category', questionId: id, questionData: { ...question, category: '判断推理', subCategory: '逻辑判断' } });
+  assert.equal(result.body.unavailable, true);
+  assert.equal(result.body.capability.category, '判断推理');
+  assert.equal(providerCalls.length, count);
+});
+
+test('shared-material snapshots restore the same scoped holder, freeze it, and reject missing or image-only material', async () => {
+  const material = '本批次共享数据：总量为240，其中12.5%为目标部分。';
+  const image = { role: 'material', dataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==' };
+  const imported = await request('/api/custom/import', { name: '真实材料组快照夹具', questions: [
+    { ...question, prompt: '材料组首题', material, material_id: 'shared-fixture' },
+    { ...question, prompt: '根据本组材料，目标部分是多少？', material: '', material_id: 'shared-fixture' },
+    { ...question, prompt: '缺少共享材料的题', material: '', material_id: 'missing-fixture' },
+    { ...question, prompt: '图片材料组首题', material: '', images: [image], material_id: 'image-fixture' },
+    { ...question, prompt: '图片材料组第二题', material: '', material_id: 'image-fixture' },
+  ] });
+  assert.equal(imported.status, 200, JSON.stringify(imported.body));
+  // Same material id elsewhere must not supply the material for this batch or owner.
+  await request('/api/custom/import', { name: '另一批次', questions: [{ ...question, prompt: '不同批次题', material: '错误的跨批次材料', material_id: 'shared-fixture' }] });
+  await request('/api/custom/import', { name: '另一用户批次', questions: [{ ...question, prompt: '不同用户题', material: '错误的跨账号材料', material_id: 'shared-fixture' }] }, { cookie: userB.cookie });
+  const practice = await request(`/api/custom/practice?batch_id=${imported.body.id}`);
+  const questions = practice.body.questions;
+  const tail = questions.find((item) => item.content === '根据本组材料，目标部分是多少？');
+  const missing = questions.find((item) => item.content === '缺少共享材料的题');
+  const imageTail = questions.find((item) => item.content === '图片材料组第二题');
+  assert.equal(tail.material, material);
+  assert.equal(tail.sharedMaterial, true);
+  assert.equal(tail.materialId, 'shared-fixture');
+  const single = await request(`/api/question?id=${tail.id}`);
+  assert.equal(single.body.material, material);
+  for (const [index, item] of [tail, missing, imageTail].entries()) {
+    assert.equal((await request('/api/records', { questionId: item.id, selected: [1], attemptId: 'shared-attempt', submissionKey: `shared-attempt:${index}` })).status, 200);
+  }
+  await request('/api/attempts/complete', { attemptId: 'shared-attempt', questionCount: 3 });
+  const db = new DatabaseSync(join(dataDir, 'practice.db'));
+  db.prepare('UPDATE custom_questions SET material = ? WHERE batch_id = ? AND material_id = ?').run('作答后被修改的材料', imported.body.id, 'shared-fixture');
+  db.close();
+  const history = await request('/api/attempts/shared-attempt');
+  assert.equal(history.body.records[0].question.material, material);
+  assert.equal(history.body.records[0].question.sharedMaterial, true);
+  assert.equal(history.body.records[0].question.materialId, 'shared-fixture');
+  assert.equal(history.body.records[2].question.images.length, 1);
+  const reviewed = await request('/api/ai/speed-review', { attemptId: 'shared-attempt', questionId: tail.id });
+  assert.equal(reviewed.body.review.status, 'method');
+  const sent = JSON.stringify(providerCalls.at(-1).messages);
+  assert.match(sent, /本批次共享数据/);
+  assert.doesNotMatch(sent, /错误的跨|作答后被修改/);
+  const before = providerCalls.length;
+  for (const [item, code] of [[missing, 'missing_material'], [imageTail, 'image_required']]) {
+    const refused = await request('/api/ai/speed-review', { attemptId: 'shared-attempt', questionId: item.id, questionData: { ...question, material: '客户端伪造材料' } });
+    assert.equal(refused.body.unavailable, true);
+    assert.equal(refused.body.capability.code, code);
+  }
+  assert.equal(providerCalls.length, before);
+});
+
+test('native material snapshots use the paper subject and reject missing or ambiguous source mappings in current and historical views', async () => {
+  const { getSpeedReviewCapability } = await import('./public/speed-review-core.mjs');
+  const db = new DatabaseSync(join(dataDir, 'practice.db'));
+  const map = db.prepare('INSERT INTO q_material_map(question_id, subject, material_id) VALUES(?,?,?)');
+  const material = db.prepare('INSERT INTO q_materials(subject, material_id, content) VALUES(?,?,?)');
+  const subject = '公务员·行测';
+  map.run('91001', subject, 'native-valid'); material.run(subject, 'native-valid', '原生题库共享材料：总量240，比例12.5%。');
+  map.run('91001', '其他科目', 'foreign'); material.run('其他科目', 'foreign', '不能混入的其他科目材料');
+  map.run('91002', subject, 'native-missing');
+  map.run('91003', subject, 'native-ambiguous-a'); map.run('91003', subject, 'native-ambiguous-b');
+  material.run(subject, 'native-ambiguous-a', '候选材料一'); material.run(subject, 'native-ambiguous-b', '候选材料二');
+  map.run('91004', subject, 'native-duplicate'); material.run(subject, 'native-duplicate', '重复标识材料一'); material.run(subject, 'native-duplicate', '重复标识材料二');
+  db.close();
+  for (let i = 1; i <= 4; i++) {
+    const questionId = String(91000 + i);
+    const current = await request(`/api/question?id=${questionId}`);
+    assert.equal(current.status, 200, JSON.stringify(current.body));
+    assert.equal(getSpeedReviewCapability(current.body).available, i === 1, questionId);
+    assert.equal((await request('/api/records', { questionId, selected: [1], attemptId: 'native-shared', submissionKey: `native-shared:${i}` })).status, 200);
+  }
+  await request('/api/attempts/complete', { attemptId: 'native-shared', questionCount: 4 });
+  const history = await request('/api/attempts/native-shared');
+  for (const [index, record] of history.body.records.entries()) {
+    assert.equal(record.question.sharedMaterial, true);
+    assert.equal(getSpeedReviewCapability(record.question).available, index === 0);
+  }
+  assert.match(history.body.records[0].question.material, /原生题库共享材料/);
+  const reviewed = await request('/api/ai/speed-review', { attemptId: 'native-shared', questionId: '91001' });
+  assert.equal(reviewed.body.review.status, 'method');
+  assert.doesNotMatch(JSON.stringify(providerCalls.at(-1).messages), /不能混入|其他科目材料/);
+  const before = providerCalls.length;
+  for (const questionId of ['91002', '91003', '91004']) {
+    const refused = await request('/api/ai/speed-review', { attemptId: 'native-shared', questionId });
+    assert.equal(refused.body.unavailable, true);
+    assert.equal(refused.body.capability.code, 'missing_material');
+  }
+  assert.equal(providerCalls.length, before);
+});
+
+test('both local native query entrypoints match shared-material qualification using disposable SQLite fixtures', async () => {
+  const { getSpeedReviewCapability } = await import('./public/speed-review-core.mjs');
+  const tiku = new DatabaseSync(join(dataDir, 'tiku.db'), { readOnly: true });
+  const practice = new DatabaseSync(join(dataDir, 'practice.db'), { readOnly: true });
+  const adapter = (db) => ({
+    get: (sql, ...params) => db.prepare(sql).get(...params),
+    all: (sql, ...params) => db.prepare(sql).all(...params),
+  });
+  try {
+    for (const entrypoint of ['./public/lib/local-queries.js', './lib/local-queries.mjs']) {
+      const { createLocalApi } = await import(entrypoint);
+      const local = createLocalApi(adapter(tiku), adapter(practice), {});
+      for (let i = 1; i <= 4; i++) {
+        const questionId = String(91000 + i);
+        const current = local.questionById(questionId);
+        assert.equal(current.sharedMaterial, true, entrypoint);
+        assert.equal(getSpeedReviewCapability(current).available, i === 1, entrypoint + ':' + questionId);
+        if (i === 1) {
+          assert.equal(current.materialId, 'native-valid');
+          assert.match(current.material, /原生题库共享材料/);
+          assert.doesNotMatch(current.material, /其他科目/);
+        } else {
+          assert.equal(current.material, null);
+          assert.equal(getSpeedReviewCapability(current).code, 'missing_material');
+        }
+      }
+    }
+  } finally { tiku.close(); practice.close(); }
 });
 
 test('browser-key preparation includes trusted timing and mock is explicitly marked', async () => {
@@ -205,6 +361,9 @@ test('browser-key preparation includes trusted timing and mock is explicitly mar
   assert.match(JSON.stringify(prepared.body.clientCall.messages), /154000|154/);
   assert.doesNotMatch(JSON.stringify(prepared.body), /fixture-test-key|客户端伪造题面/);
   assert.equal(providerCalls.length, before);
+  const unavailable = await request('/api/ai/speed-review', { questionId: 'browser-scope', questionData: { ...question, category: '常识判断' } });
+  assert.equal(unavailable.body.unavailable, true);
+  assert.equal(unavailable.body.clientCall, undefined);
   await configure({ provider_mode: 'mock', api_key: '' });
   const mock = await request('/api/ai/speed-review', reviewInput());
   assert.equal(mock.body.mock, true);
@@ -266,9 +425,20 @@ test('local AI adapter uses independent prompt and validates the provider schema
     assert.doesNotMatch(JSON.stringify(calls[0].messages), /must-not-use|must-not-load/);
     assert.ok(calls[0].max_tokens >= 8192);
     const noAnswer = await ai.speedReview({ ...input, questionData: { ...question, answer: '', answerIndex: -1 } });
-    assert.equal(noAnswer.review.status, 'insufficient');
+    assert.equal(noAnswer.capability.code, 'invalid_answer');
     const commonKnowledge = await ai.speedReview({ ...input, questionData: { ...question, category: '常识判断' } });
-    assert.equal(commonKnowledge.review.status, 'no_shortcut');
+    assert.equal(commonKnowledge.unavailable, true);
+    assert.equal(commonKnowledge.review, undefined);
+    for (const change of [
+      { category: '' }, { category: '判断推理' }, { category: '数量关系', subCategory: '数字推理' },
+      { material: '【共享材料含图片，当前导入文件未包含图片】' }, { images: '["image.png"]' },
+      { image_missing: true }, { options: ['<span>A</span>', '<span>B</span>'] },
+      { answerStatus: 'disputed' }, { category: '数量关系/言语理解' },
+    ]) {
+      const refused = await ai.speedReview({ ...input, questionData: { ...question, ...change } });
+      assert.equal(refused.unavailable, true, JSON.stringify(change));
+      assert.equal(refused.review, undefined);
+    }
     assert.equal(calls.length, 1);
     content = '模型未按格式返回';
     assert.equal((await ai.speedReview(input)).review, null);
