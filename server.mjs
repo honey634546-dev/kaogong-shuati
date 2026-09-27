@@ -20,6 +20,8 @@ import { mapChapterToNode } from './lib/xingce-chapter-map.mjs';
 import { customQuestionHtml, parseImages } from './public/lib/custom-parser.js';
 import { ANSWER_STATUSES, normalizeCustomQuestion, normalizeCustomQuestions } from './public/lib/custom-bank.js';
 import { authRequestHandler, getAuthSession, initAuth } from './lib/auth.mjs';
+import { buildSpeedReviewPrompt, normalizeSpeedReview, insufficientSpeedReview, getSpeedReviewCapability, createSpeedReviewAgent } from './public/speed-review-core.mjs';
+import { QUESTION_IMPORT_CLASSIFICATION_HINT, createQuestionImportAgent } from './public/lib/question-import-contract.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.argv[2] || process.env.PORT || 3000);
@@ -700,7 +702,7 @@ async function callVision(apiKey, baseUrl, model, imgs, mode = 'describe') {
 	    ? '这是一张考公题目图片（试卷/练习册/资料截图，可能包含一道或多道题，也可能混有笔记、页码、答题App界面元素等非题目内容）。\n\n请仔细观察整张图片，先筛选出真正的题目，再每道题整理为结构化 JSON。\n\n## 一、题型识别\n\n### 1. 图形推理题\n- 题干：引导语如「从所给的四个选项中，选择最合适的一个填入问号处」「左图为给定的多面体」「左边给定的是正方体的外表面展开图」「把下面的六个图形分为两类」等\n- 选项：\n  - 普通图推 → 图片中选项是图形，无法转写文字时写 {"A. A", "B. B", "C. C", "D. D"}\n  - 分类题（题干含「把下面的六个图形分为两类」）→ 选项是编号文字，原样保留如 "A. ①②④，③⑤⑥"\n- prompt 只放引导语原文，不要描述图形内容\n\n### 2. 定义判断题\n- 题干：一段概念定义 + 问题「根据上述定义，下列…」「以下符合…的是」「以下不属于…的是」\n- 选项：4 个完整的事例描述，逐字转写\n\n### 3. 逻辑判断题\n- 题干：一段论述 + 问题\n- 选项：4 个完整推理\n\n### 4. 判断题（对错题）\n- 选项固定为 ["正确", "错误"]\n- answer 为"正确"或"错误"\n\n### 5. 材料题（资料分析/一拖五）\n- 题干前有材料（图表或文字），材料文字摘要放入 material 字段\n- 每道小题独立一条记录，每条的 material 都填同一材料\n\n## 二、输出格式\n{"questions":[{"prompt":"题干","material":"材料（没有则为空字符串）","options":["A. 选项1","B. 选项2"],"answer":"答案字母，单选如 A / 多选如 ABD / 判断如 正确；图片未显示答案则留空","analysis":"解析（没有则为空字符串）","category":"题目分类（言语理解/判断推理/数量关系/资料分析/常识判断/申论/综应；不确定则留空）"}]}\n\n## 三、要求\n1) 忠实图片内容，不编造、不补全缺失信息；一道题一个对象\n2) 图形推理题选项为占位符 "A. A" "B. B" "C. C" "D. D"，不要编造图形文字\n3) 分类题选项完整保留编号文字，如 "A. ①②④，③⑤⑥"\n4) 材料题的图表文字尽量准确转写进 material\n5) answer 只能从图片中明确标注的答案信息提取；图片未显示答案时必须留空字符串，禁止自行计算\n6) 判断图片中题目的类别并填入 category 字段\n7) 过滤噪音：页码、标题、答题按钮、统计行等非题目内容\n8) 只输出一个 JSON，不要任何其他文字、解释、Markdown 代码块或思考过程'
     : '这是一道考公题目的图片（可能包含题干图形序列和 A/B/C/D 选项图形）。请逐一详细转写图片中的全部内容：题干部分描述每个图形的形状/线条/数量/位置/规律；选项部分标注 A/B/C/D 对应关系。不要遗漏任何图形或文字。';
   const content = [
-    { type: 'text', text },
+    { type: 'text', text: mode === 'structure' ? `${text}\n\n${QUESTION_IMPORT_CLASSIFICATION_HINT}` : text },
     ...imgs.map((i) => ({ type: 'image_url', image_url: { url: `data:${i.mime};base64,${i.b64}` } })),
   ];
   const body = { model, messages: [{ role: 'user', content }], temperature: 0.1, max_tokens: mode === 'structure' ? 8000 : 4000, stream: false };
@@ -949,6 +951,31 @@ function jsonArray(value) {
   try { return JSON.parse(value || '[]'); } catch { return []; }
 }
 
+/** Resolve exactly the shared material shown by groupCustomPracticeRows, scoped to its owner and batch. */
+function customRecordMaterial(row) {
+  const materialId = String(row.material_id || '').trim();
+  const ownImages = parseImages(row.images);
+  if (!materialId) return { material: row.material || '', images: ownImages, materialId: '', sharedMaterial: false };
+  const members = pdb.prepare(`SELECT material, images FROM custom_questions
+    WHERE user_id = ? AND batch_id = ? AND material_id = ? AND is_current != 0 ORDER BY id`).all(row.user_id, row.batch_id, materialId);
+  const holder = members.find((item) => String(item.material || '').trim()) || members[0];
+  const materialImages = parseImages(holder?.images).filter((item) => item.role === 'material');
+  const material = String(holder?.material || '').trim();
+  const materialHtml = holder ? customQuestionHtml({ ...holder, images: materialImages }).materialHtml : '';
+  return { material, materialHtml, images: [...ownImages.filter((item) => item.role !== 'material'), ...materialImages], materialId, sharedMaterial: true };
+}
+
+/** Native question banks store shared material separately from the question row. */
+function nativeRecordMaterial(question) {
+  const subject = db.prepare('SELECT subjectName FROM papers WHERE id = ?').get(question.paperId)?.subjectName || '';
+  const maps = pdb.prepare(`SELECT DISTINCT material_id FROM q_material_map
+    WHERE question_id = ? AND subject = ? AND trim(material_id) != ''`).all(String(question.questionId), subject);
+  if (!maps.length) return {};
+  const materialId = maps.map((item) => item.material_id).join('|');
+  const materials = maps.length === 1 ? pdb.prepare('SELECT DISTINCT content FROM q_materials WHERE subject = ? AND material_id = ?').all(subject, maps[0].material_id) : [];
+  return { materialId, sharedMaterial: true, material: materials.length === 1 ? materials[0].content : '', materialHtml: '' };
+}
+
 /** 解析作答时锁定的题目版本；后续改题/换版本不影响历史记录。 */
 function resolveRecordQuestion(questionId, ownerId = LEGACY_OWNER_ID) {
   const id = String(questionId ?? '');
@@ -956,9 +983,10 @@ function resolveRecordQuestion(questionId, ownerId = LEGACY_OWNER_ID) {
     const cid = Number(id.replace(/^custom-/, ''));
     const row = visibleCustomQuestion(ownerId, cid);
     if (!row) return null;
+    const material = customRecordMaterial(row);
     const question = {
       content: row.prompt || '',
-      material: row.material || '',
+      ...material,
       options: row.options || '[]',
       answer: row.answer || '',
       answerIndex: row.answer_index == null ? -1 : Number(row.answer_index),
@@ -978,19 +1006,19 @@ function resolveRecordQuestion(questionId, ownerId = LEGACY_OWNER_ID) {
         revision: Number(row.revision) > 0 ? Number(row.revision) : 1,
         type: 'custom',
         prompt: row.prompt || '',
-        material: row.material || '',
+        ...material,
         options: jsonArray(row.options),
         answer: row.answer || '',
         answerIndex: row.answer_index == null ? -1 : Number(row.answer_index),
         answerStatus: row.answer_status || 'unconfirmed',
         analysis: row.analysis || '',
         category: row.category || '',
-        images: parseImages(row.images),
       },
     };
   }
-  const q = questionByAnyId(questionId);
-  if (!q) return null;
+  const stored = questionByAnyId(questionId);
+  if (!stored) return null;
+  const q = { ...stored, ...nativeRecordMaterial(stored) };
   const revision = Number(q.revision) > 0 ? Number(q.revision) : 1;
   return {
     question: q,
@@ -1004,9 +1032,15 @@ function resolveRecordQuestion(questionId, ownerId = LEGACY_OWNER_ID) {
       prompt: q.content || '',
       contentHtml: q.contentHtml || '',
       material: q.material || '',
+      materialHtml: q.materialHtml || '',
+      materialId: q.materialId || '', sharedMaterial: q.sharedMaterial === true,
+      category: q.category || '', subCategory: q.subCategory || '',
+      categoryName: q.categoryName || '', module: q.module || '', chapter: q.chapter || '',
       options: jsonArray(q.options),
       answer: q.answer || '',
       answerIndex: q.answerIndex == null ? -1 : Number(q.answerIndex),
+      answerStatus: q.answerStatus ?? q.answer_status ?? '',
+      images: parseImages(q.images), image_missing: q.image_missing === true || q.imageMissing === true,
       analysis: q.analysis || '',
     },
   };
@@ -1080,7 +1114,7 @@ function getCompletedAttempt(ownerId, attemptId) {
   if (!row) return null;
   const records = pdb.prepare(`
     SELECT question_id, subject, chapter, question_type, selected, is_correct, cost_ms, explanation_ms,
-      question_uid, question_revision, question_snapshot, answer_snapshot, created_at
+      question_uid, question_revision, question_snapshot, answer_snapshot, submission_key, created_at
     FROM practice_records WHERE user_id = ? AND attempt_id = ? ORDER BY id
   `).all(String(ownerId || LEGACY_OWNER_ID), id).map((record) => {
     let selected = null, question = {}, answer = {};
@@ -1096,6 +1130,8 @@ function getCompletedAttempt(ownerId, attemptId) {
       correct: record.is_correct == null ? null : Boolean(record.is_correct),
       solveMs: Number(record.cost_ms) || 0,
       explanationMs: Number(record.explanation_ms) || 0,
+      assisted: typeof answer.assisted === 'boolean' ? answer.assisted : null,
+      submissionKey: record.submission_key || '',
       questionUid: record.question_uid || '',
       revision: Number(record.question_revision) || 1,
       question,
@@ -1503,12 +1539,16 @@ function toQuestion(q) {
     id: q.questionId,
     paperId: q.paperId ?? null,
     chapter: q.chapter,
+    category: q.category || '', subCategory: q.subCategory || '',
+    categoryName: q.categoryName || '', module: q.module || '',
     type: q.type,
     content: q.content,
     contentHtml: q.contentHtml,
     options: JSON.parse(q.options || '[]'),
     answer: q.answer,
     answerIndex: q.answerIndex,
+    answerStatus: q.answerStatus ?? q.answer_status ?? '',
+    images: parseImages(q.images), image_missing: q.image_missing === true || q.imageMissing === true,
     difficulty: q.difficulty,
     analysis: q.analysis ?? null,
   };
@@ -1521,9 +1561,15 @@ function enrichGroups(rows, subject, diffFilter) {
   let dropped = null; // 难度过滤时被整组剔除的题
   let maps = [];
   if (qids.length) {
-    maps = pdb.prepare(`SELECT question_id, material_id FROM q_material_map WHERE subject = ? AND question_id IN (${qids.map(() => '?').join(',')})`).all(subject, ...qids);
+    maps = pdb.prepare(`SELECT question_id, material_id FROM q_material_map WHERE subject = ? AND trim(material_id) != '' AND question_id IN (${qids.map(() => '?').join(',')})`).all(subject, ...qids);
   }
   const gidOf = new Map(maps.filter((m) => m.material_id != null).map((m) => [m.question_id, m.material_id]));
+  const materialIdsByQuestion = new Map();
+  const trackMaterial = (qid, gid) => {
+    if (!materialIdsByQuestion.has(qid)) materialIdsByQuestion.set(qid, new Set());
+    materialIdsByQuestion.get(qid).add(gid);
+  };
+  maps.filter((item) => item.material_id != null).forEach((item) => trackMaterial(item.question_id, item.material_id));
   const gids = [...new Set(gidOf.values())];
   // 组内全部题（同 material_id）；difficulty 过滤（自定义刷题）时整组必须全部满足，否则整组剔除
   const groupMembers = new Map(); // material_id -> [question_id...]
@@ -1551,12 +1597,18 @@ function enrichGroups(rows, subject, diffFilter) {
   }
   // gidOf 覆盖组内全部题（含补充题）
   for (const [gid, members] of groupMembers) {
-    for (const mid of members) gidOf.set(mid, gid);
+    for (const mid of members) { gidOf.set(mid, gid); trackMaterial(mid, gid); }
   }
   const materials = new Map(); // material_id -> content
   if (gids.length) {
     const ms = pdb.prepare(`SELECT material_id, content FROM q_materials WHERE subject = ? AND material_id IN (${gids.map(() => '?').join(',')})`).all(subject, ...gids);
-    for (const m of ms) materials.set(m.material_id, m.content);
+    const contentsById = new Map();
+    for (const m of ms) {
+      if (!contentsById.has(m.material_id)) contentsById.set(m.material_id, new Set());
+      contentsById.get(m.material_id).add(m.content);
+    }
+    // Ambiguous source material is incomplete input, never a last-row-wins guess.
+    for (const [id, contents] of contentsById) materials.set(id, contents.size === 1 ? [...contents][0] : null);
   }
   // 汇总所有需要详情的题（原 rows + 组内补充题）
   const allIds = [...new Set([...qids, ...[...groupMembers.values()].flat()])];
@@ -1577,9 +1629,9 @@ function enrichGroups(rows, subject, diffFilter) {
       const members = (groupMembers.get(gid) || []).sort((a, b) => (orderOf.get(a) || 0) - (orderOf.get(b) || 0));
       gi = members.indexOf(q.questionId);
       gt = members.length;
-      mat = materials.get(gid) || null;
+      mat = materialIdsByQuestion.get(q.questionId)?.size === 1 ? materials.get(gid) || null : null;
     }
-    out.push({ ...toQuestion(q), groupId: gid ?? null, groupIndex: gi, groupTotal: gt, material: mat });
+    out.push({ ...toQuestion(q), groupId: gid ?? null, materialId: gid ?? '', sharedMaterial: gid != null, groupIndex: gi, groupTotal: gt, material: mat });
   }
   // 按原顺序 + 组聚合排序：同组相邻
   const pos = new Map(qids.map((id, i) => [id, i]));
@@ -2262,7 +2314,10 @@ function groupCustomPracticeRows(rows, mapper) {
       const q = mapper(m);
       q.material = String(holder.material || '').trim();
       q.materialHtml = holderHtml;
+      q.images = [...parseImages(m.images).filter((image) => image.role !== 'material'), ...holderMatImgs];
       q.groupId = gid;
+      q.materialId = gid;
+      q.sharedMaterial = true;
       q.groupIndex = i;
       q.groupTotal = members.length;
       out.push(q);
@@ -2468,13 +2523,15 @@ const server = http.createServer(async (req, res) => {
           const cid = Number(String(raw).replace(/^custom-/, ''));
           const cr = visibleCustomQuestion(ownerId, cid);
           if (!cr) return err(res, 404, '题目不存在');
-          const { contentHtml, materialHtml } = customQuestionHtml({ ...cr, images: parseImages(cr.images) });
+          const material = customRecordMaterial(cr);
+          const { contentHtml, materialHtml } = customQuestionHtml({ ...cr, ...material });
           return json(res, 200, {
             questionId: String(raw), id: String(raw), type: 'custom',
             questionUid: cr.question_uid || '', revision: Number(cr.revision) > 0 ? Number(cr.revision) : 1,
-            content: cr.prompt, contentHtml, material: cr.material || '', materialHtml,
+            content: cr.prompt, contentHtml, ...material, materialHtml,
             options: JSON.parse(cr.options || '[]'), answer: cr.answer || '', answerIndex: cr.answer_index == null ? -1 : Number(cr.answer_index),
             analysis: cr.analysis || '',
+            category: cr.category || '', answerStatus: cr.answer_status || 'unconfirmed',
             subject: (cr.batch_subject || '自定义').trim() || '自定义', chapter: cr.batch_name || '',
           });
         }
@@ -3163,6 +3220,7 @@ const server = http.createServer(async (req, res) => {
             subjectName: bSubj,
             batchId: bid,
             chapter: b.name,
+            category: r.category || '',
           };
         });
         // 自定义题库：单选 chip 直接控制题量时，保留材料组完整（不把一道「第 3/5 小问」单独丢出）
@@ -3258,7 +3316,7 @@ const server = http.createServer(async (req, res) => {
           resolved.questionUid,
           resolved.revision,
           JSON.stringify(resolved.snapshot),
-          JSON.stringify({ selected: result.selected, correct: result.correct, correctText: result.correctText, ok: result.ok }),
+          JSON.stringify({ selected: result.selected, correct: result.correct, correctText: result.correctText, ok: result.ok, assisted: typeof parsed.assisted === 'boolean' ? parsed.assisted : null }),
         );
         return json(res, 200, { ...result, questionUid: resolved.questionUid, revision: resolved.revision, idempotent: false });
       }
@@ -3297,7 +3355,8 @@ const server = http.createServer(async (req, res) => {
           correct: judged.correct,
           correctText: judged.correctText,
           ok: judged.ok,
-        }) : '';
+          assisted: typeof parsed.assisted === 'boolean' ? parsed.assisted : null,
+        }) : JSON.stringify({ assisted: typeof parsed.assisted === 'boolean' ? parsed.assisted : null });
         ensureAttempt(ownerId, attemptId, subject, attemptMode, attemptQuestionCount, startedAtMs);
         // 来源归档：按题目真实来源算大模块/子模块（与错题本/收藏/笔记分组同口径），旧记录靠一键整理回填
         const cls = classifySource(questionId);
@@ -3951,6 +4010,65 @@ const server = http.createServer(async (req, res) => {
           return err(res, 400, `拉取失败：${e.message}`);
         }
       }
+      // 提速复盘独立于通用解析：按本次作答快照生成，绝不复用题目解析缓存。
+      if (pathname === '/api/ai/speed-review' && req.method === 'POST') {
+        let body = '';
+        for await (const chunk of req) {
+          body += chunk;
+          if (body.length > 220000) return err(res, 413, '复盘输入过大');
+        }
+        let parsed;
+        try { parsed = JSON.parse(body || '{}'); } catch { return err(res, 400, '请求体不是有效 JSON'); }
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return err(res, 400, '复盘输入无效');
+        const questionId = String(parsed.questionId ?? '').trim();
+        const attemptId = String(parsed.attemptId || '').trim();
+        if (!questionId || questionId.length > 256 || attemptId.length > 128) return err(res, 400, '题目或练习记录标识无效');
+        let input = { ...parsed, question: parsed.questionData };
+        if (attemptId) {
+          // 所有字段都来自本人已完成练习；错误的 attemptId 不允许回退到客户端题面。
+          const attempt = getCompletedAttempt(ownerId, attemptId);
+          if (!attempt) return err(res, 404, '练习记录不存在或尚未完成');
+          const submissionKey = String(parsed.submissionKey || '').trim();
+          const matches = attempt.records.filter((item) => item.questionId === questionId
+            && (!parsed.questionUid || item.questionUid === String(parsed.questionUid))
+            && (parsed.questionRevision == null || item.revision === Number(parsed.questionRevision))
+            && (!submissionKey || item.submissionKey === submissionKey));
+          if (matches.length > 1) return err(res, 409, '本次练习中该题有多次作答，请刷新记录并选择具体作答');
+          const record = matches[0];
+          if (!record) return err(res, 404, '本次练习中未找到该版本的题目');
+          input = {
+            ...input,
+            question: { ...record.question, subject: record.subject },
+            selected: record.selected, correct: record.correct, assisted: record.assisted,
+            timing: { ...parsed.timing, solveMs: record.solveMs, assisted: record.assisted },
+          };
+        }
+        const q = input.question;
+        const capability = getSpeedReviewCapability(q);
+        if (!capability.available) return json(res, 200, { unavailable: true, capability });
+        let prompt;
+        try { prompt = buildSpeedReviewPrompt(input); } catch (e) { return err(res, 400, e.message || '复盘输入无效'); }
+        const baseAgent = requestAgent(req, 'xingce-explainer');
+        if (!baseAgent) return err(res, 404, '行测解析 AI 不存在');
+        const agent = createSpeedReviewAgent(baseAgent);
+        const mock = String(agent.provider_mode || '').toLowerCase() === 'mock' || process.env.AI_MOCK === '1';
+        if (mock) return json(res, 200, {
+          review: insufficientSpeedReview('本地 Mock 演示未调用真实 AI，不提供解题或提速结论。'),
+          model: agent.model || 'mock', mock: true, notice: '本地 Mock 演示',
+        });
+        if (normalizeKeyStorageMode(agent.key_storage_mode, String(agent.api_key || '').trim() ? 'server' : 'browser') === 'browser') {
+          return json(res, 200, { clientCall: { kind: 'speed-review', agentId: agent.id, messages: [{ role: 'user', content: prompt }] } });
+        }
+        const scope = requestAbortSignal(req, res);
+        let result;
+        try { result = await callAgent(agent, prompt, { signal: scope.signal }); } finally { scope.cleanup(); }
+        if (result.error) return json(res, 200, { review: null, notice: result.error });
+        try {
+          return json(res, 200, { review: normalizeSpeedReview(result.content), model: result.model || agent.model || '', mock: false });
+        } catch (e) {
+          return json(res, 200, { review: null, notice: `AI 复盘格式校验失败：${e.message}。可重试，未采用该建议。` });
+        }
+      }
       // 行测 AI 解析（真实调用行测解析 AI，按题目 + 作答情况生成解析）
       if (pathname === '/api/ai/explain' && req.method === 'POST') {
         let body = '';
@@ -4222,7 +4340,7 @@ const server = http.createServer(async (req, res) => {
         let body = '';
         for await (const chunk of req) body += chunk;
         const { text, image } = JSON.parse(body || '{}');
-        const agent = requestAgent(req, 'custom-question-parser');
+        const agent = createQuestionImportAgent(requestAgent(req, 'custom-question-parser'));
         if (!agent) return json(res, 200, { notice: '题目解析员未启用，请到 AI 设置页配置', text: null });
         const hasImage = String(image || '').startsWith('data:image');
         if (!hasImage && !String(text || '').trim()) return err(res, 400, '缺少文本或图片');
@@ -4423,7 +4541,7 @@ const server = http.createServer(async (req, res) => {
   fs.createReadStream(file).pipe(res);
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, HOST, () => {
   console.log(`✅ 考公刷题服务已启动: http://${HOST}:${PORT}`);
   console.log(`   数据目录: ${DATA_DIR}`);
   console.log(`   题库: ${DB_FILE || '未提供（可先使用自定义题库）'}`);

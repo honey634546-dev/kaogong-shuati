@@ -1,0 +1,320 @@
+{
+  "version": 1,
+  "createdAt": "2026-09-27",
+  "purpose": "判断题细分类与父类文字判断方法分析的原创合成准入样本；不是用户学习效果验证。",
+  "predeclared": {
+    "maxProviderCalls": 6,
+    "concurrency": 2,
+    "timeoutMs": 60000,
+    "noResampling": true,
+    "acceptance": "必须分别检查有效入口、正确答案与论证、条件/顺序/层级边界。JSON合法不等于语义合格；错误保留供准入决定。"
+  },
+  "cases": [
+    {
+      "id": "MC01",
+      "family": "定义判断",
+      "source": "原创合成，不含真实用户题",
+      "question": {
+        "id": "MC01",
+        "category": "定义判断",
+        "content": "本题将“定向托管”定义为：所有者把某件物品交给另一方保管，保管方只能按约定用途使用，并须在约定期限届满后返还原物，所有权不转移。下列最符合定向托管的是哪项？",
+        "prompt": "本题将“定向托管”定义为：所有者把某件物品交给另一方保管，保管方只能按约定用途使用，并须在约定期限届满后返还原物，所有权不转移。下列最符合定向托管的是哪项？",
+        "options": [
+          "甲把相机交给乙保管一个月，约定乙只可用于拍摄展览，到期返还同一台相机，所有权仍归甲",
+          "甲收取价款后把相机卖给乙，乙可自行转卖",
+          "甲把相机借给乙，允许乙到期用任意同型号相机抵还",
+          "甲请乙指导摄影，相机一直由甲持有和保管"
+        ],
+        "answer": "A",
+        "analysis": "必须同时满足交付他方保管、约定用途、到期返还原物、所有权不转移。A四项均符合；B转移所有权；C不保证原物返还；D未交付保管。",
+        "type": "single"
+      },
+      "input": {
+        "selected": "A",
+        "correct": true,
+        "timing": {
+          "solveMs": 150000,
+          "referenceSeconds": 90,
+          "assisted": null
+        },
+        "userApproach": "",
+        "userReason": ""
+      },
+      "expected": {
+        "answer": "A",
+        "capabilityAvailable": true,
+        "acceptedStatuses": [
+          "method",
+          "no_shortcut"
+        ],
+        "standardReasoning": "必须同时满足交付他方保管、约定用途、到期返还原物、所有权不转移。A四项均符合；B转移所有权；C不保证原物返还；D未交付保管。",
+        "expectedMethod": "先列必要条件，再用决定性不满足条件排除；“符合”找全部满足项。",
+        "boundaries": [
+          "不得只凭“保管/借”词语选项",
+          "原物与同型号替代物不同",
+          "只用本题约定定义，不调用日常法律含义"
+        ],
+        "mustNot": [
+          "把C的同型号返还等同原物返还",
+          "认为出现借就一定符合"
+        ],
+        "drillMethod": null
+      }
+    },
+    {
+      "id": "MC02",
+      "family": "定义判断",
+      "source": "原创合成，不含真实用户题",
+      "question": {
+        "id": "MC02",
+        "category": "定义判断",
+        "content": "这里的“共同试验”指两个独立主体分别投入资源，共同决定试验方案，并各自承担结果不理想造成的损失；不要求投入或收益相等。各选项中的甲、乙均为互相独立的主体。下列哪项不属于共同试验？",
+        "prompt": "这里的“共同试验”指两个独立主体分别投入资源，共同决定试验方案，并各自承担结果不理想造成的损失；不要求投入或收益相等。各选项中的甲、乙均为互相独立的主体。下列哪项不属于共同试验？",
+        "options": [
+          "甲乙各自投入设备和人力，共同定方案；若失败，各自承担自己的投入损失",
+          "甲投入10万元、乙投入30万元，共同定方案且各自承担失败损失，成功收益按一比三分配",
+          "甲乙共同商定方案，乙提供测试服务；无论试验结果如何，甲都支付乙固定费用并补足乙全部投入，乙不承担失败损失",
+          "两个独立研究团队分别投入仪器，共同选择试验步骤，失败时各自承担仪器耗材损失"
+        ],
+        "answer": "C",
+        "analysis": "问“不属于”，找必要条件被违反的选项。C的乙不承担失败损失，违反各自承担损失。B投入收益不等，但定义明确不要求相等。",
+        "type": "single"
+      },
+      "input": {
+        "selected": "C",
+        "correct": true,
+        "timing": {
+          "solveMs": 150000,
+          "referenceSeconds": 90,
+          "assisted": null
+        },
+        "userApproach": "",
+        "userReason": ""
+      },
+      "expected": {
+        "answer": "C",
+        "capabilityAvailable": true,
+        "acceptedStatuses": [
+          "method",
+          "no_shortcut"
+        ],
+        "standardReasoning": "问“不属于”，找必要条件被违反的选项。C的乙不承担失败损失，违反各自承担损失。B投入收益不等，但定义明确不要求相等。",
+        "expectedMethod": "先标出否定问法，再核对独立主体、分别投入、共同决定、各自风险四要件。",
+        "boundaries": [
+          "不能把不相等误认作不共同",
+          "共同商定方案不是充分条件",
+          "必须保留“不属于”方向"
+        ],
+        "mustNot": [
+          "误选B因为投入不等",
+          "把C共同商定方案当作全部符合"
+        ],
+        "drillMethod": null
+      }
+    },
+    {
+      "id": "MC03",
+      "family": "类比推理",
+      "source": "原创合成，不含真实用户题",
+      "question": {
+        "id": "MC03",
+        "category": "类比推理",
+        "content": "钥匙：开锁。下列哪组关系与题干最相近？",
+        "prompt": "钥匙：开锁。下列哪组关系与题干最相近？",
+        "options": [
+          "扫地：扫帚",
+          "画笔：绘画",
+          "门锁：钥匙",
+          "剪刀：纸张"
+        ],
+        "answer": "B",
+        "analysis": "题干按“工具→通常用途/动作”排序。B画笔→绘画保持同方向。A动作→工具反向；C对象/装置→配套工具；D工具→作用对象而非动作。",
+        "type": "single"
+      },
+      "input": {
+        "selected": "B",
+        "correct": true,
+        "timing": {
+          "solveMs": 150000,
+          "referenceSeconds": 90,
+          "assisted": null
+        },
+        "userApproach": "",
+        "userReason": ""
+      },
+      "expected": {
+        "answer": "B",
+        "capabilityAvailable": true,
+        "acceptedStatuses": [
+          "method",
+          "no_shortcut"
+        ],
+        "standardReasoning": "题干按“工具→通常用途/动作”排序。B画笔→绘画保持同方向。A动作→工具反向；C对象/装置→配套工具；D工具→作用对象而非动作。",
+        "expectedMethod": "先用完整关系句固定“前项工具用于后项动作”，再核对顺序与关系类型。",
+        "boundaries": [
+          "不能只因词语相关就匹配",
+          "顺序不能颠倒",
+          "作用对象不等于动作"
+        ],
+        "mustNot": [
+          "把A反向顺序当等价",
+          "只比较两词是否相关"
+        ],
+        "drillMethod": null
+      }
+    },
+    {
+      "id": "MC04",
+      "family": "类比推理",
+      "source": "原创合成，不含真实用户题",
+      "question": {
+        "id": "MC04",
+        "category": "类比推理",
+        "content": "正方形：矩形：四边形。下列哪组关系与题干最相近？",
+        "prompt": "正方形：矩形：四边形。下列哪组关系与题干最相近？",
+        "options": [
+          "麻雀：鸟类：动物",
+          "车轮：汽车：交通工具",
+          "苹果：香蕉：水果",
+          "学生：学校：机构"
+        ],
+        "answer": "A",
+        "analysis": "题干是逐层种属包含：所有正方形都是矩形，所有矩形都是四边形。A同为逐层种属包含。B、D第一层是部分/成员与整体，不是种属；C前两项是并列类别。",
+        "type": "single"
+      },
+      "input": {
+        "selected": "A",
+        "correct": true,
+        "timing": {
+          "solveMs": 150000,
+          "referenceSeconds": 90,
+          "assisted": null
+        },
+        "userApproach": "",
+        "userReason": ""
+      },
+      "expected": {
+        "answer": "A",
+        "capabilityAvailable": true,
+        "acceptedStatuses": [
+          "method",
+          "no_shortcut"
+        ],
+        "standardReasoning": "题干是逐层种属包含：所有正方形都是矩形，所有矩形都是四边形。A同为逐层种属包含。B、D第一层是部分/成员与整体，不是种属；C前两项是并列类别。",
+        "expectedMethod": "逐层写“所有前项都是后项”，核对两段关系类型与方向一致。",
+        "boundaries": [
+          "部分属于整体不等于种属包含",
+          "前两项并列不能套两层包含",
+          "不额外要求各层划分尺度完全相同"
+        ],
+        "mustNot": [
+          "把车轮当汽车的一种",
+          "因都属于同一大领域就选"
+        ],
+        "drillMethod": null
+      }
+    },
+    {
+      "id": "MC05",
+      "family": "未细分文字判断",
+      "source": "原创合成，不含真实用户题",
+      "question": {
+        "id": "MC05",
+        "category": "判断推理",
+        "content": "一家咖啡馆本月同时延长营业时间并发布了新广告，日均销售额比上月增加。店长只据此认定，新广告本身足以解释销售额的全部增长。这一说法的主要问题是什么？",
+        "prompt": "一家咖啡馆本月同时延长营业时间并发布了新广告，日均销售额比上月增加。店长只据此认定，新广告本身足以解释销售额的全部增长。这一说法的主要问题是什么？",
+        "options": [
+          "只要销售额增长，就不可能是广告带来的",
+          "没有排除延长营业时间等同期变化对销售额的影响",
+          "日均销售额不能用于比较任何两个月的经营情况",
+          "新广告一定没有被顾客看到"
+        ],
+        "answer": "B",
+        "analysis": "同期有营业时间延长，不能只凭前后销售变化把全部增长归因于广告。B指出未排除另一变化；A/D断言广告无效缺证据；C过度否定比较指标。",
+        "type": "single"
+      },
+      "input": {
+        "selected": "B",
+        "correct": true,
+        "timing": {
+          "solveMs": 150000,
+          "referenceSeconds": 90,
+          "assisted": null
+        },
+        "userApproach": "",
+        "userReason": ""
+      },
+      "expected": {
+        "answer": "B",
+        "capabilityAvailable": true,
+        "acceptedStatuses": [
+          "method",
+          "no_shortcut"
+        ],
+        "standardReasoning": "同期有营业时间延长，不能只凭前后销售变化把全部增长归因于广告。B指出未排除另一变化；A/D断言广告无效缺证据；C过度否定比较指标。",
+        "expectedMethod": "区分观察到的变化与因果归因，检查是否有未排除的同期因素。",
+        "boundaries": [
+          "指出证据不足，不断言广告必然无效",
+          "不把同期变化本身当作已证明的原因",
+          "父类未细分不等于题目无法做方法分析"
+        ],
+        "mustNot": [
+          "因category只有判断推理拒绝",
+          "断言延长营业时间一定导致全部增长"
+        ],
+        "drillMethod": null
+      }
+    },
+    {
+      "id": "MC06",
+      "family": "父类定义结构与关键词陷阱",
+      "source": "原创合成，不含真实用户题",
+      "question": {
+        "id": "MC06",
+        "category": "判断推理",
+        "content": "一种设备把“单次授权”限定为同时满足三项要求的许可：已核验操作者身份、明确本次操作的对象与动作、许可在本次请求结束后失效。根据上述约定，下列属于单次授权的是哪项？",
+        "prompt": "一种设备把“单次授权”限定为同时满足三项要求的许可：已核验操作者身份、明确本次操作的对象与动作、许可在本次请求结束后失效。根据上述约定，下列属于单次授权的是哪项？",
+        "options": [
+          "页面写着“单次授权”，但核验一次身份后给予永久通用权限",
+          "系统核验身份后，仅允许对文件X执行本次读取，请求结束即失效",
+          "系统核验身份后允许本次执行任何操作，请求结束即失效",
+          "系统只允许本次读取文件X且随后失效，但完全未核验操作者身份"
+        ],
+        "answer": "B",
+        "analysis": "三要件为身份核验、对象动作具体、请求结束失效，缺一不可。B三项均满足。A有关键词但权限永久通用；C没有明确对象动作；D没有核验身份。",
+        "type": "single"
+      },
+      "input": {
+        "selected": "B",
+        "correct": true,
+        "timing": {
+          "solveMs": 150000,
+          "referenceSeconds": 90,
+          "assisted": null
+        },
+        "userApproach": "",
+        "userReason": ""
+      },
+      "expected": {
+        "answer": "B",
+        "capabilityAvailable": true,
+        "acceptedStatuses": [
+          "method",
+          "no_shortcut"
+        ],
+        "standardReasoning": "三要件为身份核验、对象动作具体、请求结束失效，缺一不可。B三项均满足。A有关键词但权限永久通用；C没有明确对象动作；D没有核验身份。",
+        "expectedMethod": "把三个必要条件作为检查表，依据事实逐项核对而非匹配“单次授权”标签。",
+        "boundaries": [
+          "题目给出的约定优先于生活常识或术语直觉",
+          "三个条件是合取，满足两项仍不足",
+          "源题型保持父判断，结构识别只作展示/方法建议"
+        ],
+        "mustNot": [
+          "看见A出现单次授权直接选A",
+          "认为身份核验是可选条件"
+        ],
+        "drillMethod": null
+      }
+    }
+  ]
+}

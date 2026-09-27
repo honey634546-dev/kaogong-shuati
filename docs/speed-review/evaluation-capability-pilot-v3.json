@@ -1,0 +1,533 @@
+{
+  "version": 3,
+  "casesVersion": 3,
+  "generatedAt": "2026-09-27T04:48:09.034Z",
+  "mode": "real-provider",
+  "provenance": {
+    "casesSha256": "59c956b7a8b818db110e97ba1a3da738302c5889be25e1c8242762cd755bf7c7",
+    "coreSha256": "2da564cb4009a01ac215335e29f3c77d700e5b938405f99dd796f6ee3dbb6705"
+  },
+  "model": "deepseek-v4.1-flash",
+  "settings": {
+    "role": "xingce-explainer",
+    "temperature": 0.2,
+    "reasoningEffort": "low",
+    "maxTokens": 12000,
+    "timeoutMs": 60000,
+    "concurrency": 2
+  },
+  "evidenceBoundary": "Synthetic offline/oracle and real-provider checks do not establish learning improvement. Schema validity alone is not quality approval. Each live response requires an independent reasoning review. This revised four-case run is not a user validation study and did not pass all quality checks; historical failures are preserved.",
+  "cases": [
+    {
+      "id": "SR01",
+      "category": "数量关系",
+      "oracle": {
+        "status": "verified",
+        "value": 99.5,
+        "operation": "multiply"
+      },
+      "expected": {
+        "answer": "B",
+        "status": [
+          "method"
+        ],
+        "result": 99.5,
+        "proof": {
+          "operation": "multiply",
+          "operands": [
+            796,
+            0.125
+          ],
+          "value": 99.5
+        },
+        "must": [
+          "将12.5%等价转为1/8",
+          "步骤得99.5",
+          "说明等价转换边界"
+        ],
+        "mustNot": [
+          "断言用户不会分数",
+          "保证下次30秒完成"
+        ],
+        "capability": {
+          "available": true,
+          "category": "数量关系",
+          "code": "available"
+        }
+      },
+      "capability": {
+        "available": true,
+        "code": "available",
+        "category": "数量关系",
+        "label": "数量关系",
+        "focus": "比较列式、代入与计算步骤，检查是否有更省步骤的解法。"
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2484
+      },
+      "elapsedMs": 10463,
+      "provider": "completed",
+      "model": "deepseek-v4.1-flash",
+      "usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cached_tokens": 0,
+        "completion_thinking_tokens": 1196,
+        "completion_tokens": 1603,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 0,
+          "reasoning_tokens": 1196,
+          "rejected_prediction_tokens": 0
+        },
+        "credit": 0,
+        "prompt_cache_hit_tokens": 640,
+        "prompt_cache_miss_tokens": 835,
+        "prompt_cache_write_tokens": 0,
+        "prompt_tokens": 1475,
+        "prompt_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 640,
+          "reasoning_tokens": 0,
+          "rejected_prediction_tokens": 0
+        },
+        "total_tokens": 3078
+      },
+      "rawContent": "{\"status\":\"method\",\"methodName\":\"12.5%化1/8后拆分除法\",\"recognition\":\"题干出现 796×12.5%，12.5% 是常见可化分数百分数；选项较接近，适合精确计算而非只估算。\",\"steps\":[\"将12.5%化为最简分数：12.5%=12.5/100=1/8。\",\"原式变为796×(1/8)=796÷8。\",\"把796拆成800−4，便于口算。\",\"分别除以8：800÷8=100，4÷8=0.5。\",\"相减得100−0.5=99.5，对应选项B。\"],\"whyCorrect\":\"12.5%=0.125=1/8，乘1/8等价于除以8。又因796=800−4，且除法对减法可分配：(800−4)÷8=800÷8−4÷8=100−0.5=99.5，与直接计算796×0.125一致。\",\"applicability\":\"适用于百分数可化为简单分数且被乘数便于整除或拆分的精确计算，如12.5%=1/8、25%=1/4、20%=1/5。本题796接近800，拆成800−4合适。\",\"caution\":\"不要把12.5%误当作8%，也不要把除以8写成乘8；拆分后不要漏减0.5。若百分数不便化简洁分数或数字不便拆分，直接小数乘法或估算筛选更稳。\",\"diagnosis\":\"用户未描述原解法，仅凭150秒用时无法确定慢在阅读、列式、计算还是犹豫；单次选对且assisted未记录，不能据此认定已掌握或提速。本题正确性已独立核对，若复盘可只练习常见百分数化分数和拆分除法。\",\"drillMethod\":\"percent_fraction\"}",
+      "normalized": {
+        "status": "method",
+        "methodName": "12.5%化1/8后拆分除法",
+        "recognition": "题干出现 796×12.5%，12.5% 是常见可化分数百分数；选项较接近，适合精确计算而非只估算。",
+        "whyCorrect": "12.5%=0.125=1/8，乘1/8等价于除以8。又因796=800−4，且除法对减法可分配：(800−4)÷8=800÷8−4÷8=100−0.5=99.5，与直接计算796×0.125一致。",
+        "applicability": "适用于百分数可化为简单分数且被乘数便于整除或拆分的精确计算，如12.5%=1/8、25%=1/4、20%=1/5。本题796接近800，拆成800−4合适。",
+        "caution": "不要把12.5%误当作8%，也不要把除以8写成乘8；拆分后不要漏减0.5。若百分数不便化简洁分数或数字不便拆分，直接小数乘法或估算筛选更稳。",
+        "diagnosis": "用户未描述原解法，仅凭150秒用时无法确定慢在阅读、列式、计算还是犹豫；单次选对且assisted未记录，不能据此认定已掌握或提速。本题正确性已独立核对，若复盘可只练习常见百分数化分数和拆分除法。",
+        "steps": [
+          "将12.5%化为最简分数：12.5%=12.5/100=1/8。",
+          "原式变为796×(1/8)=796÷8。",
+          "把796拆成800−4，便于口算。",
+          "分别除以8：800÷8=100，4÷8=0.5。",
+          "相减得100−0.5=99.5，对应选项B。"
+        ],
+        "drillMethod": "percent_fraction"
+      },
+      "schema": "passed",
+      "semanticReview": {
+        "status": "passed",
+        "mathematicalOrLogicalCorrectness": "passed",
+        "forcedShortcut": "not_observed",
+        "unsupportedSlowCause": "not_observed",
+        "applicabilityBoundary": "passed",
+        "assistanceEvidence": "unknown_not_independent",
+        "note": "99.5与分数变换核实正确，适用条件具体，未因耗时诊断慢因。"
+      }
+    },
+    {
+      "id": "SR03",
+      "category": "资料分析",
+      "oracle": {
+        "status": "verified",
+        "value": 119.99999999999999,
+        "operation": "divide"
+      },
+      "expected": {
+        "answer": "B",
+        "status": [
+          "method"
+        ],
+        "result": 120,
+        "proof": {
+          "operation": "divide",
+          "operands": [
+            132,
+            1.1
+          ],
+          "value": 120
+        },
+        "must": [
+          "本期除以1+增长率",
+          "说明基数不可混用"
+        ],
+        "mustNot": [
+          "用132×0.9反推基期"
+        ],
+        "capability": {
+          "available": true,
+          "category": "资料分析",
+          "code": "available"
+        }
+      },
+      "capability": {
+        "available": true,
+        "code": "available",
+        "category": "资料分析",
+        "label": "资料分析",
+        "focus": "核对文字材料、统计口径与列式，比较估算或精算方法。"
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2501
+      },
+      "elapsedMs": 11880,
+      "provider": "completed",
+      "model": "deepseek-v4.1-flash",
+      "usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cached_tokens": 0,
+        "completion_thinking_tokens": 1007,
+        "completion_tokens": 1448,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 0,
+          "reasoning_tokens": 1007,
+          "rejected_prediction_tokens": 0
+        },
+        "credit": 0,
+        "prompt_cache_hit_tokens": 1152,
+        "prompt_cache_miss_tokens": 325,
+        "prompt_cache_write_tokens": 0,
+        "prompt_tokens": 1477,
+        "prompt_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 1152,
+          "reasoning_tokens": 0,
+          "rejected_prediction_tokens": 0
+        },
+        "total_tokens": 2925
+      },
+      "rawContent": "{\"status\":\"method\",\"methodName\":\"增长率求基期：今年值除以1加增长率\",\"recognition\":\"已知今年产量132万件，同比增长10%，求去年产量；选项中有用今年值直接减今年值×10%得到的118.8等干扰项。\",\"steps\":[\"确认所求为基期量：去年产量；今年为现期量，同比增长率为10%。\",\"写关系式：今年=去年×(1+增长率)，即132=去年×1.1。\",\"求去年：去年=132÷1.1。\",\"用分数辅助计算：10%=1/10，今年是去年的11/10，所以去年=132×10/11=12×10=120。\",\"对照选项选B，并检查未把今年当作基数去减10%。\"],\"whyCorrect\":\"同比增长10%表示今年比去年多去年产量的10%，所以今年=去年+去年×10%=去年×1.1；反求去年应为132÷1.1=120。132−132×10%=118.8是用今年值作基数，与‘同比增长’的基数应为去年不符。\",\"applicability\":\"适用于同一统计口径下，已知现期量和同比增长率、求基期量；本题增长率10%便于用分数换算。若增长率接近-100%、口径变化或时间范围不一致，不能直接套用。\",\"caution\":\"不要用现期量直接加减现期量乘增长率来还原基期；下降率对应除以1−增长率。选项118.8和145.2分别是基数错用和方向错用的干扰项。\",\"diagnosis\":\"用户选择B正确，但未填写解题过程，且assisted为null，无法判断是否独立作答；单次选对也可能包含猜测，不能据此宣称已掌握。用时150秒高于参考75秒只能说明这题值得回看，不能单独证明慢在阅读、计算、知识或犹豫；若原过程是列132÷1.1并算对，则主要可练10%=1/10的换算与基期公式识别。\",\"drillMethod\":\"growth_base\"}",
+      "normalized": {
+        "status": "method",
+        "methodName": "增长率求基期：今年值除以1加增长率",
+        "recognition": "已知今年产量132万件，同比增长10%，求去年产量；选项中有用今年值直接减今年值×10%得到的118.8等干扰项。",
+        "whyCorrect": "同比增长10%表示今年比去年多去年产量的10%，所以今年=去年+去年×10%=去年×1.1；反求去年应为132÷1.1=120。132−132×10%=118.8是用今年值作基数，与‘同比增长’的基数应为去年不符。",
+        "applicability": "适用于同一统计口径下，已知现期量和同比增长率、求基期量；本题增长率10%便于用分数换算。若增长率接近-100%、口径变化或时间范围不一致，不能直接套用。",
+        "caution": "不要用现期量直接加减现期量乘增长率来还原基期；下降率对应除以1−增长率。选项118.8和145.2分别是基数错用和方向错用的干扰项。",
+        "diagnosis": "用户选择B正确，但未填写解题过程，且assisted为null，无法判断是否独立作答；单次选对也可能包含猜测，不能据此宣称已掌握。用时150秒高于参考75秒只能说明这题值得回看，不能单独证明慢在阅读、计算、知识或犹豫；若原过程是列132÷1.1并算对，则主要可练10%=1/10的换算与基期公式识别。",
+        "steps": [
+          "确认所求为基期量：去年产量；今年为现期量，同比增长率为10%。",
+          "写关系式：今年=去年×(1+增长率)，即132=去年×1.1。",
+          "求去年：去年=132÷1.1。",
+          "用分数辅助计算：10%=1/10，今年是去年的11/10，所以去年=132×10/11=12×10=120。",
+          "对照选项选B，并检查未把今年当作基数去减10%。"
+        ],
+        "drillMethod": "growth_base"
+      },
+      "schema": "passed",
+      "semanticReview": {
+        "status": "failed",
+        "mathematicalOrLogicalCorrectness": "wrong_applicability_boundary",
+        "forcedShortcut": "not_observed",
+        "unsupportedSlowCause": "not_observed",
+        "applicabilityBoundary": "failed",
+        "assistanceEvidence": "unknown_not_independent",
+        "note": "正确结果120，但applicability称增长率接近-100%不能用公式；当r>-100%且口径一致时基期=现期/(1+r)仍成立。caution的“下降率对应1−增长率”还混淆正下降率与负增长率口径。"
+      }
+    },
+    {
+      "id": "SR11",
+      "category": "判断推理",
+      "oracle": {
+        "status": "manual_reasoning_required"
+      },
+      "expected": {
+        "answer": "B",
+        "status": [
+          "method"
+        ],
+        "must": [
+          "使用逆否命题",
+          "区分否后与肯后"
+        ],
+        "mustNot": [
+          "额外推断档案原因或永久状态"
+        ],
+        "capability": {
+          "available": true,
+          "category": "逻辑判断",
+          "code": "available"
+        }
+      },
+      "capability": {
+        "available": true,
+        "code": "available",
+        "category": "逻辑判断",
+        "label": "逻辑判断",
+        "focus": "梳理条件关系与推导顺序，核对每一步能否成立。"
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2519
+      },
+      "elapsedMs": 12058,
+      "provider": "completed",
+      "model": "deepseek-v4.1-flash",
+      "usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cached_tokens": 0,
+        "completion_thinking_tokens": 871,
+        "completion_tokens": 1230,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 0,
+          "reasoning_tokens": 871,
+          "rejected_prediction_tokens": 0
+        },
+        "credit": 0,
+        "prompt_cache_hit_tokens": 1152,
+        "prompt_cache_miss_tokens": 336,
+        "prompt_cache_write_tokens": 0,
+        "prompt_tokens": 1488,
+        "prompt_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 1152,
+          "reasoning_tokens": 0,
+          "rejected_prediction_tokens": 0
+        },
+        "total_tokens": 2718
+      },
+      "rawContent": "{\"status\":\"method\",\"methodName\":\"充分条件逆否命题法\",\"recognition\":\"题干出现“如果P，那么Q”，又给出“非Q”，问必然成立项，优先考虑逆否命题。\",\"steps\":[\"把“档案已经审核通过”记为P，把“档案会被归档”记为Q。\",\"题干条件写成：P→Q。\",\"已知“该档案没有被归档”，即非Q。\",\"对P→Q取逆否，得到非Q→非P。\",\"由非Q推出非P，即“档案未审核通过”。\",\"对应选项B。\"],\"whyCorrect\":\"充分条件命题P→Q与其逆否命题非Q→非P等值；已知后件Q为假，则前件P必为假，因此B必然成立。\",\"applicability\":\"适用于题干明确给出“如果P，那么Q”这类充分条件关系，并且已知后件为假的情形。若题干不是充分条件，或已知的是非P，则不能套用。\",\"caution\":\"不要混淆有效式：由非Q推出非P有效；由非P推出非Q无效，由Q推出P也无效。选项C“永远不能审核”超出题干单个档案条件，不能推出。\",\"diagnosis\":\"你选B且与逆否推理一致，但userApproach为空，无法判断你是直接识别逆否还是逐项排除；assisted为null，未记录辅助情况，不能据此判断独立作答或已掌握。仅凭150秒和参考75秒，无法确定慢在阅读、符号化、推理还是犹豫。复盘时可用符号化固定检查“P→Q，非Q，所以非P”。\",\"drillMethod\":null}",
+      "normalized": {
+        "status": "method",
+        "methodName": "充分条件逆否命题法",
+        "recognition": "题干出现“如果P，那么Q”，又给出“非Q”，问必然成立项，优先考虑逆否命题。",
+        "whyCorrect": "充分条件命题P→Q与其逆否命题非Q→非P等值；已知后件Q为假，则前件P必为假，因此B必然成立。",
+        "applicability": "适用于题干明确给出“如果P，那么Q”这类充分条件关系，并且已知后件为假的情形。若题干不是充分条件，或已知的是非P，则不能套用。",
+        "caution": "不要混淆有效式：由非Q推出非P有效；由非P推出非Q无效，由Q推出P也无效。选项C“永远不能审核”超出题干单个档案条件，不能推出。",
+        "diagnosis": "你选B且与逆否推理一致，但userApproach为空，无法判断你是直接识别逆否还是逐项排除；assisted为null，未记录辅助情况，不能据此判断独立作答或已掌握。仅凭150秒和参考75秒，无法确定慢在阅读、符号化、推理还是犹豫。复盘时可用符号化固定检查“P→Q，非Q，所以非P”。",
+        "steps": [
+          "把“档案已经审核通过”记为P，把“档案会被归档”记为Q。",
+          "题干条件写成：P→Q。",
+          "已知“该档案没有被归档”，即非Q。",
+          "对P→Q取逆否，得到非Q→非P。",
+          "由非Q推出非P，即“档案未审核通过”。",
+          "对应选项B。"
+        ],
+        "drillMethod": null
+      },
+      "schema": "passed",
+      "semanticReview": {
+        "status": "passed",
+        "mathematicalOrLogicalCorrectness": "passed",
+        "forcedShortcut": "not_observed",
+        "unsupportedSlowCause": "not_observed",
+        "applicabilityBoundary": "passed",
+        "assistanceEvidence": "unknown_not_independent",
+        "note": "逆否等值与无效反推区分正确，无原方法或独立作答的无证据断言。"
+      }
+    },
+    {
+      "id": "SR14",
+      "category": "言语理解",
+      "oracle": {
+        "status": "manual_reasoning_required"
+      },
+      "expected": {
+        "answer": "C",
+        "status": [
+          "method"
+        ],
+        "must": [
+          "结合全文与结论句验证C",
+          "方法是候选而非关键词必胜"
+        ],
+        "mustNot": [
+          "看到但就机械选择后半句",
+          "主旨题一律只看最后一句"
+        ],
+        "capability": {
+          "available": true,
+          "category": "言语理解",
+          "code": "available"
+        }
+      },
+      "capability": {
+        "available": true,
+        "code": "available",
+        "category": "言语理解",
+        "label": "言语理解",
+        "focus": "梳理文段或语境，比较选项依据与排除顺序。"
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2575
+      },
+      "elapsedMs": 11195,
+      "provider": "completed",
+      "model": "deepseek-v4.1-flash",
+      "usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cached_tokens": 0,
+        "completion_thinking_tokens": 950,
+        "completion_tokens": 1497,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 0,
+          "reasoning_tokens": 950,
+          "rejected_prediction_tokens": 0
+        },
+        "credit": 0,
+        "prompt_cache_hit_tokens": 1152,
+        "prompt_cache_miss_tokens": 366,
+        "prompt_cache_write_tokens": 0,
+        "prompt_tokens": 1518,
+        "prompt_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 1152,
+          "reasoning_tokens": 0,
+          "rejected_prediction_tokens": 0
+        },
+        "total_tokens": 3015
+      },
+      "rawContent": "{\"status\":\"method\",\"methodName\":\"尾句观点概括法\",\"recognition\":\"文段先讲试点现象，再用“但”指出局限，最后以“管理部门认为……”给出观点或对策；设问为“主要强调什么”。这类题的重点通常落在末句观点，而不是前面的现象。\",\"steps\":[\"先定位末句“管理部门认为，开放时间调整应结合各馆周边交通与读者需求”，把它作为主旨候选。\",\"提取核心对象：图书馆开放时间调整。\",\"提取条件或做法：结合各馆周边交通与读者需求，即因馆制宜、结合具体条件。\",\"概括为：图书馆开放安排应结合具体条件，对应选项C。\",\"排除A：“所有图书馆都应通宵开放”绝对化，且原文只说试点延长周末开放时间，未主张通宵。\",\"排除B：原文说部分分馆因交通不便利用率仍低，并未说延长开放时间导致利用率下降；排除D：原文未说交通改善是唯一任务。\",\"确认C与末句观点一致，选择C。\"],\"whyCorrect\":\"文段的论证结构是：延长开放有成效，但部分分馆受交通条件限制，因此管理部门认为开放时间调整要结合周边交通与读者需求。选项C“图书馆开放安排应结合具体条件”正是对该末句观点的同义概括。A、B、D分别存在绝对化、因果偷换和“唯一任务”的过度推断，均不能由原文推出。\",\"applicability\":\"适用于主旨概括题中，文段先摆现象或问题，末句出现“应”“需”“认为”“因此”等观点、对策或结论标志，且设问问“主要强调”“意在说明”等。若末句只是他人观点而作者态度不明，或文段为并列结构，则不能只靠末句。\",\"caution\":\"不能看到“应”就机械选对策项，必须核对全文论述对象和条件是否一致。也不能把“结合各馆周边交通与读者需求”扩大成所有图书馆任务或交通改善是唯一任务；选项中出现“所有”“唯一”“必然导致”等绝对化表述时要谨慎。\",\"diagnosis\":\"你选择C且正确，但未描述自己的解题过程，assisted为null、情况未知，因此仅凭150秒用时无法确定慢在阅读、选项比较、犹豫还是其他环节，也不能据此判断已掌握或提速。复盘时可回看当时是否在多个选项间反复；若需要稳定做法，可练习先锁定末句观点，再逐项排查绝对化、因果偷换和范围扩大。\",\"drillMethod\":null}",
+      "error": "提速复盘步骤数量无效",
+      "schema": "failed",
+      "semanticReview": {
+        "status": "failed",
+        "mathematicalOrLogicalCorrectness": "passed",
+        "forcedShortcut": "not_observed",
+        "unsupportedSlowCause": "not_observed",
+        "applicabilityBoundary": "passed",
+        "assistanceEvidence": "unknown_not_independent",
+        "note": "模型输出7步而契约最多6步，严格解析器拒收；答案C、结论句与全文核对及排除依据正确，但该回复不能作为成功产品结果。"
+      }
+    }
+  ],
+  "capabilityChecks": [
+    {
+      "name": "明确数量关系开放",
+      "expected": "available",
+      "actual": "available",
+      "available": true,
+      "status": "passed"
+    },
+    {
+      "name": "明确常识分类不可用",
+      "expected": "category_unsupported",
+      "actual": "category_unsupported",
+      "available": false,
+      "status": "passed"
+    },
+    {
+      "name": "明确政治理论分类不可用",
+      "expected": "category_unsupported",
+      "actual": "category_unsupported",
+      "available": false,
+      "status": "passed"
+    },
+    {
+      "name": "仅父类判断推理不开放",
+      "expected": "category_unsupported",
+      "actual": "category_unsupported",
+      "available": false,
+      "status": "passed"
+    },
+    {
+      "name": "父类与细类逻辑判断共同存在开放",
+      "expected": "available",
+      "actual": "available",
+      "available": true,
+      "status": "passed"
+    },
+    {
+      "name": "言语题干提及知识不误拦截",
+      "expected": "available",
+      "actual": "available",
+      "available": true,
+      "status": "passed"
+    },
+    {
+      "name": "未知题型不靠题干猜测分类",
+      "expected": "category_unknown",
+      "actual": "category_unknown",
+      "available": false,
+      "status": "passed"
+    },
+    {
+      "name": "subject不能冒充题型",
+      "expected": "category_unknown",
+      "actual": "category_unknown",
+      "available": false,
+      "status": "passed"
+    },
+    {
+      "name": "题型冲突不可用",
+      "expected": "category_conflict",
+      "actual": "category_conflict",
+      "available": false,
+      "status": "passed"
+    },
+    {
+      "name": "完整文字资料开放",
+      "expected": "available",
+      "actual": "available",
+      "available": true,
+      "status": "passed"
+    },
+    {
+      "name": "资料图片缺失标记不可用",
+      "expected": "image_required",
+      "actual": "image_required",
+      "available": false,
+      "status": "passed"
+    },
+    {
+      "name": "资料缺图文本标记不可用",
+      "expected": "image_required",
+      "actual": "image_required",
+      "available": false,
+      "status": "passed"
+    },
+    {
+      "name": "占位选项不可用",
+      "expected": "incomplete_question",
+      "actual": "incomplete_question",
+      "available": false,
+      "status": "passed"
+    },
+    {
+      "name": "缺少答案不可用",
+      "expected": "invalid_answer",
+      "actual": "invalid_answer",
+      "available": false,
+      "status": "passed"
+    },
+    {
+      "name": "明确争议答案不可用",
+      "expected": "invalid_answer",
+      "actual": "invalid_answer",
+      "available": false,
+      "status": "passed"
+    }
+  ],
+  "summary": {
+    "total": 4,
+    "arithmeticOraclesVerified": 2,
+    "providerResponses": 4,
+    "schemaPasses": 3,
+    "deterministicSkips": 0,
+    "unavailableInputs": 0,
+    "failures": 1,
+    "qualityDecision": "two_passed_one_boundary_error_one_schema_rejection",
+    "semanticPasses": 2,
+    "semanticBoundaryFailures": [
+      "SR03"
+    ],
+    "schemaFailures": [
+      "SR14"
+    ]
+  },
+  "reviewedAt": "2026-09-27T04:50:29.386Z"
+}

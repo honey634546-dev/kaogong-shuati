@@ -1,0 +1,18 @@
+{
+  "generatedAt": "2026-09-27T04:49:44.586Z",
+  "source": "Read-only local custom_questions aggregate; no question text or identities exported",
+  "coreSha256": "30cd1292a048f188946d0a325fdd9b2001d532cbfa20cdc7faa9fd6f7a89689e",
+  "total": 705,
+  "eligible": 238,
+  "eligibleByCategory": {
+    "言语理解": 153,
+    "数量关系": 70,
+    "资料分析": 15
+  },
+  "rejectedByCode": {
+    "category_unsupported": 340,
+    "image_required": 127
+  },
+  "meaning": "Eligibility for candidate method analysis only, not verified shortcuts or measured learning gains. Based on existing category metadata and input completeness.",
+  "note": "The final added shared-material completeness guard does not change this read-only aggregate: the audited local bank has no explicit material groups."
+}

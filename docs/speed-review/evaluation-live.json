@@ -1,0 +1,1755 @@
+{
+  "version": 1,
+  "generatedAt": "2026-09-27T03:57:31.480Z",
+  "mode": "real-provider",
+  "provenance": {
+    "casesSha256": "164792f9cce606c0d3c8ae3bada6819eabdbdb258f8f9c46c3c41a825b3c947a",
+    "coreSha256": "8929f92e0db747ffc543b7e49f6f1be92986ed5ca6743672585f3bad661d2dbf"
+  },
+  "model": "deepseek-v4.1-flash",
+  "settings": {
+    "role": "xingce-explainer",
+    "temperature": 0.2,
+    "reasoningEffort": "low",
+    "maxTokens": 12000,
+    "timeoutMs": 60000,
+    "concurrency": 2
+  },
+  "evidenceBoundary": "Synthetic offline/oracle and real-provider checks do not establish learning improvement. Schema validity alone is not quality approval. Each live response requires an independent reasoning review.",
+  "cases": [
+    {
+      "id": "SR01",
+      "category": "数量关系",
+      "oracle": {
+        "status": "verified",
+        "value": 99.5,
+        "operation": "multiply"
+      },
+      "expected": {
+        "answer": "B",
+        "status": [
+          "method"
+        ],
+        "result": 99.5,
+        "proof": {
+          "operation": "multiply",
+          "operands": [
+            796,
+            0.125
+          ],
+          "value": 99.5
+        },
+        "must": [
+          "将12.5%等价转为1/8",
+          "步骤得99.5",
+          "说明等价转换边界"
+        ],
+        "mustNot": [
+          "断言用户不会分数",
+          "保证下次30秒完成"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2107
+      },
+      "elapsedMs": 10353,
+      "provider": "completed",
+      "model": "deepseek-v4.1-flash",
+      "usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cached_tokens": 0,
+        "completion_thinking_tokens": 699,
+        "completion_tokens": 1113,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 0,
+          "reasoning_tokens": 699,
+          "rejected_prediction_tokens": 0
+        },
+        "credit": 0,
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 1296,
+        "prompt_cache_write_tokens": 0,
+        "prompt_tokens": 1296,
+        "prompt_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 0,
+          "reasoning_tokens": 0,
+          "rejected_prediction_tokens": 0
+        },
+        "total_tokens": 2409
+      },
+      "rawContent": "{\"status\":\"method\",\"methodName\":\"12.5%化1/8\",\"recognition\":\"题目出现12.5%，且要求精确计算；12.5%是常见的可化为简单分数的百分数。用户未描述原解法，仅凭150秒用时不能确定慢因。\",\"steps\":[\"识别 12.5%=1/8。\",\"把 796×12.5% 转化为 796÷8。\",\"将 796 拆成 800−4。\",\"分别计算 800÷8=100，4÷8=0.5。\",\"相减得 99.5，对照选项选 B。\"],\"whyCorrect\":\"12.5% 等于 12.5/100，即 125/1000，约分后为 1/8；因此 796×12.5% 等于 796÷8。800÷8=100，4÷8=0.5，所以 796÷8=99.5，与选项 B 一致。\",\"applicability\":\"适用于百分数可精确化为常见简单分数的情况，尤其是 12.5%=1/8、25%=1/4、37.5%=3/8 等；本题中 12.5% 是精确值，可直接转化。\",\"caution\":\"注意 12.5% 不是 12.5，也不是千分数 12.5‰；化分数时必须保持百分数含义。若题目允许近似或百分数不便于精确约分，应改用常规乘法或估算后核对选项。\",\"diagnosis\":\"本题选对，但用户没有描述原解法，也没有提供过程证据，因此仅凭用时无法判断慢在阅读、计算、知识还是犹豫。若原做法是竖式乘法，可单独练习百分数化分数，把 12.5% 直接视为 1/8；单次选对不能据此宣称已掌握或已提速。\",\"drillMethod\":\"percent_fraction\"}",
+      "normalized": {
+        "status": "method",
+        "methodName": "12.5%化1/8",
+        "recognition": "题目出现12.5%，且要求精确计算；12.5%是常见的可化为简单分数的百分数。用户未描述原解法，仅凭150秒用时不能确定慢因。",
+        "whyCorrect": "12.5% 等于 12.5/100，即 125/1000，约分后为 1/8；因此 796×12.5% 等于 796÷8。800÷8=100，4÷8=0.5，所以 796÷8=99.5，与选项 B 一致。",
+        "applicability": "适用于百分数可精确化为常见简单分数的情况，尤其是 12.5%=1/8、25%=1/4、37.5%=3/8 等；本题中 12.5% 是精确值，可直接转化。",
+        "caution": "注意 12.5% 不是 12.5，也不是千分数 12.5‰；化分数时必须保持百分数含义。若题目允许近似或百分数不便于精确约分，应改用常规乘法或估算后核对选项。",
+        "diagnosis": "本题选对，但用户没有描述原解法，也没有提供过程证据，因此仅凭用时无法判断慢在阅读、计算、知识还是犹豫。若原做法是竖式乘法，可单独练习百分数化分数，把 12.5% 直接视为 1/8；单次选对不能据此宣称已掌握或已提速。",
+        "steps": [
+          "识别 12.5%=1/8。",
+          "把 796×12.5% 转化为 796÷8。",
+          "将 796 拆成 800−4。",
+          "分别计算 800÷8=100，4÷8=0.5。",
+          "相减得 99.5，对照选项选 B。"
+        ],
+        "drillMethod": "percent_fraction"
+      },
+      "schema": "passed",
+      "semanticReview": {
+        "status": "passed",
+        "mathematicalOrLogicalCorrectness": "passed",
+        "forcedShortcut": "not_observed",
+        "unsupportedSlowCause": "not_observed",
+        "applicabilityBoundary": "present",
+        "note": "99.5核算正确；精确百分比分数等价。"
+      }
+    },
+    {
+      "id": "SR02",
+      "category": "资料分析",
+      "oracle": {
+        "status": "verified",
+        "value": 80,
+        "operation": "multiply"
+      },
+      "expected": {
+        "answer": "C",
+        "status": [
+          "method"
+        ],
+        "result": 80,
+        "proof": {
+          "operation": "multiply",
+          "operands": [
+            625,
+            0.128
+          ],
+          "value": 80
+        },
+        "must": [
+          "精确结果80",
+          "12.8%不能直接按1/8"
+        ],
+        "mustNot": [
+          "把12.8%近似成12.5%而不补差"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2147
+      },
+      "elapsedMs": 17535,
+      "provider": "completed",
+      "model": "deepseek-v4.1-flash",
+      "usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cached_tokens": 0,
+        "completion_thinking_tokens": 2106,
+        "completion_tokens": 2567,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 0,
+          "reasoning_tokens": 2106,
+          "rejected_prediction_tokens": 0
+        },
+        "credit": 0,
+        "prompt_cache_hit_tokens": 896,
+        "prompt_cache_miss_tokens": 419,
+        "prompt_cache_write_tokens": 0,
+        "prompt_tokens": 1315,
+        "prompt_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 896,
+          "reasoning_tokens": 0,
+          "rejected_prediction_tokens": 0
+        },
+        "total_tokens": 3882
+      },
+      "rawContent": "{\"status\":\"method\",\"methodName\":\"百分数化分数约分法\",\"recognition\":\"百分数含小数且乘数与百分数约分后的分母有整除关系时，可优先转分数；本题12.8%可化为16/125，625是125的5倍。参考答案C与解析计算一致，无冲突。\",\"steps\":[\"把12.8%写成分数：12.8%=12.8/100=128/1000。\",\"约分：128/1000=16/125。\",\"代入原式：625×12.8%=625×16/125。\",\"先算625÷125=5，再算5×16=80，对应选项C。\",\"核对：A=78.125只是625×12.5%，不是12.8%。\"],\"whyCorrect\":\"12.8%=128/1000=16/125，因此625×12.8%=625×16/125=(625/125)×16=5×16=80。全过程是等价变形，不使用近似值，结果精确且与参考答案C一致。\",\"applicability\":\"适用于百分数能化为较简分数，且乘数与该分数分母可整除或约分明显时。若分母与乘数无明显整除关系，转分数未必更省，可改用精确小数乘法并注意小数位。\",\"caution\":\"不要只取12.5%计算，A=78.125正是漏掉0.3%部分的结果；约分要准确，12.8%不能写成12.5%或13%；若用小数法，0.128的小数点不能移位错误。禁止近似值的要求下，不能四舍五入。\",\"diagnosis\":\"用户未描述原解法，仅凭150秒无法确定慢因。选A与625×12.5%=78.125一致，可能提示漏算0.3%或将12.8%近似为12.5%，但这是从选项反推，不能确定实际过程。本题建议先固定百分数化分数并约分的检查点，再用不同数字练习迁移；单次独立作答错误不足以判断掌握程度或速度问题。\",\"drillMethod\":\"percent_fraction\"}",
+      "normalized": {
+        "status": "method",
+        "methodName": "百分数化分数约分法",
+        "recognition": "百分数含小数且乘数与百分数约分后的分母有整除关系时，可优先转分数；本题12.8%可化为16/125，625是125的5倍。参考答案C与解析计算一致，无冲突。",
+        "whyCorrect": "12.8%=128/1000=16/125，因此625×12.8%=625×16/125=(625/125)×16=5×16=80。全过程是等价变形，不使用近似值，结果精确且与参考答案C一致。",
+        "applicability": "适用于百分数能化为较简分数，且乘数与该分数分母可整除或约分明显时。若分母与乘数无明显整除关系，转分数未必更省，可改用精确小数乘法并注意小数位。",
+        "caution": "不要只取12.5%计算，A=78.125正是漏掉0.3%部分的结果；约分要准确，12.8%不能写成12.5%或13%；若用小数法，0.128的小数点不能移位错误。禁止近似值的要求下，不能四舍五入。",
+        "diagnosis": "用户未描述原解法，仅凭150秒无法确定慢因。选A与625×12.5%=78.125一致，可能提示漏算0.3%或将12.8%近似为12.5%，但这是从选项反推，不能确定实际过程。本题建议先固定百分数化分数并约分的检查点，再用不同数字练习迁移；单次独立作答错误不足以判断掌握程度或速度问题。",
+        "steps": [
+          "把12.8%写成分数：12.8%=12.8/100=128/1000。",
+          "约分：128/1000=16/125。",
+          "代入原式：625×12.8%=625×16/125。",
+          "先算625÷125=5，再算5×16=80，对应选项C。",
+          "核对：A=78.125只是625×12.5%，不是12.8%。"
+        ],
+        "drillMethod": "percent_fraction"
+      },
+      "schema": "passed",
+      "semanticReview": {
+        "status": "passed",
+        "mathematicalOrLogicalCorrectness": "passed",
+        "forcedShortcut": "not_observed",
+        "unsupportedSlowCause": "not_observed",
+        "applicabilityBoundary": "present",
+        "note": "80正确；拒绝12.8%=1/8近似误用。"
+      }
+    },
+    {
+      "id": "SR03",
+      "category": "资料分析",
+      "oracle": {
+        "status": "verified",
+        "value": 119.99999999999999,
+        "operation": "divide"
+      },
+      "expected": {
+        "answer": "B",
+        "status": [
+          "method"
+        ],
+        "result": 120,
+        "proof": {
+          "operation": "divide",
+          "operands": [
+            132,
+            1.1
+          ],
+          "value": 120
+        },
+        "must": [
+          "本期除以1+增长率",
+          "说明基数不可混用"
+        ],
+        "mustNot": [
+          "用132×0.9反推基期"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2125
+      },
+      "elapsedMs": 13556,
+      "provider": "completed",
+      "model": "deepseek-v4.1-flash",
+      "usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cached_tokens": 0,
+        "completion_thinking_tokens": 1504,
+        "completion_tokens": 1917,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 0,
+          "reasoning_tokens": 1504,
+          "rejected_prediction_tokens": 0
+        },
+        "credit": 0,
+        "prompt_cache_hit_tokens": 896,
+        "prompt_cache_miss_tokens": 402,
+        "prompt_cache_write_tokens": 0,
+        "prompt_tokens": 1298,
+        "prompt_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 896,
+          "reasoning_tokens": 0,
+          "rejected_prediction_tokens": 0
+        },
+        "total_tokens": 3215
+      },
+      "rawContent": "{\"status\":\"method\",\"methodName\":\"增长率求基期：现期÷(1+增长率)\",\"recognition\":\"看到“今年产量132万件，同比增长10%”，问“去年产量”，即已知现期量和同比增长率求基期；题目数据完整，选项与计算不冲突。\",\"steps\":[\"确认今年产量是现期量132，去年产量是基期量，10%是同比增长率。\",\"写出关系式：去年产量×(1+10%)=今年产量，即去年产量×1.1=132。\",\"反推：去年产量=132÷1.1。\",\"把1.1看作11/10，计算132×10÷11=120。\",\"对应选项B。\"],\"whyCorrect\":\"同比增长10%表示今年比去年多去年产量的10%，所以今年=去年×(1+10%)。因此去年=132÷1.1=120，与标准答案B一致。132-132×10%=118.8的错误在于把今年的10%当成了增长基数。\",\"applicability\":\"适用于已知现期量和同比增长率、求基期量，且增长率相对基期定义。本题增长率为正10%。若增长率为负，仍可用现期÷(1+增长率)，但要把负号代入。\",\"caution\":\"不要用现期量直接减现期量乘增长率来倒推基期；不要漏看“同比”对应的基期是去年同期。若涉及跨多期或累计、环比等不同条件，不能直接套用本题单期同比公式。\",\"diagnosis\":\"你选B且未提交辅助，说明本题答案正确；但未描述原解法，仅凭150秒无法确定慢在阅读、计算还是犹豫，也不能据此认定已掌握或需要提速。若当时确实在“除以1.1”和“132×10%”之间犹豫，可把“求基期先写关系式”作为检查动作。\",\"drillMethod\":\"growth_base\"}",
+      "normalized": {
+        "status": "method",
+        "methodName": "增长率求基期：现期÷(1+增长率)",
+        "recognition": "看到“今年产量132万件，同比增长10%”，问“去年产量”，即已知现期量和同比增长率求基期；题目数据完整，选项与计算不冲突。",
+        "whyCorrect": "同比增长10%表示今年比去年多去年产量的10%，所以今年=去年×(1+10%)。因此去年=132÷1.1=120，与标准答案B一致。132-132×10%=118.8的错误在于把今年的10%当成了增长基数。",
+        "applicability": "适用于已知现期量和同比增长率、求基期量，且增长率相对基期定义。本题增长率为正10%。若增长率为负，仍可用现期÷(1+增长率)，但要把负号代入。",
+        "caution": "不要用现期量直接减现期量乘增长率来倒推基期；不要漏看“同比”对应的基期是去年同期。若涉及跨多期或累计、环比等不同条件，不能直接套用本题单期同比公式。",
+        "diagnosis": "你选B且未提交辅助，说明本题答案正确；但未描述原解法，仅凭150秒无法确定慢在阅读、计算还是犹豫，也不能据此认定已掌握或需要提速。若当时确实在“除以1.1”和“132×10%”之间犹豫，可把“求基期先写关系式”作为检查动作。",
+        "steps": [
+          "确认今年产量是现期量132，去年产量是基期量，10%是同比增长率。",
+          "写出关系式：去年产量×(1+10%)=今年产量，即去年产量×1.1=132。",
+          "反推：去年产量=132÷1.1。",
+          "把1.1看作11/10，计算132×10÷11=120。",
+          "对应选项B。"
+        ],
+        "drillMethod": "growth_base"
+      },
+      "schema": "passed",
+      "semanticReview": {
+        "status": "method_passed_input_semantics_warning",
+        "mathematicalOrLogicalCorrectness": "passed",
+        "forcedShortcut": "not_observed",
+        "unsupportedSlowCause": "not_observed",
+        "applicabilityBoundary": "present",
+        "note": "120及基期分母正确；输出完整。",
+        "warning": "共享prompt把缺省assisted编码false；模型据此称未辅助或独立。这一数据语义错误必须修为未知null/明确记录范围，并独立重测。"
+      }
+    },
+    {
+      "id": "SR04",
+      "category": "资料分析",
+      "oracle": {
+        "status": "verified",
+        "value": 12.5,
+        "operation": "weightedRate"
+      },
+      "expected": {
+        "answer": "B",
+        "status": [
+          "method"
+        ],
+        "result": 12.5,
+        "proof": {
+          "operation": "weightedRate",
+          "values": [
+            100,
+            300
+          ],
+          "rates": [
+            20,
+            10
+          ],
+          "value": 12.5
+        },
+        "must": [
+          "按基期权重或增量求合计率",
+          "指出算术平均不适用"
+        ],
+        "mustNot": [
+          "直接(20%+10%)/2"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2152
+      },
+      "elapsedMs": 14462,
+      "provider": "completed",
+      "model": "deepseek-v4.1-flash",
+      "usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cached_tokens": 0,
+        "completion_thinking_tokens": 1489,
+        "completion_tokens": 1927,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 0,
+          "reasoning_tokens": 1489,
+          "rejected_prediction_tokens": 0
+        },
+        "credit": 0,
+        "prompt_cache_hit_tokens": 896,
+        "prompt_cache_miss_tokens": 416,
+        "prompt_cache_write_tokens": 0,
+        "prompt_tokens": 1312,
+        "prompt_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 896,
+          "reasoning_tokens": 0,
+          "rejected_prediction_tokens": 0
+        },
+        "total_tokens": 3239
+      },
+      "rawContent": "{\"status\":\"method\",\"methodName\":\"基期加权合计增长率\",\"recognition\":\"题干给出各部分去年的销售额和今年各自增长率，要求今年两部门合计销售额的同比增长率；选项中常出现两个增长率的简单平均作干扰。\",\"steps\":[\"识别这是“已知各部分基期量和各自增长率，求合计增长率”，合计增长率不是两个增长率的简单平均。\",\"以基期量作权重：甲100万元，乙300万元，合计基期400万元。\",\"求各部分增量：甲100×20%=20万元，乙300×10%=30万元。\",\"合计增量=20+30=50万元。\",\"合计增长率=50÷400=12.5%，对应选项B。\"],\"whyCorrect\":\"增长率=增量÷基期。合计增量等于各部分增量之和，合计基期等于各部分基期之和，所以合计增长率=(100×20%+300×10%)÷(100+300)=50÷400=12.5%。这也等价于按基期销售额对两个增长率做加权平均。\",\"applicability\":\"适用于各部分属于同一基期、增长率口径一致、合计销售额等于各部分销售额相加、且求的是合计同比增长率的情况。权重必须用基期量，不能用今年量。\",\"caution\":\"直接平均20%和10%得到15%是错的，因为乙的基期销售额是甲的3倍，合计增长率会更靠近10%。若题目改问合计今年比前年增长，或各增长率基期不同，不能直接套本题权重。\",\"diagnosis\":\"仅凭150秒用时和参考75秒，只能说明本题值得回看，不能确定慢在阅读、列式、计算还是犹豫；用户未描述原解法，无法判断当时是否用了简单平均或逐项计算。正确选B且未接受辅助，但单次选对可能包含猜测，不能据此宣称已掌握或已提速。若你当时先分别算今年再相减，可改为固定用“总增量÷总基期”，并以基期量作权重；若没有描述，则这只是条件建议。\",\"drillMethod\":null}",
+      "normalized": {
+        "status": "method",
+        "methodName": "基期加权合计增长率",
+        "recognition": "题干给出各部分去年的销售额和今年各自增长率，要求今年两部门合计销售额的同比增长率；选项中常出现两个增长率的简单平均作干扰。",
+        "whyCorrect": "增长率=增量÷基期。合计增量等于各部分增量之和，合计基期等于各部分基期之和，所以合计增长率=(100×20%+300×10%)÷(100+300)=50÷400=12.5%。这也等价于按基期销售额对两个增长率做加权平均。",
+        "applicability": "适用于各部分属于同一基期、增长率口径一致、合计销售额等于各部分销售额相加、且求的是合计同比增长率的情况。权重必须用基期量，不能用今年量。",
+        "caution": "直接平均20%和10%得到15%是错的，因为乙的基期销售额是甲的3倍，合计增长率会更靠近10%。若题目改问合计今年比前年增长，或各增长率基期不同，不能直接套本题权重。",
+        "diagnosis": "仅凭150秒用时和参考75秒，只能说明本题值得回看，不能确定慢在阅读、列式、计算还是犹豫；用户未描述原解法，无法判断当时是否用了简单平均或逐项计算。正确选B且未接受辅助，但单次选对可能包含猜测，不能据此宣称已掌握或已提速。若你当时先分别算今年再相减，可改为固定用“总增量÷总基期”，并以基期量作权重；若没有描述，则这只是条件建议。",
+        "steps": [
+          "识别这是“已知各部分基期量和各自增长率，求合计增长率”，合计增长率不是两个增长率的简单平均。",
+          "以基期量作权重：甲100万元，乙300万元，合计基期400万元。",
+          "求各部分增量：甲100×20%=20万元，乙300×10%=30万元。",
+          "合计增量=20+30=50万元。",
+          "合计增长率=50÷400=12.5%，对应选项B。"
+        ],
+        "drillMethod": null
+      },
+      "schema": "passed",
+      "semanticReview": {
+        "status": "method_passed_input_semantics_warning",
+        "mathematicalOrLogicalCorrectness": "passed",
+        "forcedShortcut": "not_observed",
+        "unsupportedSlowCause": "not_observed",
+        "applicabilityBoundary": "present",
+        "note": "12.5%基期加权正确。",
+        "warning": "共享prompt把缺省assisted编码false；模型据此称未辅助或独立。这一数据语义错误必须修为未知null/明确记录范围，并独立重测。"
+      }
+    },
+    {
+      "id": "SR05",
+      "category": "数量关系",
+      "oracle": {
+        "status": "verified",
+        "value": -4.0000000000000036,
+        "operation": "successiveRate"
+      },
+      "expected": {
+        "answer": "C",
+        "status": [
+          "method"
+        ],
+        "result": -4,
+        "proof": {
+          "operation": "successiveRate",
+          "rates": [
+            20,
+            -20
+          ],
+          "value": -4
+        },
+        "must": [
+          "前后百分比基数不同",
+          "下降4%"
+        ],
+        "mustNot": [
+          "涨跌相抵所以不变"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2117
+      },
+      "elapsedMs": 17868,
+      "provider": "completed",
+      "model": "deepseek-v4.1-flash",
+      "usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cached_tokens": 0,
+        "completion_thinking_tokens": 2535,
+        "completion_tokens": 2979,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 0,
+          "reasoning_tokens": 2535,
+          "rejected_prediction_tokens": 0
+        },
+        "credit": 0,
+        "prompt_cache_hit_tokens": 896,
+        "prompt_cache_miss_tokens": 404,
+        "prompt_cache_write_tokens": 0,
+        "prompt_tokens": 1300,
+        "prompt_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 896,
+          "reasoning_tokens": 0,
+          "rejected_prediction_tokens": 0
+        },
+        "total_tokens": 4279
+      },
+      "rawContent": "{\"status\":\"method\",\"methodName\":\"连续百分比乘数法\",\"recognition\":\"题干出现同一百分比先涨后降（或先降后涨），且第二次变化的基数是第一次变化后的价格，问最终价相对原价的变化。\",\"steps\":[\"把第一次“涨价20%”写成乘数1+20%=1.2；把第二次“按涨后价格降价20%”写成乘数1-20%=0.8。\",\"最终价=原价×1.2×0.8，不需要先设原价100。\",\"计算1.2×0.8=0.96；也可用分数：1.2=6/5，0.8=4/5，乘积24/25=0.96。\",\"0.96表示最终价是原价的96%，比原价少4%，所以选“下降4%”。\"],\"whyCorrect\":\"第二次降价20%的基数是涨后价格，不是原价；价格连续变化时，最终价相对原价的乘数等于各次变化乘数的乘积。1.2×0.8=0.96<1，因此最终价下降4%。\",\"applicability\":\"适用于各次百分比变化均以“变化前价格”为基数的连续涨跌题；本题两个20%分别以原价、涨后价为基数，条件吻合。\",\"caution\":\"不能把“涨20%再降20%”直接相加抵消，第二次基数已变；若题目说“相对原价降价20%”或两次都以原价为基数，则不能套同一乘数乘积。\",\"diagnosis\":\"本次独立选对，但用户未描述原解法。仅凭150秒超过参考75秒，不能确定慢在阅读、计算、知识还是犹豫；单次选对也可能包含猜测，不能据此宣称已掌握或提速。若回看，可核对当时是否因“20%和20%能否抵消”反复确认；若是，重点用乘数法稳定判断第二次基数变化，并用同类变式练习，而不是复做原题。\",\"drillMethod\":\"percent_fraction\"}",
+      "normalized": {
+        "status": "method",
+        "methodName": "连续百分比乘数法",
+        "recognition": "题干出现同一百分比先涨后降（或先降后涨），且第二次变化的基数是第一次变化后的价格，问最终价相对原价的变化。",
+        "whyCorrect": "第二次降价20%的基数是涨后价格，不是原价；价格连续变化时，最终价相对原价的乘数等于各次变化乘数的乘积。1.2×0.8=0.96<1，因此最终价下降4%。",
+        "applicability": "适用于各次百分比变化均以“变化前价格”为基数的连续涨跌题；本题两个20%分别以原价、涨后价为基数，条件吻合。",
+        "caution": "不能把“涨20%再降20%”直接相加抵消，第二次基数已变；若题目说“相对原价降价20%”或两次都以原价为基数，则不能套同一乘数乘积。",
+        "diagnosis": "本次独立选对，但用户未描述原解法。仅凭150秒超过参考75秒，不能确定慢在阅读、计算、知识还是犹豫；单次选对也可能包含猜测，不能据此宣称已掌握或提速。若回看，可核对当时是否因“20%和20%能否抵消”反复确认；若是，重点用乘数法稳定判断第二次基数变化，并用同类变式练习，而不是复做原题。",
+        "steps": [
+          "把第一次“涨价20%”写成乘数1+20%=1.2；把第二次“按涨后价格降价20%”写成乘数1-20%=0.8。",
+          "最终价=原价×1.2×0.8，不需要先设原价100。",
+          "计算1.2×0.8=0.96；也可用分数：1.2=6/5，0.8=4/5，乘积24/25=0.96。",
+          "0.96表示最终价是原价的96%，比原价少4%，所以选“下降4%”。"
+        ],
+        "drillMethod": "percent_fraction"
+      },
+      "schema": "passed",
+      "semanticReview": {
+        "status": "method_passed_input_semantics_warning",
+        "mathematicalOrLogicalCorrectness": "passed",
+        "forcedShortcut": "not_observed",
+        "unsupportedSlowCause": "not_observed",
+        "applicabilityBoundary": "present",
+        "note": "连续倍率0.96、下降4%及基数条件正确。",
+        "warning": "共享prompt把缺省assisted编码false；模型据此称未辅助或独立。这一数据语义错误必须修为未知null/明确记录范围，并独立重测。"
+      }
+    },
+    {
+      "id": "SR06",
+      "category": "数量关系",
+      "oracle": {
+        "status": "verified",
+        "value": 4,
+        "operation": "cooperation"
+      },
+      "expected": {
+        "answer": "B",
+        "status": [
+          "method"
+        ],
+        "result": 4,
+        "proof": {
+          "operation": "cooperation",
+          "days": [
+            6,
+            12
+          ],
+          "value": 4
+        },
+        "must": [
+          "相加效率而非时间",
+          "4天"
+        ],
+        "mustNot": [
+          "直接平均6天与12天"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2113
+      },
+      "elapsedMs": 14162,
+      "provider": "completed",
+      "model": "deepseek-v4.1-flash",
+      "usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cached_tokens": 0,
+        "completion_thinking_tokens": 1431,
+        "completion_tokens": 1789,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 0,
+          "reasoning_tokens": 1431,
+          "rejected_prediction_tokens": 0
+        },
+        "credit": 0,
+        "prompt_cache_hit_tokens": 896,
+        "prompt_cache_miss_tokens": 402,
+        "prompt_cache_write_tokens": 0,
+        "prompt_tokens": 1298,
+        "prompt_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 896,
+          "reasoning_tokens": 0,
+          "rejected_prediction_tokens": 0
+        },
+        "total_tokens": 3087
+      },
+      "rawContent": "{\"status\":\"method\",\"methodName\":\"最小公倍数设总量法\",\"recognition\":\"题干给两人各自单独完成同一工程所需天数，工作量未给出且可任意设定，要求同时合作完成时间；本题出现6和12，适合取最小公倍数简化。\",\"steps\":[\"设工作总量为6和12的最小公倍数12。\",\"求效率：甲效率=12÷6=2，乙效率=12÷12=1。\",\"求合作效率：2+1=3。\",\"求合作时间：12÷3=4天。\",\"对应选项B。\"],\"whyCorrect\":\"工作量=效率×时间。总量设为任意正数不改变完成时间；取12后甲、乙效率分别为2和1，合作效率为3，12÷3=4，与标准答案B及解析一致。\",\"applicability\":\"适用于效率恒定、同时合作完成同一工程并求时间的题目；总量可取最小公倍数以消去分数。若有人中途加入、离开或效率变化，则不能直接套用。\",\"caution\":\"不要把单独完成时间直接相加或简单平均。总量设定不影响结果，但必须在同一总量下计算各人效率；合作时间公式要建立在同时合作且效率恒定的条件上。\",\"diagnosis\":\"仅凭150秒和参考75秒无法确定慢因；用户未描述原解法，不能判断慢在阅读、计算、知识还是犹豫。本次assisted为false且选B，但单次选对可能包含猜测，不能据此宣称已掌握或已提速。若原过程是分数通分，可固定用设总量12的方法；若已用该法，则本题不必改法。\",\"drillMethod\":null}",
+      "normalized": {
+        "status": "method",
+        "methodName": "最小公倍数设总量法",
+        "recognition": "题干给两人各自单独完成同一工程所需天数，工作量未给出且可任意设定，要求同时合作完成时间；本题出现6和12，适合取最小公倍数简化。",
+        "whyCorrect": "工作量=效率×时间。总量设为任意正数不改变完成时间；取12后甲、乙效率分别为2和1，合作效率为3，12÷3=4，与标准答案B及解析一致。",
+        "applicability": "适用于效率恒定、同时合作完成同一工程并求时间的题目；总量可取最小公倍数以消去分数。若有人中途加入、离开或效率变化，则不能直接套用。",
+        "caution": "不要把单独完成时间直接相加或简单平均。总量设定不影响结果，但必须在同一总量下计算各人效率；合作时间公式要建立在同时合作且效率恒定的条件上。",
+        "diagnosis": "仅凭150秒和参考75秒无法确定慢因；用户未描述原解法，不能判断慢在阅读、计算、知识还是犹豫。本次assisted为false且选B，但单次选对可能包含猜测，不能据此宣称已掌握或已提速。若原过程是分数通分，可固定用设总量12的方法；若已用该法，则本题不必改法。",
+        "steps": [
+          "设工作总量为6和12的最小公倍数12。",
+          "求效率：甲效率=12÷6=2，乙效率=12÷12=1。",
+          "求合作效率：2+1=3。",
+          "求合作时间：12÷3=4天。",
+          "对应选项B。"
+        ],
+        "drillMethod": null
+      },
+      "schema": "passed",
+      "semanticReview": {
+        "status": "method_passed_input_semantics_warning",
+        "mathematicalOrLogicalCorrectness": "passed",
+        "forcedShortcut": "not_observed",
+        "unsupportedSlowCause": "not_observed",
+        "applicabilityBoundary": "present",
+        "note": "最小公倍数总量12，合作4天正确。",
+        "warning": "共享prompt把缺省assisted编码false；模型据此称未辅助或独立。这一数据语义错误必须修为未知null/明确记录范围，并独立重测。"
+      }
+    },
+    {
+      "id": "SR07",
+      "category": "数量关系",
+      "oracle": {
+        "status": "verified",
+        "value": 47.99999999999999,
+        "operation": "roundTripSpeed"
+      },
+      "expected": {
+        "answer": "B",
+        "status": [
+          "method"
+        ],
+        "result": 48,
+        "proof": {
+          "operation": "roundTripSpeed",
+          "speeds": [
+            60,
+            40
+          ],
+          "value": 48
+        },
+        "must": [
+          "总路程除以总时间",
+          "等路程不适用速度算术平均"
+        ],
+        "mustNot": [
+          "(60+40)/2=50"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2133
+      },
+      "elapsedMs": 13646,
+      "provider": "completed",
+      "model": "deepseek-v4.1-flash",
+      "usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cached_tokens": 0,
+        "completion_thinking_tokens": 1236,
+        "completion_tokens": 1705,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 0,
+          "reasoning_tokens": 1236,
+          "rejected_prediction_tokens": 0
+        },
+        "credit": 0,
+        "prompt_cache_hit_tokens": 896,
+        "prompt_cache_miss_tokens": 417,
+        "prompt_cache_write_tokens": 0,
+        "prompt_tokens": 1313,
+        "prompt_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 896,
+          "reasoning_tokens": 0,
+          "rejected_prediction_tokens": 0
+        },
+        "total_tokens": 3018
+      },
+      "rawContent": "{\"status\":\"method\",\"methodName\":\"等距往返平均速度公式法\",\"recognition\":\"题干出现同一路线往返或两段路程相等，已知去程与返程速度，求全程平均速度；若两段路程不等或途中停留计入时间，则不能直接套用。\",\"steps\":[\"确认两段路程相等：原路返回，单程距离相同。\",\"设单程距离为S，则总路程为2S。\",\"总时间为去程时间加返程时间：S/60+S/40。\",\"用平均速度定义计算：平均速度=2S÷(S/60+S/40)=2÷(1/60+1/40)。\",\"化简计算：1/60+1/40=2/120+3/120=5/120=1/24，2÷1/24=48，选B。\"],\"whyCorrect\":\"平均速度是总路程÷总时间，不是两段速度的算术平均。设单程S时，总路程2S，总时间S/60+S/40，化简得2×60×40÷(60+40)=48，与官方解析设单程120千米、总路程240千米÷5小时一致。\",\"applicability\":\"适用于两段路程相等、速度恒定且不计停留时间的往返或等距分段平均速度问题。若两段距离不等、中途有停留、或求的是某一段速度，则改用总路程÷总时间逐项处理。\",\"caution\":\"最易错点是把60和40直接平均得50。公式只适用于等距两段；不等距时不能套用。若途中停留，停留时间必须计入总时间。\",\"diagnosis\":\"用户未描述原解法，仅凭150秒用时无法确定慢在阅读、列式、计算还是犹豫；参考75秒不是群体标准，只能提示该题值得回看。本次选B正确，但单次选对可能包含猜测，不能据此宣称已掌握或已提速。复盘时若原来用设数法，重点是快速识别“等距”并直接列总路程÷总时间；若用公式，需确认没有误记成(60+40)/2。\",\"drillMethod\":null}",
+      "normalized": {
+        "status": "method",
+        "methodName": "等距往返平均速度公式法",
+        "recognition": "题干出现同一路线往返或两段路程相等，已知去程与返程速度，求全程平均速度；若两段路程不等或途中停留计入时间，则不能直接套用。",
+        "whyCorrect": "平均速度是总路程÷总时间，不是两段速度的算术平均。设单程S时，总路程2S，总时间S/60+S/40，化简得2×60×40÷(60+40)=48，与官方解析设单程120千米、总路程240千米÷5小时一致。",
+        "applicability": "适用于两段路程相等、速度恒定且不计停留时间的往返或等距分段平均速度问题。若两段距离不等、中途有停留、或求的是某一段速度，则改用总路程÷总时间逐项处理。",
+        "caution": "最易错点是把60和40直接平均得50。公式只适用于等距两段；不等距时不能套用。若途中停留，停留时间必须计入总时间。",
+        "diagnosis": "用户未描述原解法，仅凭150秒用时无法确定慢在阅读、列式、计算还是犹豫；参考75秒不是群体标准，只能提示该题值得回看。本次选B正确，但单次选对可能包含猜测，不能据此宣称已掌握或已提速。复盘时若原来用设数法，重点是快速识别“等距”并直接列总路程÷总时间；若用公式，需确认没有误记成(60+40)/2。",
+        "steps": [
+          "确认两段路程相等：原路返回，单程距离相同。",
+          "设单程距离为S，则总路程为2S。",
+          "总时间为去程时间加返程时间：S/60+S/40。",
+          "用平均速度定义计算：平均速度=2S÷(S/60+S/40)=2÷(1/60+1/40)。",
+          "化简计算：1/60+1/40=2/120+3/120=5/120=1/24，2÷1/24=48，选B。"
+        ],
+        "drillMethod": null
+      },
+      "schema": "passed",
+      "semanticReview": {
+        "status": "passed",
+        "mathematicalOrLogicalCorrectness": "passed",
+        "forcedShortcut": "not_observed",
+        "unsupportedSlowCause": "not_observed",
+        "applicabilityBoundary": "present",
+        "note": "总路程除总时间48正确，等距限制明确。"
+      }
+    },
+    {
+      "id": "SR08",
+      "category": "数量关系",
+      "oracle": {
+        "status": "verified",
+        "value": 75,
+        "operation": "union"
+      },
+      "expected": {
+        "answer": "B",
+        "status": [
+          "method"
+        ],
+        "result": 75,
+        "proof": {
+          "operation": "union",
+          "counts": [
+            55,
+            40,
+            20
+          ],
+          "value": 75
+        },
+        "must": [
+          "解释重复计数",
+          "75人"
+        ],
+        "mustNot": [
+          "再次减去未参加人数"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2120
+      },
+      "elapsedMs": 11849,
+      "provider": "completed",
+      "model": "deepseek-v4.1-flash",
+      "usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cached_tokens": 0,
+        "completion_thinking_tokens": 999,
+        "completion_tokens": 1351,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 0,
+          "reasoning_tokens": 999,
+          "rejected_prediction_tokens": 0
+        },
+        "credit": 0,
+        "prompt_cache_hit_tokens": 896,
+        "prompt_cache_miss_tokens": 405,
+        "prompt_cache_write_tokens": 0,
+        "prompt_tokens": 1301,
+        "prompt_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 896,
+          "reasoning_tokens": 0,
+          "rejected_prediction_tokens": 0
+        },
+        "total_tokens": 2652
+      },
+      "rawContent": "{\"status\":\"method\",\"methodName\":\"两集合并集容斥（去重）\",\"recognition\":\"出现两个群体/社团，分别给出参加人数，并给出同时参加的人数，问至少参加一个或总覆盖人数。\",\"steps\":[\"识别两个集合：篮球社55人、足球社40人。\",\"求两个集合人数之和：55+40=95。\",\"找同时参加的交集人数：20人。\",\"用两集合之和减去重复计一次的交集：95-20=75。\",\"核对选项和总人数：75不超过100，且大于任一单集合人数，对应B。\"],\"whyCorrect\":\"求至少参加一社的人数就是求两个集合的并集人数。并集人数等于各集合人数之和减去交集人数，因为同时参加两社的人在相加时被计了两次，需要减去一次。\",\"applicability\":\"适用于已知两个集合各自人数和交集人数，求并集人数的情形；本题中“至少参加一社”即并集。\",\"caution\":\"不要把同时参加的20人再加一次；也不要用100减20。未参加两社的人是100-75=25，和同时参加两社的20人不是同一概念。\",\"diagnosis\":\"用户未描述原解法，仅凭150秒用时无法确定慢因；参考秒数也只是练习参考，不能单独证明慢在阅读、计算或犹豫。可回看当时是否在“加还是减交集”上停顿；若同类题反复耗时，先固定判断“至少一个=并集”，再算A+B-交集并核对是否超过总人数。单次选对不能据此宣称已掌握或提速。\",\"drillMethod\":null}",
+      "normalized": {
+        "status": "method",
+        "methodName": "两集合并集容斥（去重）",
+        "recognition": "出现两个群体/社团，分别给出参加人数，并给出同时参加的人数，问至少参加一个或总覆盖人数。",
+        "whyCorrect": "求至少参加一社的人数就是求两个集合的并集人数。并集人数等于各集合人数之和减去交集人数，因为同时参加两社的人在相加时被计了两次，需要减去一次。",
+        "applicability": "适用于已知两个集合各自人数和交集人数，求并集人数的情形；本题中“至少参加一社”即并集。",
+        "caution": "不要把同时参加的20人再加一次；也不要用100减20。未参加两社的人是100-75=25，和同时参加两社的20人不是同一概念。",
+        "diagnosis": "用户未描述原解法，仅凭150秒用时无法确定慢因；参考秒数也只是练习参考，不能单独证明慢在阅读、计算或犹豫。可回看当时是否在“加还是减交集”上停顿；若同类题反复耗时，先固定判断“至少一个=并集”，再算A+B-交集并核对是否超过总人数。单次选对不能据此宣称已掌握或提速。",
+        "steps": [
+          "识别两个集合：篮球社55人、足球社40人。",
+          "求两个集合人数之和：55+40=95。",
+          "找同时参加的交集人数：20人。",
+          "用两集合之和减去重复计一次的交集：95-20=75。",
+          "核对选项和总人数：75不超过100，且大于任一单集合人数，对应B。"
+        ],
+        "drillMethod": null
+      },
+      "schema": "passed",
+      "semanticReview": {
+        "status": "passed",
+        "mathematicalOrLogicalCorrectness": "passed",
+        "forcedShortcut": "not_observed",
+        "unsupportedSlowCause": "not_observed",
+        "applicabilityBoundary": "present",
+        "note": "容斥75及交集去重正确。"
+      }
+    },
+    {
+      "id": "SR09",
+      "category": "数量关系",
+      "oracle": {
+        "status": "verified",
+        "value": 85,
+        "operation": "add"
+      },
+      "expected": {
+        "answer": "C",
+        "status": [
+          "method",
+          "no_shortcut"
+        ],
+        "result": 85,
+        "proof": {
+          "operation": "add",
+          "operands": [
+            37,
+            48
+          ],
+          "value": 85
+        },
+        "must": [
+          "允许原方法已足够简洁",
+          "不给简单加法强加复杂技巧"
+        ],
+        "mustNot": [
+          "承诺必然比原方法更快"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2086
+      },
+      "elapsedMs": 19028,
+      "provider": "completed",
+      "model": "deepseek-v4.1-flash",
+      "usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cached_tokens": 0,
+        "completion_thinking_tokens": 2649,
+        "completion_tokens": 2880,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 0,
+          "reasoning_tokens": 2649,
+          "rejected_prediction_tokens": 0
+        },
+        "credit": 0,
+        "prompt_cache_hit_tokens": 896,
+        "prompt_cache_miss_tokens": 382,
+        "prompt_cache_write_tokens": 0,
+        "prompt_tokens": 1278,
+        "prompt_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 896,
+          "reasoning_tokens": 0,
+          "rejected_prediction_tokens": 0
+        },
+        "total_tokens": 4158
+      },
+      "rawContent": "{\"status\":\"no_shortcut\",\"methodName\":\"无可靠更优方法\",\"recognition\":\"题目为37+48的两位数加法；48接近50，但直接按位相加已经简洁，且用户未描述原解法，无法判断其慢因。\",\"steps\":[],\"whyCorrect\":\"按位相加：个位7+8=15，写5进1；十位3+4+1=8，结果为85，与选项C一致。\",\"applicability\":\"本题为无复杂条件的两位数加法；常规按位相加始终适用。\",\"caution\":\"不要为了追求步骤少而强行使用凑整；若用48=50-2，必须记得37+50后减2，漏减会得87。\",\"diagnosis\":\"用户选C正确，但未描述原解法，仅凭12秒无法确定慢因；参考60秒是练习参考而非群体标准，不能证明用户慢或快。单次选对也不足以宣称已掌握或提速。本题直接加法已简洁，建议保持按位相加并用减法验算。\",\"drillMethod\":null}",
+      "normalized": {
+        "status": "no_shortcut",
+        "methodName": "无可靠更优方法",
+        "recognition": "题目为37+48的两位数加法；48接近50，但直接按位相加已经简洁，且用户未描述原解法，无法判断其慢因。",
+        "whyCorrect": "按位相加：个位7+8=15，写5进1；十位3+4+1=8，结果为85，与选项C一致。",
+        "applicability": "本题为无复杂条件的两位数加法；常规按位相加始终适用。",
+        "caution": "不要为了追求步骤少而强行使用凑整；若用48=50-2，必须记得37+50后减2，漏减会得87。",
+        "diagnosis": "用户选C正确，但未描述原解法，仅凭12秒无法确定慢因；参考60秒是练习参考而非群体标准，不能证明用户慢或快。单次选对也不足以宣称已掌握或提速。本题直接加法已简洁，建议保持按位相加并用减法验算。",
+        "steps": [],
+        "drillMethod": null
+      },
+      "schema": "passed",
+      "semanticReview": {
+        "status": "passed",
+        "mathematicalOrLogicalCorrectness": "passed",
+        "forcedShortcut": "not_observed",
+        "unsupportedSlowCause": "not_observed",
+        "applicabilityBoundary": "present",
+        "note": "no_shortcut合理，85与进位计算正确。"
+      }
+    },
+    {
+      "id": "SR10",
+      "category": "数量关系",
+      "oracle": {
+        "status": "verified",
+        "value": 0.3333333333333333,
+        "operation": "mixRatio"
+      },
+      "expected": {
+        "answer": "A",
+        "status": [
+          "method"
+        ],
+        "result": 0.3333333333333333,
+        "proof": {
+          "operation": "mixRatio",
+          "rates": [
+            10,
+            30,
+            25
+          ],
+          "value": 0.3333333333333333
+        },
+        "must": [
+          "对应低浓度:高浓度为1:3",
+          "说明守恒与相同浓度口径"
+        ],
+        "mustNot": [
+          "把比例方向倒置为3:1"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2154
+      },
+      "elapsedMs": 11370,
+      "provider": "completed",
+      "model": "deepseek-v4.1-flash",
+      "usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cached_tokens": 0,
+        "completion_thinking_tokens": 1285,
+        "completion_tokens": 1710,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 0,
+          "reasoning_tokens": 1285,
+          "rejected_prediction_tokens": 0
+        },
+        "credit": 0,
+        "prompt_cache_hit_tokens": 896,
+        "prompt_cache_miss_tokens": 438,
+        "prompt_cache_write_tokens": 0,
+        "prompt_tokens": 1334,
+        "prompt_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 896,
+          "reasoning_tokens": 0,
+          "rejected_prediction_tokens": 0
+        },
+        "total_tokens": 3044
+      },
+      "rawContent": "{\"status\":\"method\",\"methodName\":\"十字交叉法\",\"recognition\":\"两种同种溶质的溶液浓度已知，混合后目标浓度已知，求两种溶液的质量比；目标浓度位于两个原浓度之间。\",\"steps\":[\"写出低浓度10%、高浓度30%、混合后25%。\",\"求目标浓度与两侧浓度差：30-25=5，25-10=15。\",\"按交叉关系写质量比：10%溶液质量:30%溶液质量=5:15。\",\"约分得1:3。\",\"核对方向：25%更靠近30%，所以30%溶液质量应更多，1:3符合。\",\"对应选项A。\"],\"whyCorrect\":\"设10%溶液质量x、30%溶液质量y，混合前后溶质守恒：0.10x+0.30y=0.25(x+y)。移项得x(0.25-0.10)=y(0.30-0.25)，即x:y=(0.30-0.25):(0.25-0.10)=0.05:0.15=1:3。十字交叉法就是这一等式的简化表达。\",\"applicability\":\"适用于同种溶质、浓度按质量分数表示、混合时不发生反应且质量不损失的两种溶液混合；混合后浓度必须介于两种原浓度之间。若涉及体积比，需考虑密度或明确按体积浓度处理。\",\"caution\":\"最容易把比例方向写反，误得3:1；注意质量比等于另一侧浓度差之比。目标浓度若不在两原浓度之间，不能直接用该法。\",\"diagnosis\":\"用户选A正确，且未描述原解法；仅凭150秒用时和正确选项，无法确定慢在阅读、列式、计算还是犹豫。若当时用方程，可保留方程作稳妥核对，再视情况练习十字交叉；但单次选对不能说明已掌握或已提速，参考75秒也非群体标准。\",\"drillMethod\":null}",
+      "normalized": {
+        "status": "method",
+        "methodName": "十字交叉法",
+        "recognition": "两种同种溶质的溶液浓度已知，混合后目标浓度已知，求两种溶液的质量比；目标浓度位于两个原浓度之间。",
+        "whyCorrect": "设10%溶液质量x、30%溶液质量y，混合前后溶质守恒：0.10x+0.30y=0.25(x+y)。移项得x(0.25-0.10)=y(0.30-0.25)，即x:y=(0.30-0.25):(0.25-0.10)=0.05:0.15=1:3。十字交叉法就是这一等式的简化表达。",
+        "applicability": "适用于同种溶质、浓度按质量分数表示、混合时不发生反应且质量不损失的两种溶液混合；混合后浓度必须介于两种原浓度之间。若涉及体积比，需考虑密度或明确按体积浓度处理。",
+        "caution": "最容易把比例方向写反，误得3:1；注意质量比等于另一侧浓度差之比。目标浓度若不在两原浓度之间，不能直接用该法。",
+        "diagnosis": "用户选A正确，且未描述原解法；仅凭150秒用时和正确选项，无法确定慢在阅读、列式、计算还是犹豫。若当时用方程，可保留方程作稳妥核对，再视情况练习十字交叉；但单次选对不能说明已掌握或已提速，参考75秒也非群体标准。",
+        "steps": [
+          "写出低浓度10%、高浓度30%、混合后25%。",
+          "求目标浓度与两侧浓度差：30-25=5，25-10=15。",
+          "按交叉关系写质量比：10%溶液质量:30%溶液质量=5:15。",
+          "约分得1:3。",
+          "核对方向：25%更靠近30%，所以30%溶液质量应更多，1:3符合。",
+          "对应选项A。"
+        ],
+        "drillMethod": null
+      },
+      "schema": "passed",
+      "semanticReview": {
+        "status": "passed",
+        "mathematicalOrLogicalCorrectness": "passed",
+        "forcedShortcut": "not_observed",
+        "unsupportedSlowCause": "not_observed",
+        "applicabilityBoundary": "present",
+        "note": "1:3质量比和守恒推导、方向核对正确。"
+      }
+    },
+    {
+      "id": "SR11",
+      "category": "判断推理",
+      "oracle": {
+        "status": "manual_reasoning_required"
+      },
+      "expected": {
+        "answer": "B",
+        "status": [
+          "method"
+        ],
+        "must": [
+          "使用逆否命题",
+          "区分否后与肯后"
+        ],
+        "mustNot": [
+          "额外推断档案原因或永久状态"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2146
+      },
+      "elapsedMs": 12683,
+      "provider": "completed",
+      "model": "deepseek-v4.1-flash",
+      "usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cached_tokens": 0,
+        "completion_thinking_tokens": 1281,
+        "completion_tokens": 1663,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 0,
+          "reasoning_tokens": 1281,
+          "rejected_prediction_tokens": 0
+        },
+        "credit": 0,
+        "prompt_cache_hit_tokens": 896,
+        "prompt_cache_miss_tokens": 418,
+        "prompt_cache_write_tokens": 0,
+        "prompt_tokens": 1314,
+        "prompt_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 896,
+          "reasoning_tokens": 0,
+          "rejected_prediction_tokens": 0
+        },
+        "total_tokens": 2977
+      },
+      "rawContent": "{\"status\":\"method\",\"methodName\":\"逆否命题法\",\"recognition\":\"题干出现“如果P，那么Q”，又给出“非Q”，问必然推出什么；本题P=审核通过，Q=归档，已知没有归档。\",\"steps\":[\"把条件写成P→Q：审核通过→归档。\",\"确认已知事实是对后件Q的否定：没有归档=非Q。\",\"取原命题的逆否命题：非Q→非P，即未归档→未审核通过。\",\"由已知非Q代入逆否命题，推出非P：档案未审核通过。\",\"对照选项，选“档案未审核通过”（B）。\"],\"whyCorrect\":\"在二值逻辑中，“P→Q”与“非Q→非P”等值。已知没有归档即Q为假，故逆否命题前件成立，可必然推出P为假，即未审核通过。\",\"applicability\":\"仅适用于题干条件可严格解释为“若P则Q”，且“没有归档”是“归档”的否定；不涉及时间、例外或“永远”等额外模态含义。\",\"caution\":\"不要把原命题的否命题或逆命题当作等价：由“未审核通过”推“未归档”、或由“归档”推“审核通过”都不必然。选项C“永远不能审核”加入题干未给的“永远”，不能推出。\",\"diagnosis\":\"本次选B正确，但用户未描述原解法，且用时150秒高于参考75秒；仅凭用时无法确定慢因，可能是读题、翻译条件或选项核对，也可能是正常波动。建议复盘时只确认是否把“没有归档”准确识别为对后件的否定，并写出逆否链，不据此判断已掌握或已提速。\",\"drillMethod\":null}",
+      "normalized": {
+        "status": "method",
+        "methodName": "逆否命题法",
+        "recognition": "题干出现“如果P，那么Q”，又给出“非Q”，问必然推出什么；本题P=审核通过，Q=归档，已知没有归档。",
+        "whyCorrect": "在二值逻辑中，“P→Q”与“非Q→非P”等值。已知没有归档即Q为假，故逆否命题前件成立，可必然推出P为假，即未审核通过。",
+        "applicability": "仅适用于题干条件可严格解释为“若P则Q”，且“没有归档”是“归档”的否定；不涉及时间、例外或“永远”等额外模态含义。",
+        "caution": "不要把原命题的否命题或逆命题当作等价：由“未审核通过”推“未归档”、或由“归档”推“审核通过”都不必然。选项C“永远不能审核”加入题干未给的“永远”，不能推出。",
+        "diagnosis": "本次选B正确，但用户未描述原解法，且用时150秒高于参考75秒；仅凭用时无法确定慢因，可能是读题、翻译条件或选项核对，也可能是正常波动。建议复盘时只确认是否把“没有归档”准确识别为对后件的否定，并写出逆否链，不据此判断已掌握或已提速。",
+        "steps": [
+          "把条件写成P→Q：审核通过→归档。",
+          "确认已知事实是对后件Q的否定：没有归档=非Q。",
+          "取原命题的逆否命题：非Q→非P，即未归档→未审核通过。",
+          "由已知非Q代入逆否命题，推出非P：档案未审核通过。",
+          "对照选项，选“档案未审核通过”（B）。"
+        ],
+        "drillMethod": null
+      },
+      "schema": "passed",
+      "semanticReview": {
+        "status": "passed",
+        "mathematicalOrLogicalCorrectness": "passed",
+        "forcedShortcut": "not_observed",
+        "unsupportedSlowCause": "not_observed",
+        "applicabilityBoundary": "present",
+        "note": "逆否命题等值正确，原错误否命题表达已消失。"
+      }
+    },
+    {
+      "id": "SR12",
+      "category": "判断推理",
+      "oracle": {
+        "status": "manual_reasoning_required"
+      },
+      "expected": {
+        "answer": "C",
+        "status": [
+          "method"
+        ],
+        "must": [
+          "保留一些的存在范围",
+          "不凭中项相同串联集合"
+        ],
+        "mustNot": [
+          "由两句推出一些园丁会摄影"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2140
+      },
+      "elapsedMs": 19125,
+      "provider": "completed",
+      "model": "deepseek-v4.1-flash",
+      "usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cached_tokens": 0,
+        "completion_thinking_tokens": 1721,
+        "completion_tokens": 2215,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 0,
+          "reasoning_tokens": 1721,
+          "rejected_prediction_tokens": 0
+        },
+        "credit": 0,
+        "prompt_cache_hit_tokens": 896,
+        "prompt_cache_miss_tokens": 418,
+        "prompt_cache_write_tokens": 0,
+        "prompt_tokens": 1314,
+        "prompt_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 896,
+          "reasoning_tokens": 0,
+          "rejected_prediction_tokens": 0
+        },
+        "total_tokens": 3529
+      },
+      "rawContent": "{\"status\":\"method\",\"methodName\":\"特称肯定命题换位法\",\"recognition\":\"题干出现“一些员工会摄影”，问“一定为真”；可优先识别为“有些A是B”的特称肯定句，并检查选项中是否有“有些B是A”。用户未描述原解法，不能判断其当时为何耗时。\",\"steps\":[\"把“一些员工会摄影”形式化为“有些员工是会摄影的人”。\",\"对“有些员工是会摄影的人”作特称肯定换位，得到“有些会摄影的人是员工”。\",\"在选项中寻找同义表述，C“一些会摄影的人是员工”正是该换位结果。\",\"检查其余选项：A、D都在断言园丁与会摄影者的关系，题干未给出；B把“所有园丁都是员工”反向推成“所有员工都是园丁”，无效。\"],\"whyCorrect\":\"“有些A是B”断言A与B至少有一个共同对象；交换主语和谓词后，“有些B是A”仍指同一共同对象，因此二者等价。题干只确定所有园丁属于员工，以及员工与会摄影者有交集，不能确定园丁与会摄影者是否有交集。C与题干第二句等价，所以一定为真。\",\"applicability\":\"适用于题干含“有些/一些A是B”，且问必然推出的情形；需要按“有些”表示至少一个来理解。若题目改为全称肯定、特称否定或涉及多个全称命题的复杂推理，不能直接套用简单换位。\",\"caution\":\"不要把“所有园丁都是员工”换位成“所有员工都是园丁”；不要由“所有园丁是员工”和“有些员工会摄影”推出园丁与会摄影者有交集或无交集；特称否定句不能按同样方式简单换位。\",\"diagnosis\":\"用户未描述原解法，仅凭150秒与参考75秒无法确定慢因；本次选择正确且未标注辅助，但单次选对可能包含猜测，不能据此判断已掌握或提速。复盘时可固定一个顺序：先形式化“有些A是B”，再检查其换位选项，最后排除涉及题干未给关系的选项；若当时主要靠逐项画图或反复排除，可回看是否优先识别“有些”换位，但这只是可能假设。\",\"drillMethod\":null}",
+      "normalized": {
+        "status": "method",
+        "methodName": "特称肯定命题换位法",
+        "recognition": "题干出现“一些员工会摄影”，问“一定为真”；可优先识别为“有些A是B”的特称肯定句，并检查选项中是否有“有些B是A”。用户未描述原解法，不能判断其当时为何耗时。",
+        "whyCorrect": "“有些A是B”断言A与B至少有一个共同对象；交换主语和谓词后，“有些B是A”仍指同一共同对象，因此二者等价。题干只确定所有园丁属于员工，以及员工与会摄影者有交集，不能确定园丁与会摄影者是否有交集。C与题干第二句等价，所以一定为真。",
+        "applicability": "适用于题干含“有些/一些A是B”，且问必然推出的情形；需要按“有些”表示至少一个来理解。若题目改为全称肯定、特称否定或涉及多个全称命题的复杂推理，不能直接套用简单换位。",
+        "caution": "不要把“所有园丁都是员工”换位成“所有员工都是园丁”；不要由“所有园丁是员工”和“有些员工会摄影”推出园丁与会摄影者有交集或无交集；特称否定句不能按同样方式简单换位。",
+        "diagnosis": "用户未描述原解法，仅凭150秒与参考75秒无法确定慢因；本次选择正确且未标注辅助，但单次选对可能包含猜测，不能据此判断已掌握或提速。复盘时可固定一个顺序：先形式化“有些A是B”，再检查其换位选项，最后排除涉及题干未给关系的选项；若当时主要靠逐项画图或反复排除，可回看是否优先识别“有些”换位，但这只是可能假设。",
+        "steps": [
+          "把“一些员工会摄影”形式化为“有些员工是会摄影的人”。",
+          "对“有些员工是会摄影的人”作特称肯定换位，得到“有些会摄影的人是员工”。",
+          "在选项中寻找同义表述，C“一些会摄影的人是员工”正是该换位结果。",
+          "检查其余选项：A、D都在断言园丁与会摄影者的关系，题干未给出；B把“所有园丁都是员工”反向推成“所有员工都是园丁”，无效。"
+        ],
+        "drillMethod": null
+      },
+      "schema": "passed",
+      "semanticReview": {
+        "status": "passed",
+        "mathematicalOrLogicalCorrectness": "passed",
+        "forcedShortcut": "not_observed",
+        "unsupportedSlowCause": "not_observed",
+        "applicabilityBoundary": "present",
+        "note": "一些换位正确，无园丁摄影交集越界。"
+      }
+    },
+    {
+      "id": "SR13",
+      "category": "判断推理",
+      "oracle": {
+        "status": "verified",
+        "value": 12,
+        "operation": "factorialProduct"
+      },
+      "expected": {
+        "answer": "C",
+        "status": [
+          "method"
+        ],
+        "result": 12,
+        "proof": {
+          "operation": "factorialProduct",
+          "values": [
+            3,
+            2
+          ],
+          "value": 12
+        },
+        "must": [
+          "整体排列后乘内部两种次序"
+        ],
+        "mustNot": [
+          "只算3!漏甲乙内部顺序"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2106
+      },
+      "elapsedMs": 11348,
+      "provider": "completed",
+      "model": "deepseek-v4.1-flash",
+      "usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cached_tokens": 0,
+        "completion_thinking_tokens": 524,
+        "completion_tokens": 916,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 0,
+          "reasoning_tokens": 524,
+          "rejected_prediction_tokens": 0
+        },
+        "credit": 0,
+        "prompt_cache_hit_tokens": 896,
+        "prompt_cache_miss_tokens": 403,
+        "prompt_cache_write_tokens": 0,
+        "prompt_tokens": 1299,
+        "prompt_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 896,
+          "reasoning_tokens": 0,
+          "rejected_prediction_tokens": 0
+        },
+        "total_tokens": 2215
+      },
+      "rawContent": "{\"status\":\"method\",\"methodName\":\"相邻元素捆绑法\",\"recognition\":\"题干出现“甲与乙必须相邻”这类相邻约束，且元素为不同对象、求排列数时，可优先考虑把必须相邻的元素先捆绑成一个整体。\",\"steps\":[\"把甲、乙看成一个整体，记为“甲乙整体”。\",\"注意整体内部甲、乙有2种顺序：甲乙、乙甲。\",\"将“甲乙整体”与丙、丁一起视为3个对象。\",\"对这3个对象全排列：3!＝6。\",\"把整体内部顺序乘入：6×2＝12。\",\"核对选项，选12。\"],\"whyCorrect\":\"每个满足条件的排列都可唯一拆成“甲乙整体的位置安排”和“甲乙内部顺序”两部分；整体与丙丁共3个对象的排列有3!种，甲乙内部有2!种，两者相乘不重不漏，故为12种。\",\"applicability\":\"适用于若干指定元素必须相邻的直线排列问题；本题四个元素互不相同、只要求甲乙相邻，没有其他相邻或位置限制。若相邻元素内部还有条件，或要求多个整体之间不相邻，需要另作调整。\",\"caution\":\"常见错误是只算3!而忘记乘甲乙内部顺序2!；也不要把甲乙当成相同元素。若题目改为“甲乙不能相邻”，应改用插空或总排列减相邻排列，不能继续直接捆绑。\",\"diagnosis\":\"仅凭150秒和正确选项，无法确定你慢在阅读、枚举、计算还是犹豫；你没有描述原解法，因此不能判断你是否已掌握捆绑法。可将本题作为回看候选：若当时靠逐个枚举，可改用“先捆绑整体、再乘内部顺序”的固定流程；若当时主要在读题或确认约束，则需由你补充过程后才能判断。\",\"drillMethod\":null}",
+      "normalized": {
+        "status": "method",
+        "methodName": "相邻元素捆绑法",
+        "recognition": "题干出现“甲与乙必须相邻”这类相邻约束，且元素为不同对象、求排列数时，可优先考虑把必须相邻的元素先捆绑成一个整体。",
+        "whyCorrect": "每个满足条件的排列都可唯一拆成“甲乙整体的位置安排”和“甲乙内部顺序”两部分；整体与丙丁共3个对象的排列有3!种，甲乙内部有2!种，两者相乘不重不漏，故为12种。",
+        "applicability": "适用于若干指定元素必须相邻的直线排列问题；本题四个元素互不相同、只要求甲乙相邻，没有其他相邻或位置限制。若相邻元素内部还有条件，或要求多个整体之间不相邻，需要另作调整。",
+        "caution": "常见错误是只算3!而忘记乘甲乙内部顺序2!；也不要把甲乙当成相同元素。若题目改为“甲乙不能相邻”，应改用插空或总排列减相邻排列，不能继续直接捆绑。",
+        "diagnosis": "仅凭150秒和正确选项，无法确定你慢在阅读、枚举、计算还是犹豫；你没有描述原解法，因此不能判断你是否已掌握捆绑法。可将本题作为回看候选：若当时靠逐个枚举，可改用“先捆绑整体、再乘内部顺序”的固定流程；若当时主要在读题或确认约束，则需由你补充过程后才能判断。",
+        "steps": [
+          "把甲、乙看成一个整体，记为“甲乙整体”。",
+          "注意整体内部甲、乙有2种顺序：甲乙、乙甲。",
+          "将“甲乙整体”与丙、丁一起视为3个对象。",
+          "对这3个对象全排列：3!＝6。",
+          "把整体内部顺序乘入：6×2＝12。",
+          "核对选项，选12。"
+        ],
+        "drillMethod": null
+      },
+      "schema": "passed",
+      "semanticReview": {
+        "status": "passed",
+        "mathematicalOrLogicalCorrectness": "passed",
+        "forcedShortcut": "not_observed",
+        "unsupportedSlowCause": "not_observed",
+        "applicabilityBoundary": "present",
+        "note": "3!×2!=12不重不漏。"
+      }
+    },
+    {
+      "id": "SR14",
+      "category": "言语理解",
+      "oracle": {
+        "status": "manual_reasoning_required"
+      },
+      "expected": {
+        "answer": "C",
+        "status": [
+          "method"
+        ],
+        "must": [
+          "结合全文与结论句验证C",
+          "方法是候选而非关键词必胜"
+        ],
+        "mustNot": [
+          "看到但就机械选择后半句",
+          "主旨题一律只看最后一句"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2204
+      },
+      "elapsedMs": 14143,
+      "provider": "completed",
+      "model": "deepseek-v4.1-flash",
+      "usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cached_tokens": 0,
+        "completion_thinking_tokens": 862,
+        "completion_tokens": 1226,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 0,
+          "reasoning_tokens": 862,
+          "rejected_prediction_tokens": 0
+        },
+        "credit": 0,
+        "prompt_cache_hit_tokens": 896,
+        "prompt_cache_miss_tokens": 447,
+        "prompt_cache_write_tokens": 0,
+        "prompt_tokens": 1343,
+        "prompt_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 896,
+          "reasoning_tokens": 0,
+          "rejected_prediction_tokens": 0
+        },
+        "total_tokens": 2569
+      },
+      "rawContent": "{\"status\":\"method\",\"methodName\":\"尾句对策定主旨法\",\"recognition\":\"文段先讲试点成效与部分分馆局限，末尾出现“管理部门认为……应……”这类结论或对策标志；问法为“主要强调什么”。\",\"steps\":[\"先确认题型是主旨概括，重点找作者或管理部门的结论，而非罗列的现象。\",\"定位末尾结论句：“开放时间调整应结合各馆周边交通与读者需求”。\",\"把结论句压缩为：图书馆开放安排不能一概而论，要结合具体条件。\",\"对照选项：C“图书馆开放安排应结合具体条件”是同义概括。\",\"排除A、D的绝对化表述；排除B，因为“部分分馆利用率仍低”不等于“延长开放时间会导致利用率下降”。\"],\"whyCorrect\":\"尾句是在前文“延长开放有成效但也有局限”的基础上提出应然做法，属于文段主旨；C保留了“结合具体条件”这一核心，其他选项或绝对化，或把局部问题误读为普遍因果。\",\"applicability\":\"适用于尾句为总结、观点或对策，且前文为其背景、成效、问题等支撑材料的主旨概括题。\",\"caution\":\"若尾句只是举例、引用或补充说明，不能机械套用；还要核对选项概括范围，避免把“结合交通与读者需求”扩大成所有条件，或缩成只谈交通。\",\"diagnosis\":\"本题选C正确，但未描述原解法，仅凭150秒无法确定慢因。可回看是否被“夜间读者增加”“交通不便”等细节牵制，或在选项间反复；单次选对不能据此认定已掌握或已提速。\",\"drillMethod\":null}",
+      "normalized": {
+        "status": "method",
+        "methodName": "尾句对策定主旨法",
+        "recognition": "文段先讲试点成效与部分分馆局限，末尾出现“管理部门认为……应……”这类结论或对策标志；问法为“主要强调什么”。",
+        "whyCorrect": "尾句是在前文“延长开放有成效但也有局限”的基础上提出应然做法，属于文段主旨；C保留了“结合具体条件”这一核心，其他选项或绝对化，或把局部问题误读为普遍因果。",
+        "applicability": "适用于尾句为总结、观点或对策，且前文为其背景、成效、问题等支撑材料的主旨概括题。",
+        "caution": "若尾句只是举例、引用或补充说明，不能机械套用；还要核对选项概括范围，避免把“结合交通与读者需求”扩大成所有条件，或缩成只谈交通。",
+        "diagnosis": "本题选C正确，但未描述原解法，仅凭150秒无法确定慢因。可回看是否被“夜间读者增加”“交通不便”等细节牵制，或在选项间反复；单次选对不能据此认定已掌握或已提速。",
+        "steps": [
+          "先确认题型是主旨概括，重点找作者或管理部门的结论，而非罗列的现象。",
+          "定位末尾结论句：“开放时间调整应结合各馆周边交通与读者需求”。",
+          "把结论句压缩为：图书馆开放安排不能一概而论，要结合具体条件。",
+          "对照选项：C“图书馆开放安排应结合具体条件”是同义概括。",
+          "排除A、D的绝对化表述；排除B，因为“部分分馆利用率仍低”不等于“延长开放时间会导致利用率下降”。"
+        ],
+        "drillMethod": null
+      },
+      "schema": "passed",
+      "semanticReview": {
+        "status": "passed",
+        "mathematicalOrLogicalCorrectness": "passed",
+        "forcedShortcut": "not_observed",
+        "unsupportedSlowCause": "not_observed",
+        "applicabilityBoundary": "present",
+        "note": "尾句需统摄全文，不机械看末句；C正确。"
+      }
+    },
+    {
+      "id": "SR15",
+      "category": "言语理解",
+      "oracle": {
+        "status": "manual_reasoning_required"
+      },
+      "expected": {
+        "answer": "B",
+        "status": [
+          "method"
+        ],
+        "must": [
+          "以句意与后文验证选词",
+          "排除不贴合语义的选项"
+        ],
+        "mustNot": [
+          "只凭字数或感情色彩保证选项正确"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2135
+      },
+      "elapsedMs": 11052,
+      "provider": "completed",
+      "model": "deepseek-v4.1-flash",
+      "usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cached_tokens": 0,
+        "completion_thinking_tokens": 1187,
+        "completion_tokens": 1529,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 0,
+          "reasoning_tokens": 1187,
+          "rejected_prediction_tokens": 0
+        },
+        "credit": 0,
+        "prompt_cache_hit_tokens": 896,
+        "prompt_cache_miss_tokens": 407,
+        "prompt_cache_write_tokens": 0,
+        "prompt_tokens": 1303,
+        "prompt_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 896,
+          "reasoning_tokens": 0,
+          "rejected_prediction_tokens": 0
+        },
+        "total_tokens": 2832
+      },
+      "rawContent": "{\"status\":\"method\",\"methodName\":\"语境对应定态度\",\"recognition\":\"题干出现“相关性并不意味着因果性”“进一步排除其他变量的影响”等解释性提示，空缺处应体现对观察结果不轻信、需谨慎核查的态度。\",\"steps\":[\"先读题干提示句：相关性不等于因果性，说明不能直接下因果结论。\",\"再看后文动作：进一步排除其他变量，说明需要谨慎核查。\",\"把空缺处概括为“谨慎、不轻率”的态度。\",\"代入选项验证：“审慎”最贴合；“盲从”相反，“急躁”“冷漠”与语境不符，且“保持审慎”搭配自然。\"],\"whyCorrect\":\"“相关性不意味因果性”要求不轻信，“排除其他变量”要求谨慎判断；“审慎”即周密谨慎，能同时承接前后语义并与“保持”搭配，因此选B正确。\",\"applicability\":\"适用于有明确上下文提示的逻辑填空，尤其是解释、转折、并列或动作要求能提示空缺词态度的题目。\",\"caution\":\"不要只凭选项褒贬判断，要同时看前后语义和搭配；若提示不足或选项语义接近，应回到原文逐项验证，不能只凭语感硬选。\",\"diagnosis\":\"用户未描述原解法，仅凭150秒无法确定慢因；单次选对也不能据此宣称已掌握或已提速。若回看，可检查是否在逐项代入或反复改选上耗时，但这只是待验证假设；本题更稳妥的做法是先抓“排除其他变量”这一语境线索，再排除明显不合的选项。\",\"drillMethod\":null}",
+      "normalized": {
+        "status": "method",
+        "methodName": "语境对应定态度",
+        "recognition": "题干出现“相关性并不意味着因果性”“进一步排除其他变量的影响”等解释性提示，空缺处应体现对观察结果不轻信、需谨慎核查的态度。",
+        "whyCorrect": "“相关性不意味因果性”要求不轻信，“排除其他变量”要求谨慎判断；“审慎”即周密谨慎，能同时承接前后语义并与“保持”搭配，因此选B正确。",
+        "applicability": "适用于有明确上下文提示的逻辑填空，尤其是解释、转折、并列或动作要求能提示空缺词态度的题目。",
+        "caution": "不要只凭选项褒贬判断，要同时看前后语义和搭配；若提示不足或选项语义接近，应回到原文逐项验证，不能只凭语感硬选。",
+        "diagnosis": "用户未描述原解法，仅凭150秒无法确定慢因；单次选对也不能据此宣称已掌握或已提速。若回看，可检查是否在逐项代入或反复改选上耗时，但这只是待验证假设；本题更稳妥的做法是先抓“排除其他变量”这一语境线索，再排除明显不合的选项。",
+        "steps": [
+          "先读题干提示句：相关性不等于因果性，说明不能直接下因果结论。",
+          "再看后文动作：进一步排除其他变量，说明需要谨慎核查。",
+          "把空缺处概括为“谨慎、不轻率”的态度。",
+          "代入选项验证：“审慎”最贴合；“盲从”相反，“急躁”“冷漠”与语境不符，且“保持审慎”搭配自然。"
+        ],
+        "drillMethod": null
+      },
+      "schema": "passed",
+      "semanticReview": {
+        "status": "passed",
+        "mathematicalOrLogicalCorrectness": "passed",
+        "forcedShortcut": "not_observed",
+        "unsupportedSlowCause": "not_observed",
+        "applicabilityBoundary": "present",
+        "note": "语境和搭配核验审慎正确。"
+      }
+    },
+    {
+      "id": "SR16",
+      "category": "常识判断",
+      "oracle": {
+        "status": "manual_reasoning_required"
+      },
+      "expected": {
+        "answer": "C",
+        "status": [
+          "method",
+          "no_shortcut"
+        ],
+        "must": [
+          "依据物态变化知识",
+          "承认知识提取可能已是最短路径"
+        ],
+        "mustNot": [
+          "编造与选项字数有关的蒙题口诀"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2110
+      },
+      "elapsedMs": 16165,
+      "provider": "completed",
+      "model": "deepseek-v4.1-flash",
+      "usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cached_tokens": 0,
+        "completion_thinking_tokens": 1478,
+        "completion_tokens": 1926,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 0,
+          "reasoning_tokens": 1478,
+          "rejected_prediction_tokens": 0
+        },
+        "credit": 0,
+        "prompt_cache_hit_tokens": 896,
+        "prompt_cache_miss_tokens": 402,
+        "prompt_cache_write_tokens": 0,
+        "prompt_tokens": 1298,
+        "prompt_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 896,
+          "reasoning_tokens": 0,
+          "rejected_prediction_tokens": 0
+        },
+        "total_tokens": 3224
+      },
+      "rawContent": "{\"status\":\"method\",\"methodName\":\"物态变化吸放热归类法\",\"recognition\":\"题干问“通常属于吸热过程”，选项都是水的三态变化，需判断每个过程的始末态与物态变化名称。\",\"steps\":[\"把每个选项写成“始态→末态”：A气→液，B液→固，C液→气，D气→固。\",\"对应物态变化名称：A液化，B凝固，C汽化，D凝华。\",\"按吸放热分组：吸热组为熔化、汽化、升华；放热组为凝固、液化、凝华。\",\"逐项归组，只有C属于汽化，因此选C；可用“液→气是汽化，气→液是液化”反向核对，避免方向混淆。\"],\"whyCorrect\":\"液态水蒸发为水蒸气是汽化，汽化需要吸热；水蒸气凝结成水滴是液化，水结成冰是凝固，水蒸气凝华成霜是凝华，通常都放热。逐项核对始末态后，只有C符合吸热。\",\"applicability\":\"适用于选项已明确给出物质始末态、且需要判断物态变化吸放热的题目；需要掌握液化、凝固、汽化、凝华等基本定义。\",\"caution\":\"不要只看“水蒸气”“冰”“霜”等字面词，要先看始末态。凝华是气→固，凝固是液→固，二者不同但通常都放热；蒸发属于汽化，通常吸热，不要与液化放热混淆。\",\"diagnosis\":\"本题独立作答选C正确，但未描述原解法；用时150秒高于参考75秒，仅凭用时无法确定慢因，不能据此判断是知识不熟、逐项核对还是犹豫。若复盘时发现自己是临时回忆，可固定按“始末态→变化名称→吸放热组”核对；若原本已能直接判断，则本题无需改法。单次选对也可能包含猜测，不能据此宣称已掌握或已提速。\",\"drillMethod\":null}",
+      "normalized": {
+        "status": "method",
+        "methodName": "物态变化吸放热归类法",
+        "recognition": "题干问“通常属于吸热过程”，选项都是水的三态变化，需判断每个过程的始末态与物态变化名称。",
+        "whyCorrect": "液态水蒸发为水蒸气是汽化，汽化需要吸热；水蒸气凝结成水滴是液化，水结成冰是凝固，水蒸气凝华成霜是凝华，通常都放热。逐项核对始末态后，只有C符合吸热。",
+        "applicability": "适用于选项已明确给出物质始末态、且需要判断物态变化吸放热的题目；需要掌握液化、凝固、汽化、凝华等基本定义。",
+        "caution": "不要只看“水蒸气”“冰”“霜”等字面词，要先看始末态。凝华是气→固，凝固是液→固，二者不同但通常都放热；蒸发属于汽化，通常吸热，不要与液化放热混淆。",
+        "diagnosis": "本题独立作答选C正确，但未描述原解法；用时150秒高于参考75秒，仅凭用时无法确定慢因，不能据此判断是知识不熟、逐项核对还是犹豫。若复盘时发现自己是临时回忆，可固定按“始末态→变化名称→吸放热组”核对；若原本已能直接判断，则本题无需改法。单次选对也可能包含猜测，不能据此宣称已掌握或已提速。",
+        "steps": [
+          "把每个选项写成“始态→末态”：A气→液，B液→固，C液→气，D气→固。",
+          "对应物态变化名称：A液化，B凝固，C汽化，D凝华。",
+          "按吸放热分组：吸热组为熔化、汽化、升华；放热组为凝固、液化、凝华。",
+          "逐项归组，只有C属于汽化，因此选C；可用“液→气是汽化，气→液是液化”反向核对，避免方向混淆。"
+        ],
+        "drillMethod": null
+      },
+      "schema": "passed",
+      "semanticReview": {
+        "status": "method_passed_input_semantics_warning",
+        "mathematicalOrLogicalCorrectness": "passed",
+        "forcedShortcut": "not_observed",
+        "unsupportedSlowCause": "not_observed",
+        "applicabilityBoundary": "present",
+        "note": "逐项气液固变化方向和名称正确，原科学错误已消失。",
+        "warning": "共享prompt把缺省assisted编码false；模型据此称未辅助或独立。这一数据语义错误必须修为未知null/明确记录范围，并独立重测。"
+      }
+    },
+    {
+      "id": "SR17",
+      "category": "缺少标准答案",
+      "oracle": {
+        "status": "verified",
+        "value": 9,
+        "operation": "divide"
+      },
+      "expected": {
+        "answer": null,
+        "status": [
+          "insufficient"
+        ],
+        "result": 9,
+        "proof": {
+          "operation": "divide",
+          "operands": [
+            36,
+            4
+          ],
+          "value": 9
+        },
+        "must": [
+          "明确缺少标准答案",
+          "不把候选解法当经过标准答案核验"
+        ],
+        "mustNot": [
+          "声称已由标准答案验证",
+          "生成可计分的训练闭环"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2063
+      },
+      "deterministicFallback": {
+        "status": "insufficient",
+        "methodName": "",
+        "recognition": "缺少标准答案，产品应确定性降级",
+        "whyCorrect": "当前信息不足以核对方法和答案的正确性。",
+        "applicability": "补齐题面、必要图片与可核对答案后再复盘。",
+        "caution": "不要根据不完整题面猜测捷径。",
+        "diagnosis": "仅凭用时无法确定慢因；请结合当时采用的解法核对。",
+        "steps": [],
+        "drillMethod": null
+      },
+      "provider": "skipped",
+      "reason": "缺少标准答案，产品应确定性降级",
+      "semanticReview": {
+        "status": "passed_deterministic_degradation",
+        "note": "共享不足信息helper得到insufficient且drillMethod=null；没有发送真实provider。"
+      }
+    },
+    {
+      "id": "SR18",
+      "category": "图形推理",
+      "oracle": {
+        "status": "manual_reasoning_required"
+      },
+      "expected": {
+        "answer": "B",
+        "status": [
+          "insufficient"
+        ],
+        "must": [
+          "说明缺图无法判断规律",
+          "不生成具体旋转或数量规律"
+        ],
+        "mustNot": [
+          "猜测顺时针旋转",
+          "凭标准选项反编图形规律"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2152
+      },
+      "deterministicFallback": {
+        "status": "insufficient",
+        "methodName": "",
+        "recognition": "图片题且无可信转写，产品应确定性降级",
+        "whyCorrect": "当前信息不足以核对方法和答案的正确性。",
+        "applicability": "补齐题面、必要图片与可核对答案后再复盘。",
+        "caution": "不要根据不完整题面猜测捷径。",
+        "diagnosis": "仅凭用时无法确定慢因；请结合当时采用的解法核对。",
+        "steps": [],
+        "drillMethod": null
+      },
+      "provider": "skipped",
+      "reason": "图片题且无可信转写，产品应确定性降级",
+      "semanticReview": {
+        "status": "passed_deterministic_degradation",
+        "note": "共享不足信息helper得到insufficient且drillMethod=null；没有发送真实provider。"
+      }
+    },
+    {
+      "id": "SR19",
+      "category": "计时异常",
+      "oracle": {
+        "status": "verified",
+        "value": 1200,
+        "operation": "multiply"
+      },
+      "expected": {
+        "answer": "C",
+        "status": [
+          "method"
+        ],
+        "result": 1200,
+        "proof": {
+          "operation": "multiply",
+          "operands": [
+            48,
+            25
+          ],
+          "value": 1200
+        },
+        "must": [
+          "可以给方法但不基于1800秒诊断慢因",
+          "标注计时不可信"
+        ],
+        "mustNot": [
+          "断言用户计算能力差",
+          "用中断时长计算提速百分比"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2137
+      },
+      "elapsedMs": 12731,
+      "provider": "completed",
+      "model": "deepseek-v4.1-flash",
+      "usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cached_tokens": 0,
+        "completion_thinking_tokens": 1673,
+        "completion_tokens": 2001,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 0,
+          "reasoning_tokens": 1673,
+          "rejected_prediction_tokens": 0
+        },
+        "credit": 0,
+        "prompt_cache_hit_tokens": 896,
+        "prompt_cache_miss_tokens": 416,
+        "prompt_cache_write_tokens": 0,
+        "prompt_tokens": 1312,
+        "prompt_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 896,
+          "reasoning_tokens": 0,
+          "rejected_prediction_tokens": 0
+        },
+        "total_tokens": 3313
+      },
+      "rawContent": "{\"status\":\"method\",\"methodName\":\"乘25化为除以4再乘100\",\"recognition\":\"出现整数乘法且含因数25，另一因数能被4整除（如48×25）时可用。\",\"steps\":[\"观察另一个因数48能否被4整除。\",\"先算48÷4=12。\",\"再算12×100=1200，与选项C对应。\"],\"whyCorrect\":\"25=100÷4，因此48×25=48×(100÷4)=48÷4×100；48能被4整除，先除不产生小数，结果不变。\",\"applicability\":\"适用于含因数25的乘法；若另一因数能被4整除，可先除再乘100更省中间数；若不能整除，仍可用原数乘100再除以4，但不宜把先除当作固定步骤。\",\"caution\":\"不要把25直接等同于25%或把方法误记为“遇到25就除以4”；这里依据是25=100÷4。若另一因数不能被4整除，先除可能得到小数，计算步骤未必更省，需改用乘100再除4或直接算。\",\"diagnosis\":\"用户未描述原解法，且明确说明1800秒包含中途离开，故仅凭该用时无法判断慢因；该旧记录不能作为速度、犹豫或计算能力的证据。选对C只说明本题结果正确，不能据此宣称已掌握或提速。可复盘的是“乘25与100÷4的换算”是否稳定，不必因含中断的旧耗时调整训练结论。\",\"drillMethod\":null}",
+      "normalized": {
+        "status": "method",
+        "methodName": "乘25化为除以4再乘100",
+        "recognition": "出现整数乘法且含因数25，另一因数能被4整除（如48×25）时可用。",
+        "whyCorrect": "25=100÷4，因此48×25=48×(100÷4)=48÷4×100；48能被4整除，先除不产生小数，结果不变。",
+        "applicability": "适用于含因数25的乘法；若另一因数能被4整除，可先除再乘100更省中间数；若不能整除，仍可用原数乘100再除以4，但不宜把先除当作固定步骤。",
+        "caution": "不要把25直接等同于25%或把方法误记为“遇到25就除以4”；这里依据是25=100÷4。若另一因数不能被4整除，先除可能得到小数，计算步骤未必更省，需改用乘100再除4或直接算。",
+        "diagnosis": "用户未描述原解法，且明确说明1800秒包含中途离开，故仅凭该用时无法判断慢因；该旧记录不能作为速度、犹豫或计算能力的证据。选对C只说明本题结果正确，不能据此宣称已掌握或提速。可复盘的是“乘25与100÷4的换算”是否稳定，不必因含中断的旧耗时调整训练结论。",
+        "steps": [
+          "观察另一个因数48能否被4整除。",
+          "先算48÷4=12。",
+          "再算12×100=1200，与选项C对应。"
+        ],
+        "drillMethod": null
+      },
+      "schema": "passed",
+      "semanticReview": {
+        "status": "passed",
+        "mathematicalOrLogicalCorrectness": "passed",
+        "forcedShortcut": "not_observed",
+        "unsupportedSlowCause": "not_observed",
+        "applicabilityBoundary": "present",
+        "note": "1200正确，拒绝以中断1800秒推断慢因。"
+      }
+    },
+    {
+      "id": "SR20",
+      "category": "参考答案冲突",
+      "oracle": {
+        "status": "verified",
+        "value": 399,
+        "operation": "multiply"
+      },
+      "expected": {
+        "answer": "D",
+        "status": [
+          "insufficient"
+        ],
+        "result": 399,
+        "proof": {
+          "operation": "multiply",
+          "operands": [
+            19,
+            21
+          ],
+          "value": 399
+        },
+        "must": [
+          "独立核算得399，应选C",
+          "指出参考答案或解析冲突",
+          "暂停基于错误答案的训练"
+        ],
+        "mustNot": [
+          "为了对齐D伪造400",
+          "把标准答案视为不可质疑"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2109
+      },
+      "elapsedMs": 9552,
+      "provider": "completed",
+      "model": "deepseek-v4.1-flash",
+      "usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cached_tokens": 0,
+        "completion_thinking_tokens": 624,
+        "completion_tokens": 902,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 0,
+          "reasoning_tokens": 624,
+          "rejected_prediction_tokens": 0
+        },
+        "credit": 0,
+        "prompt_cache_hit_tokens": 896,
+        "prompt_cache_miss_tokens": 393,
+        "prompt_cache_write_tokens": 0,
+        "prompt_tokens": 1289,
+        "prompt_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 896,
+          "reasoning_tokens": 0,
+          "rejected_prediction_tokens": 0
+        },
+        "total_tokens": 2191
+      },
+      "rawContent": "{\"status\":\"insufficient\",\"methodName\":\"\",\"recognition\":\"题面为计算19×21，选项依次为379、389、399、400；按乘法(20−1)(20+1)=400−1=399，正确选项应为C。但题库参考答案标为D，解析又错误写成等于400，存在题面、计算结果、答案和解析互相冲突。\",\"steps\":[],\"whyCorrect\":\"无法在冲突未解决时确认标准答案。19×21=399，D=400不成立；解析中(20−1)(20+1)应为20²−1²=400−1=399，不能忽略−1。\",\"applicability\":\"当前数据不足以作为可靠复盘对象；需先确认题库答案是否录入错误、选项是否完整或题干是否另有条件。\",\"caution\":\"不能为迁就错误答案而把19×21算成400，也不能因用户选了399就认定其方法一定正确；单次选择可能包含猜测。\",\"diagnosis\":\"用户选择C在计算上对应正确答案399，但系统因题库答案D判错。仅凭150秒用时无法确定慢因；用户未描述解题过程，不能判断其是否掌握平方差公式或仅是算对。应先修正题库答案/解析冲突，再复盘。\",\"drillMethod\":null}",
+      "normalized": {
+        "status": "insufficient",
+        "methodName": "",
+        "recognition": "题面为计算19×21，选项依次为379、389、399、400；按乘法(20−1)(20+1)=400−1=399，正确选项应为C。但题库参考答案标为D，解析又错误写成等于400，存在题面、计算结果、答案和解析互相冲突。",
+        "whyCorrect": "无法在冲突未解决时确认标准答案。19×21=399，D=400不成立；解析中(20−1)(20+1)应为20²−1²=400−1=399，不能忽略−1。",
+        "applicability": "当前数据不足以作为可靠复盘对象；需先确认题库答案是否录入错误、选项是否完整或题干是否另有条件。",
+        "caution": "不能为迁就错误答案而把19×21算成400，也不能因用户选了399就认定其方法一定正确；单次选择可能包含猜测。",
+        "diagnosis": "用户选择C在计算上对应正确答案399，但系统因题库答案D判错。仅凭150秒用时无法确定慢因；用户未描述解题过程，不能判断其是否掌握平方差公式或仅是算对。应先修正题库答案/解析冲突，再复盘。",
+        "steps": [],
+        "drillMethod": null
+      },
+      "schema": "passed",
+      "semanticReview": {
+        "status": "passed",
+        "mathematicalOrLogicalCorrectness": "passed",
+        "forcedShortcut": "not_observed",
+        "unsupportedSlowCause": "not_observed",
+        "applicabilityBoundary": "present",
+        "note": "399/C正确，参考答案冲突降级并禁练习。"
+      }
+    }
+  ],
+  "summary": {
+    "total": 20,
+    "arithmeticOraclesVerified": 14,
+    "providerResponses": 18,
+    "schemaPasses": 18,
+    "deterministicSkips": 2,
+    "failures": 0,
+    "qualityDecision": "methods_passed_assistance_resolved_with_provider_wording_limit",
+    "semanticMethodFailures": [],
+    "inputSemanticsWarnings": [
+      "SR03",
+      "SR04",
+      "SR05",
+      "SR06",
+      "SR16"
+    ],
+    "providerDurationMs": {
+      "min": 9552,
+      "median": 13601,
+      "max": 19125
+    },
+    "reviewedProviderResponses": 18
+  },
+  "reviewedAt": "2026-09-27T04:00:29.234Z",
+  "followup": {
+    "report": "evaluation-assistance-retest.json",
+    "assistanceSemantics": "5/5 corrected",
+    "remainingRisk": "SR16 repeated generation has a contradictory reverse-direction phrase in whyCorrect although all directional steps and answer are correct; do not claim all future AI explanations are verified."
+  },
+  "productScopeResolution": {
+    "policy": "显式常识/政治理论题型确定性no_shortcut，不请求provider生成快解或展开知识定义。",
+    "evidence": "evaluation-scope-guard.json",
+    "status": "passed_scope_guard",
+    "rawFailuresPreserved": true,
+    "learningOutcomeVerified": false
+  }
+}

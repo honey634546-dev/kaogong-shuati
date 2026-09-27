@@ -1,0 +1,253 @@
+{
+  "version": 1,
+  "generatedAt": "2026-09-27T05:23:31.119Z",
+  "mode": "real-provider",
+  "selectedCases": [
+    "MC01",
+    "MC05"
+  ],
+  "provenance": {
+    "casesSha256": "98250f6bb9a0a6932f86bc9d3de14d33ad4cf30c7f48c9475f710c5ef79fcc83",
+    "coreSha256": "4a9ed171ef61737904491cdeacd36fea2dc48a6b592931bea305f183dc11ef95",
+    "classifierSha256": "0b5587a6ecb4b0224fdb87743c984d6cc76e47af8c0a72e33048248233ad76c2"
+  },
+  "settings": {
+    "role": "xingce-explainer",
+    "model": "deepseek-v4.1-flash",
+    "temperature": 0.2,
+    "maxTokens": 12000,
+    "reasoningEffort": "low",
+    "concurrency": 2,
+    "timeoutMs": 60000,
+    "retries": 0
+  },
+  "evidenceBoundary": "Six original synthetic cases are a limited admission probe, not real-user usability or learning validation. Schema validity is separate from independent semantic review. Failed first responses remain in this report.",
+  "cases": [
+    {
+      "id": "MC01",
+      "family": "定义判断",
+      "sourceCategory": "定义判断",
+      "expected": {
+        "answer": "A",
+        "capabilityAvailable": true,
+        "acceptedStatuses": [
+          "method",
+          "no_shortcut"
+        ],
+        "standardReasoning": "必须同时满足交付他方保管、约定用途、到期返还原物、所有权不转移。A四项均符合；B转移所有权；C不保证原物返还；D未交付保管。",
+        "expectedMethod": "先列必要条件，再用决定性不满足条件排除；“符合”找全部满足项。",
+        "boundaries": [
+          "不得只凭“保管/借”词语选项",
+          "原物与同型号替代物不同",
+          "只用本题约定定义，不调用日常法律含义"
+        ],
+        "mustNot": [
+          "把C的同型号返还等同原物返还",
+          "认为出现借就一定符合"
+        ],
+        "drillMethod": null
+      },
+      "capability": {
+        "available": true,
+        "code": "available",
+        "category": "定义判断",
+        "label": "定义判断",
+        "focus": "拆出定义的必要条件，逐项核对选项，注意设问要求属于还是不属于。",
+        "classificationSource": "source",
+        "classificationReason": "依据题库提供的逐题分类。"
+      },
+      "sourceUnchanged": true,
+      "prompt": {
+        "length": 3317,
+        "sha256": "d734de01ac93bbd807292195291b53370825d5621f0f1a61facc1099e31c7b51"
+      },
+      "providerAttempted": true,
+      "elapsedMs": 15362,
+      "provider": "completed",
+      "model": "deepseek-v4.1-flash",
+      "usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cached_tokens": 0,
+        "completion_thinking_tokens": 1858,
+        "completion_tokens": 2263,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 0,
+          "reasoning_tokens": 1858,
+          "rejected_prediction_tokens": 0
+        },
+        "credit": 0,
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 2065,
+        "prompt_cache_write_tokens": 0,
+        "prompt_tokens": 2065,
+        "prompt_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 0,
+          "reasoning_tokens": 0,
+          "rejected_prediction_tokens": 0
+        },
+        "total_tokens": 4328
+      },
+      "rawContent": "{\"status\":\"method\",\"methodName\":\"定义要件逐项匹配法\",\"recognition\":\"题干先给出一个概念定义，再问“最符合”，选项围绕交付保管、约定用途、返还原物、所有权是否转移设置差异，适合拆出要件逐项核对。\",\"steps\":[\"先把定义拆成四个必要条件：物品交给另一方保管；保管方只能按约定用途使用；约定期限届满返还同一原物；所有权不转移。\",\"逐项核对：A同时满足交付保管、限定用途、到期返还同一台相机、所有权仍归甲；B已卖给乙，所有权转移；C可用任意同型号相机抵还，不是返还原物；D相机一直由甲持有和保管，没有交付他人保管。\",\"按设问“最符合”选择四项要件都满足的A。\"],\"whyCorrect\":\"定向托管的判断依据是定义中的必要条件是否全部满足。A对交付保管、约定用途、到期返还原物、所有权不转移四项一一对应；B、C、D分别违反所有权不转移、返还原物、交付他方保管，因此A最符合，与参考答案一致。\",\"applicability\":\"适用于题干定义要件较清晰、选项可逐项对照的“属于/最符合”类定义判断。本题不依赖图形或额外材料。\",\"caution\":\"不要把“同型号替代”当成“返还原物”，也不要把买卖、借用、请人指导与“交给他人保管”混同；若设问改成“不属于”，则应反向选择违反要件的选项。\",\"diagnosis\":\"你这次选A，与答案一致；但未描述原解法，用时150秒，参考90秒。仅凭用时无法确定慢在拆要件、逐项比对还是犹豫，也不能据此判断已掌握或提速。下次复盘时先写下四个要件，再逐项标“满足/不满足”，看时间主要花在哪一步。\",\"drillMethod\":null}",
+      "normalized": {
+        "status": "method",
+        "methodName": "定义要件逐项匹配法",
+        "recognition": "题干先给出一个概念定义，再问“最符合”，选项围绕交付保管、约定用途、返还原物、所有权是否转移设置差异，适合拆出要件逐项核对。",
+        "whyCorrect": "定向托管的判断依据是定义中的必要条件是否全部满足。A对交付保管、约定用途、到期返还原物、所有权不转移四项一一对应；B、C、D分别违反所有权不转移、返还原物、交付他方保管，因此A最符合，与参考答案一致。",
+        "applicability": "适用于题干定义要件较清晰、选项可逐项对照的“属于/最符合”类定义判断。本题不依赖图形或额外材料。",
+        "caution": "不要把“同型号替代”当成“返还原物”，也不要把买卖、借用、请人指导与“交给他人保管”混同；若设问改成“不属于”，则应反向选择违反要件的选项。",
+        "diagnosis": "你这次选A，与答案一致；但未描述原解法，用时150秒，参考90秒。仅凭用时无法确定慢在拆要件、逐项比对还是犹豫，也不能据此判断已掌握或提速。下次复盘时先写下四个要件，再逐项标“满足/不满足”，看时间主要花在哪一步。",
+        "steps": [
+          "先把定义拆成四个必要条件：物品交给另一方保管；保管方只能按约定用途使用；约定期限届满返还同一原物；所有权不转移。",
+          "逐项核对：A同时满足交付保管、限定用途、到期返还同一台相机、所有权仍归甲；B已卖给乙，所有权转移；C可用任意同型号相机抵还，不是返还原物；D相机一直由甲持有和保管，没有交付他人保管。",
+          "按设问“最符合”选择四项要件都满足的A。"
+        ],
+        "drillMethod": null
+      },
+      "schema": "passed",
+      "semanticReview": {
+        "status": "method_passed_copy_target_not_fully_met",
+        "correctAnswer": "passed",
+        "conditionDirectionAndHierarchy": "passed",
+        "causalQualification": "not_applicable",
+        "internalFieldMentions": [],
+        "diagnosisSentenceCount": 3,
+        "unrequestedAssistanceDisclaimer": false,
+        "userFacingLanguage": "verbosity_target_not_met",
+        "note": "四要件与A正确，内部字段已消失；diagnosis仍为3句，未达到这次通常1至2句的简洁目标。"
+      }
+    },
+    {
+      "id": "MC05",
+      "family": "未细分文字判断",
+      "sourceCategory": "判断推理",
+      "expected": {
+        "answer": "B",
+        "capabilityAvailable": true,
+        "acceptedStatuses": [
+          "method",
+          "no_shortcut"
+        ],
+        "standardReasoning": "同期有营业时间延长，不能只凭前后销售变化把全部增长归因于广告。B指出未排除另一变化；A/D断言广告无效缺证据；C过度否定比较指标。",
+        "expectedMethod": "区分观察到的变化与因果归因，检查是否有未排除的同期因素。",
+        "boundaries": [
+          "指出证据不足，不断言广告必然无效",
+          "不把同期变化本身当作已证明的原因",
+          "父类未细分不等于题目无法做方法分析"
+        ],
+        "mustNot": [
+          "因category只有判断推理拒绝",
+          "断言延长营业时间一定导致全部增长"
+        ],
+        "drillMethod": null
+      },
+      "capability": {
+        "available": true,
+        "code": "available",
+        "category": "判断推理",
+        "label": "文字判断",
+        "focus": "依据本题的条件和选项比较解法，再判断适合整理条件、核对定义还是比较关系。",
+        "classificationSource": "source",
+        "classificationReason": "题库标注为判断推理；未确定细类，按本题完整文字条件和选项分析。"
+      },
+      "sourceUnchanged": true,
+      "prompt": {
+        "length": 3310,
+        "sha256": "2be936a729e1c1ea8725c7906e07e7f24501276a7f31b39683e772ce54470db4"
+      },
+      "providerAttempted": true,
+      "elapsedMs": 12360,
+      "provider": "completed",
+      "model": "deepseek-v4.1-flash",
+      "usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cached_tokens": 0,
+        "completion_thinking_tokens": 902,
+        "completion_tokens": 1273,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 0,
+          "reasoning_tokens": 902,
+          "rejected_prediction_tokens": 0
+        },
+        "credit": 0,
+        "prompt_cache_hit_tokens": 1536,
+        "prompt_cache_miss_tokens": 496,
+        "prompt_cache_write_tokens": 0,
+        "prompt_tokens": 2032,
+        "prompt_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 1536,
+          "reasoning_tokens": 0,
+          "rejected_prediction_tokens": 0
+        },
+        "total_tokens": 3305
+      },
+      "rawContent": "{\"status\":\"method\",\"methodName\":\"他因排除法\",\"recognition\":\"题干先给出一个结果，再说明同一时期存在多个可能影响结果的变化；结论却只把结果全部归因于其中一个变化，并出现“足以解释全部增长”这类绝对表述。\",\"steps\":[\"先圈出结论：新广告本身足以解释销售额的全部增长。\",\"回到事实，列出同期发生的其他变化：延长营业时间。\",\"判断漏洞：销售额增加只能说明前后有变化，不能排除营业时间延长等同期的其他原因。\",\"匹配选项：B直接指出未排除延长营业时间等同期变化的影响；A、D没有依据，C把“日均销售额不能比较任何两个月”说得过绝对。\"],\"whyCorrect\":\"在存在另一同期变量的情况下，只凭销售额前后增加不能推出新广告解释了全部增长；B准确点出这一归因漏洞，因此正确。\",\"applicability\":\"适用于题干中有多个同时发生的变化、结论只归因其中一个并声称其足以解释全部结果的归因类题目；如果题干已控制其他变量，或结论只是说广告可能起作用，则不能机械套用。\",\"caution\":\"不要因为存在其他原因就直接断定广告无效；本题的问题是“不能只归因于广告”，不是“广告一定没作用”。也不要选完全否定指标比较或断言广告无人看到的选项。\",\"diagnosis\":\"你选B正确。未描述原解法，仅凭150秒无法确定慢因是阅读、比较选项还是犹豫；可回看当时是否先锁定“全部增长”这一绝对结论，再找同期他因。若当时是逐项凭语感排除，下次可先找结论漏洞再匹配选项。未记录是否使用辅助，不能据此判断掌握程度或速度。\",\"drillMethod\":null}",
+      "normalized": {
+        "status": "method",
+        "methodName": "他因排除法",
+        "recognition": "题干先给出一个结果，再说明同一时期存在多个可能影响结果的变化；结论却只把结果全部归因于其中一个变化，并出现“足以解释全部增长”这类绝对表述。",
+        "whyCorrect": "在存在另一同期变量的情况下，只凭销售额前后增加不能推出新广告解释了全部增长；B准确点出这一归因漏洞，因此正确。",
+        "applicability": "适用于题干中有多个同时发生的变化、结论只归因其中一个并声称其足以解释全部结果的归因类题目；如果题干已控制其他变量，或结论只是说广告可能起作用，则不能机械套用。",
+        "caution": "不要因为存在其他原因就直接断定广告无效；本题的问题是“不能只归因于广告”，不是“广告一定没作用”。也不要选完全否定指标比较或断言广告无人看到的选项。",
+        "diagnosis": "你选B正确。未描述原解法，仅凭150秒无法确定慢因是阅读、比较选项还是犹豫；可回看当时是否先锁定“全部增长”这一绝对结论，再找同期他因。若当时是逐项凭语感排除，下次可先找结论漏洞再匹配选项。未记录是否使用辅助，不能据此判断掌握程度或速度。",
+        "steps": [
+          "先圈出结论：新广告本身足以解释销售额的全部增长。",
+          "回到事实，列出同期发生的其他变化：延长营业时间。",
+          "判断漏洞：销售额增加只能说明前后有变化，不能排除营业时间延长等同期的其他原因。",
+          "匹配选项：B直接指出未排除延长营业时间等同期变化的影响；A、D没有依据，C把“日均销售额不能比较任何两个月”说得过绝对。"
+        ],
+        "drillMethod": null
+      },
+      "schema": "passed",
+      "semanticReview": {
+        "status": "method_passed_copy_target_not_fully_met",
+        "correctAnswer": "passed",
+        "conditionDirectionAndHierarchy": "passed",
+        "causalQualification": "passed_alternative_remains_unexcluded",
+        "internalFieldMentions": [],
+        "diagnosisSentenceCount": 4,
+        "unrequestedAssistanceDisclaimer": true,
+        "userFacingLanguage": "failed_default_assistance_disclaimer_and_length",
+        "note": "B与他因未排除的推理正确，没有再断言营业时间已造成增长；内部字段已消失。但diagnosis4句，最后仍自动强调辅助情况未知及不能判断掌握/速度，文案纠正目标未完全达到。"
+      }
+    }
+  ],
+  "targetedPlan": {
+    "priorReport": "classification-method-evaluation-live-v1.json",
+    "change": "Natural Chinese output, no debug fields or unrequested guess/assistance disclaimers; diagnosis generally one or two sentences. Unproven alternative causes remain possibilities.",
+    "checks": [
+      "MC01 retains all four defining conditions and answer A; no assisted/userReason/userApproach/null/false debugging language.",
+      "MC05 keeps answer B and distinguishes possible alternative causes from proven causes; no claim that longer hours necessarily caused sales growth.",
+      "Both diagnoses are concise natural Chinese, normally one or two sentences, without automatic guesses or assistance disclaimers.",
+      "Strict schema remains unchanged; each case is called once, no retry, old failures preserved."
+    ],
+    "attemptsPerCase": 1
+  },
+  "summary": {
+    "total": 2,
+    "available": 2,
+    "providerCalls": 2,
+    "providerResponses": 2,
+    "schemaPasses": 2,
+    "failures": 0,
+    "qualityDecision": "methods_and_debug_fields_corrected_copy_target_still_incomplete",
+    "methodPasses": 2,
+    "debugFieldFree": 2,
+    "diagnosisWithinOneOrTwoSentences": 0,
+    "defaultAssistanceDisclaimerFailures": [
+      "MC05"
+    ],
+    "totalAuthorizedProviderCallsAcrossReports": 8,
+    "resamplingAfterThisRun": false
+  },
+  "reviewedAt": "2026-09-27T05:25:12.901Z"
+}

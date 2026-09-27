@@ -1,0 +1,493 @@
+{
+  "version": 1,
+  "generatedAt": "2026-09-27T04:00:37.096Z",
+  "mode": "real-provider",
+  "provenance": {
+    "casesSha256": "164792f9cce606c0d3c8ae3bada6819eabdbdb258f8f9c46c3c41a825b3c947a",
+    "coreSha256": "cb4fb34fac8449a82435a8bb3f60c33c651e4d5b702ee24ea80ff0e66b18a966"
+  },
+  "model": "deepseek-v4.1-flash",
+  "settings": {
+    "role": "xingce-explainer",
+    "temperature": 0.2,
+    "reasoningEffort": "low",
+    "maxTokens": 12000,
+    "timeoutMs": 60000,
+    "concurrency": 2
+  },
+  "evidenceBoundary": "Synthetic offline/oracle and real-provider checks do not establish learning improvement. Schema validity alone is not quality approval. Each live response requires an independent reasoning review.",
+  "cases": [
+    {
+      "id": "SR03",
+      "category": "资料分析",
+      "oracle": {
+        "status": "verified",
+        "value": 119.99999999999999,
+        "operation": "divide"
+      },
+      "expected": {
+        "answer": "B",
+        "status": [
+          "method"
+        ],
+        "result": 120,
+        "proof": {
+          "operation": "divide",
+          "operands": [
+            132,
+            1.1
+          ],
+          "value": 120
+        },
+        "must": [
+          "本期除以1+增长率",
+          "说明基数不可混用"
+        ],
+        "mustNot": [
+          "用132×0.9反推基期"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2307
+      },
+      "elapsedMs": 13604,
+      "provider": "completed",
+      "model": "deepseek-v4.1-flash",
+      "usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cached_tokens": 0,
+        "completion_thinking_tokens": 1460,
+        "completion_tokens": 1942,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 0,
+          "reasoning_tokens": 1460,
+          "rejected_prediction_tokens": 0
+        },
+        "credit": 0,
+        "prompt_cache_hit_tokens": 384,
+        "prompt_cache_miss_tokens": 999,
+        "prompt_cache_write_tokens": 0,
+        "prompt_tokens": 1383,
+        "prompt_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 384,
+          "reasoning_tokens": 0,
+          "rejected_prediction_tokens": 0
+        },
+        "total_tokens": 3325
+      },
+      "rawContent": "{\"status\":\"method\",\"methodName\":\"增长率求基期：现期除以1+r\",\"recognition\":\"已知今年产量132万件和同比增长10%，要求去年产量，属于已知现期和增长率求基期；选项中有用今年直接减增长量的干扰项118.8。\",\"steps\":[\"先定角色：今年132万件是现期，同比增长10%对应去年到今年的增长率，去年产量是基期。\",\"写关系式：今年产量=去年产量×(1+10%)，因此去年产量=今年产量÷(1+10%)。\",\"把1+10%化成便于计算的形式：1.1=11/10。\",\"计算132÷1.1=132×10/11=120，或直接132÷1.1=120。\",\"对照选项，选120，即B；118.8是132−132×10%，用错了增长基数。\"],\"whyCorrect\":\"同比增长10%表示今年比去年多去年产量的10%，即今年=去年×(1+10%)。所以去年=今年÷1.1=132÷1.1=120。118.8的错误在于把10%乘在今年132上，得到的是按今年基数计算的数，不是题目定义的同比增长量。\",\"applicability\":\"适用于同比增长率为正、今年产量与增长率口径一致，且要求去年基期产量。若增长率是下降，则分母应为1−下降率；若问增长量，则用今年−去年或去年×增长率。\",\"caution\":\"不要把“今年−今年×增长率”当作去年；增长量应以去年为基数。计算时注意1+10%=1.1，不是0.9；145.2是132×1.1，属于把现期当基期反算。\",\"diagnosis\":\"用户未描述原解法，仅凭150秒用时无法确定慢因；该用时只说明值得回看，不能证明慢在阅读、计算、知识或犹豫。选B正确，但单次选对可能包含猜测，不能据此宣称已掌握或已提速。assisted为null，不能据此证明独立作答。若回看，优先核对“今年=去年×(1+r)”这一关系，并练习把1.1化为11/10后约分。\",\"drillMethod\":\"growth_base\"}",
+      "normalized": {
+        "status": "method",
+        "methodName": "增长率求基期：现期除以1+r",
+        "recognition": "已知今年产量132万件和同比增长10%，要求去年产量，属于已知现期和增长率求基期；选项中有用今年直接减增长量的干扰项118.8。",
+        "whyCorrect": "同比增长10%表示今年比去年多去年产量的10%，即今年=去年×(1+10%)。所以去年=今年÷1.1=132÷1.1=120。118.8的错误在于把10%乘在今年132上，得到的是按今年基数计算的数，不是题目定义的同比增长量。",
+        "applicability": "适用于同比增长率为正、今年产量与增长率口径一致，且要求去年基期产量。若增长率是下降，则分母应为1−下降率；若问增长量，则用今年−去年或去年×增长率。",
+        "caution": "不要把“今年−今年×增长率”当作去年；增长量应以去年为基数。计算时注意1+10%=1.1，不是0.9；145.2是132×1.1，属于把现期当基期反算。",
+        "diagnosis": "用户未描述原解法，仅凭150秒用时无法确定慢因；该用时只说明值得回看，不能证明慢在阅读、计算、知识或犹豫。选B正确，但单次选对可能包含猜测，不能据此宣称已掌握或已提速。assisted为null，不能据此证明独立作答。若回看，优先核对“今年=去年×(1+r)”这一关系，并练习把1.1化为11/10后约分。",
+        "steps": [
+          "先定角色：今年132万件是现期，同比增长10%对应去年到今年的增长率，去年产量是基期。",
+          "写关系式：今年产量=去年产量×(1+10%)，因此去年产量=今年产量÷(1+10%)。",
+          "把1+10%化成便于计算的形式：1.1=11/10。",
+          "计算132÷1.1=132×10/11=120，或直接132÷1.1=120。",
+          "对照选项，选120，即B；118.8是132−132×10%，用错了增长基数。"
+        ],
+        "drillMethod": "growth_base"
+      },
+      "schema": "passed",
+      "semanticReview": {
+        "status": "passed",
+        "mathematicalOrLogicalCorrectness": "passed",
+        "forcedShortcut": "not_observed",
+        "unsupportedSlowCause": "not_observed",
+        "assistanceEvidence": "passed_unknown_is_not_independent",
+        "applicabilityBoundary": "present",
+        "note": "计算、适用边界正确；明确辅助情况未记录，不能证明独立作答。"
+      }
+    },
+    {
+      "id": "SR04",
+      "category": "资料分析",
+      "oracle": {
+        "status": "verified",
+        "value": 12.5,
+        "operation": "weightedRate"
+      },
+      "expected": {
+        "answer": "B",
+        "status": [
+          "method"
+        ],
+        "result": 12.5,
+        "proof": {
+          "operation": "weightedRate",
+          "values": [
+            100,
+            300
+          ],
+          "rates": [
+            20,
+            10
+          ],
+          "value": 12.5
+        },
+        "must": [
+          "按基期权重或增量求合计率",
+          "指出算术平均不适用"
+        ],
+        "mustNot": [
+          "直接(20%+10%)/2"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2334
+      },
+      "elapsedMs": 12666,
+      "provider": "completed",
+      "model": "deepseek-v4.1-flash",
+      "usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cached_tokens": 0,
+        "completion_thinking_tokens": 1145,
+        "completion_tokens": 1561,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 0,
+          "reasoning_tokens": 1145,
+          "rejected_prediction_tokens": 0
+        },
+        "credit": 0,
+        "prompt_cache_hit_tokens": 384,
+        "prompt_cache_miss_tokens": 1013,
+        "prompt_cache_write_tokens": 0,
+        "prompt_tokens": 1397,
+        "prompt_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 384,
+          "reasoning_tokens": 0,
+          "rejected_prediction_tokens": 0
+        },
+        "total_tokens": 2958
+      },
+      "rawContent": "{\"status\":\"method\",\"methodName\":\"基期加权平均法\",\"recognition\":\"题目给出各部门或各部分的基期销售额和各自增长率，要求合并后的总体增长率。\",\"steps\":[\"分别计算各部门增量：甲部门100×20%=20万元，乙部门300×10%=30万元。\",\"合并增量：20+30=50万元。\",\"合并基期：100+300=400万元。\",\"总体增长率=合并增量÷合并基期=50÷400=12.5%，对应B。\",\"也可用基期权重检验：权重为100:300=1:3，加权平均为20%×1/4+10%×3/4=12.5%。\"],\"whyCorrect\":\"总体增长率的定义是总增量除以总基期。各部门增量按各自基期计算，合并后分母也应是各部门基期之和，因此50÷400=12.5%。这等价于以基期销售额为权重的加权平均，而不是两个增长率的简单算术平均。\",\"applicability\":\"适用于各部分属于同一总体、基期销售额可相加、增长率口径一致且均以各自基期为分母的情形。若今年销售额不能简单相加，或部门间有重叠、口径不一致，则不能直接这样合并。\",\"caution\":\"不能直接算(20%+10%)÷2=15%，因为两部门基期规模不同。权重应取基期销售额，不是部门个数，也不是今年销售额；若给的是今年数据，需要先转回基期或分别求增量。\",\"diagnosis\":\"用户选择B且计算与参考答案一致，但userReason和userApproach为空，assisted为null，无法证明是否独立作答，也不能据单次选对宣称已掌握。用时150秒高于参考75秒，但仅凭用时无法确定慢在阅读、计算、知识还是犹豫；若确有卡顿，可重点回看是否误把合并增长率当成两个增长率的算术平均。\",\"drillMethod\":null}",
+      "normalized": {
+        "status": "method",
+        "methodName": "基期加权平均法",
+        "recognition": "题目给出各部门或各部分的基期销售额和各自增长率，要求合并后的总体增长率。",
+        "whyCorrect": "总体增长率的定义是总增量除以总基期。各部门增量按各自基期计算，合并后分母也应是各部门基期之和，因此50÷400=12.5%。这等价于以基期销售额为权重的加权平均，而不是两个增长率的简单算术平均。",
+        "applicability": "适用于各部分属于同一总体、基期销售额可相加、增长率口径一致且均以各自基期为分母的情形。若今年销售额不能简单相加，或部门间有重叠、口径不一致，则不能直接这样合并。",
+        "caution": "不能直接算(20%+10%)÷2=15%，因为两部门基期规模不同。权重应取基期销售额，不是部门个数，也不是今年销售额；若给的是今年数据，需要先转回基期或分别求增量。",
+        "diagnosis": "用户选择B且计算与参考答案一致，但userReason和userApproach为空，assisted为null，无法证明是否独立作答，也不能据单次选对宣称已掌握。用时150秒高于参考75秒，但仅凭用时无法确定慢在阅读、计算、知识还是犹豫；若确有卡顿，可重点回看是否误把合并增长率当成两个增长率的算术平均。",
+        "steps": [
+          "分别计算各部门增量：甲部门100×20%=20万元，乙部门300×10%=30万元。",
+          "合并增量：20+30=50万元。",
+          "合并基期：100+300=400万元。",
+          "总体增长率=合并增量÷合并基期=50÷400=12.5%，对应B。",
+          "也可用基期权重检验：权重为100:300=1:3，加权平均为20%×1/4+10%×3/4=12.5%。"
+        ],
+        "drillMethod": null
+      },
+      "schema": "passed",
+      "semanticReview": {
+        "status": "passed",
+        "mathematicalOrLogicalCorrectness": "passed",
+        "forcedShortcut": "not_observed",
+        "unsupportedSlowCause": "not_observed",
+        "assistanceEvidence": "passed_unknown_is_not_independent",
+        "applicabilityBoundary": "present",
+        "note": "计算、适用边界正确；明确辅助情况未记录，不能证明独立作答。"
+      }
+    },
+    {
+      "id": "SR05",
+      "category": "数量关系",
+      "oracle": {
+        "status": "verified",
+        "value": -4.0000000000000036,
+        "operation": "successiveRate"
+      },
+      "expected": {
+        "answer": "C",
+        "status": [
+          "method"
+        ],
+        "result": -4,
+        "proof": {
+          "operation": "successiveRate",
+          "rates": [
+            20,
+            -20
+          ],
+          "value": -4
+        },
+        "must": [
+          "前后百分比基数不同",
+          "下降4%"
+        ],
+        "mustNot": [
+          "涨跌相抵所以不变"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2299
+      },
+      "elapsedMs": 21429,
+      "provider": "completed",
+      "model": "deepseek-v4.1-flash",
+      "usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cached_tokens": 0,
+        "completion_thinking_tokens": 2848,
+        "completion_tokens": 3445,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 0,
+          "reasoning_tokens": 2848,
+          "rejected_prediction_tokens": 0
+        },
+        "credit": 0,
+        "prompt_cache_hit_tokens": 1024,
+        "prompt_cache_miss_tokens": 361,
+        "prompt_cache_write_tokens": 0,
+        "prompt_tokens": 1385,
+        "prompt_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 1024,
+          "reasoning_tokens": 0,
+          "rejected_prediction_tokens": 0
+        },
+        "total_tokens": 4830
+      },
+      "rawContent": "{\"status\":\"method\",\"methodName\":\"同幅度涨跌总倍率法\",\"recognition\":\"题干出现“先涨价（或降价）同一百分比，再按变化后的价格反向变化同一百分比”，问最终相对原价变化。识别关键是两次幅度相同，且第二次以第一次变化后的价格为基数。\",\"steps\":[\"确认两次变化幅度相同，且第二次降价以涨后价为基数。\",\"把20%转为分数：20%=1/5。\",\"涨20%后的倍率=1+1/5=6/5；降20%后的倍率=1-1/5=4/5。\",\"总倍率=6/5×4/5=24/25=96%。\",\"96%表示最终价是原价的96%，比原价少4%，即下降4%，对应选项C。\"],\"whyCorrect\":\"设原价为P。涨20%后为P×1.2；再按涨后价降20%，最终为P×1.2×0.8=P×0.96。用分数表示：1.2×0.8=6/5×4/5=24/25=96%，所以最终价是原价的96%，相对原价下降4%。一般地，同幅度a先涨后降，总倍率为(1+a)(1-a)=1-a²；a=20%=0.2，1-0.04=0.96。第二次降价的基数是涨后价，不是原价，因此不能把两个20%直接抵消。\",\"applicability\":\"适用于题干明确“先涨a%再按涨后价降a%”，或“先降a%再按降后价涨a%”，且两次幅度相同、第二次基数为第一次变化后的价格。若两次幅度不同，应分别乘(1+a)(1-b)，不能用1-a²；若第二次直接按原价变化，也不能套此公式。\",\"caution\":\"常见错误是认为涨20%再降20%回到原价；实际最终为原价的96%，下降4%。也不要把“下降4%”误读为相对涨后价下降4%；相对涨后价仍是下降20%。公式仅在同幅度且反向变化、且按变化后价格计算时使用。\",\"diagnosis\":\"用户选C正确，但userApproach和userReason为空，无法判断其原解法；仅凭150秒和参考75秒不能确定慢在阅读、计算、知识还是犹豫。assisted为null，未记录是否使用辅助，不能证明独立作答或已掌握。可练习把20%转为1/5、6/5×4/5=24/25=96%这类倍率计算，但单次选对可能包含猜测，不据此宣称提速或能力提升。\",\"drillMethod\":\"percent_fraction\"}",
+      "normalized": {
+        "status": "method",
+        "methodName": "同幅度涨跌总倍率法",
+        "recognition": "题干出现“先涨价（或降价）同一百分比，再按变化后的价格反向变化同一百分比”，问最终相对原价变化。识别关键是两次幅度相同，且第二次以第一次变化后的价格为基数。",
+        "whyCorrect": "设原价为P。涨20%后为P×1.2；再按涨后价降20%，最终为P×1.2×0.8=P×0.96。用分数表示：1.2×0.8=6/5×4/5=24/25=96%，所以最终价是原价的96%，相对原价下降4%。一般地，同幅度a先涨后降，总倍率为(1+a)(1-a)=1-a²；a=20%=0.2，1-0.04=0.96。第二次降价的基数是涨后价，不是原价，因此不能把两个20%直接抵消。",
+        "applicability": "适用于题干明确“先涨a%再按涨后价降a%”，或“先降a%再按降后价涨a%”，且两次幅度相同、第二次基数为第一次变化后的价格。若两次幅度不同，应分别乘(1+a)(1-b)，不能用1-a²；若第二次直接按原价变化，也不能套此公式。",
+        "caution": "常见错误是认为涨20%再降20%回到原价；实际最终为原价的96%，下降4%。也不要把“下降4%”误读为相对涨后价下降4%；相对涨后价仍是下降20%。公式仅在同幅度且反向变化、且按变化后价格计算时使用。",
+        "diagnosis": "用户选C正确，但userApproach和userReason为空，无法判断其原解法；仅凭150秒和参考75秒不能确定慢在阅读、计算、知识还是犹豫。assisted为null，未记录是否使用辅助，不能证明独立作答或已掌握。可练习把20%转为1/5、6/5×4/5=24/25=96%这类倍率计算，但单次选对可能包含猜测，不据此宣称提速或能力提升。",
+        "steps": [
+          "确认两次变化幅度相同，且第二次降价以涨后价为基数。",
+          "把20%转为分数：20%=1/5。",
+          "涨20%后的倍率=1+1/5=6/5；降20%后的倍率=1-1/5=4/5。",
+          "总倍率=6/5×4/5=24/25=96%。",
+          "96%表示最终价是原价的96%，比原价少4%，即下降4%，对应选项C。"
+        ],
+        "drillMethod": "percent_fraction"
+      },
+      "schema": "passed",
+      "semanticReview": {
+        "status": "passed",
+        "mathematicalOrLogicalCorrectness": "passed",
+        "forcedShortcut": "not_observed",
+        "unsupportedSlowCause": "not_observed",
+        "assistanceEvidence": "passed_unknown_is_not_independent",
+        "applicabilityBoundary": "present",
+        "note": "计算、适用边界正确；明确辅助情况未记录，不能证明独立作答。"
+      }
+    },
+    {
+      "id": "SR06",
+      "category": "数量关系",
+      "oracle": {
+        "status": "verified",
+        "value": 4,
+        "operation": "cooperation"
+      },
+      "expected": {
+        "answer": "B",
+        "status": [
+          "method"
+        ],
+        "result": 4,
+        "proof": {
+          "operation": "cooperation",
+          "days": [
+            6,
+            12
+          ],
+          "value": 4
+        },
+        "must": [
+          "相加效率而非时间",
+          "4天"
+        ],
+        "mustNot": [
+          "直接平均6天与12天"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2295
+      },
+      "elapsedMs": 7301,
+      "provider": "completed",
+      "model": "deepseek-v4.1-flash",
+      "usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cached_tokens": 0,
+        "completion_thinking_tokens": 618,
+        "completion_tokens": 962,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 0,
+          "reasoning_tokens": 618,
+          "rejected_prediction_tokens": 0
+        },
+        "credit": 0,
+        "prompt_cache_hit_tokens": 1024,
+        "prompt_cache_miss_tokens": 359,
+        "prompt_cache_write_tokens": 0,
+        "prompt_tokens": 1383,
+        "prompt_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 1024,
+          "reasoning_tokens": 0,
+          "rejected_prediction_tokens": 0
+        },
+        "total_tokens": 2345
+      },
+      "rawContent": "{\"status\":\"method\",\"methodName\":\"最小公倍数设总量法\",\"recognition\":\"题目给出甲、乙各自单独完成同一项工作的时间，效率恒定，求两人合作完成时间。\",\"steps\":[\"取甲、乙单独完成时间6和12的最小公倍数12，作为工作总量。\",\"甲效率=12÷6=2。\",\"乙效率=12÷12=1。\",\"合作效率=2+1=3。\",\"合作时间=12÷3=4，对应选项B。\"],\"whyCorrect\":\"工作量=效率×时间。把总量设为12后，甲、乙效率分别为2和1，合作效率为3，所以合作时间为12÷3=4。设其他总量也会得到同一合作时间，设最小公倍数只是便于整数计算。\",\"applicability\":\"适用于两人或多人的效率恒定、工作总量可加、合作过程中无休息或效率变化的完成时间问题。\",\"caution\":\"不要把单独完成时间直接相加或取平均。总量可以任意设，但后续效率和时间必须与所设总量一致。若存在效率变化、休息或互相干扰，不能直接套用。\",\"diagnosis\":\"本题选B正确，但用户未描述原解法，仅凭150秒用时无法确定慢在阅读、计算、知识还是犹豫；参考75秒也只是练习参考，并非群体标准，不能据此断言速度或掌握程度。assisted为null表示未记录辅助情况，不能据此判断是否独立作答。若回看，可检查自己是否稳定按“设总量—求效率—合作效率—求时间”完成，而不是把时间直接相加。\",\"drillMethod\":null}",
+      "normalized": {
+        "status": "method",
+        "methodName": "最小公倍数设总量法",
+        "recognition": "题目给出甲、乙各自单独完成同一项工作的时间，效率恒定，求两人合作完成时间。",
+        "whyCorrect": "工作量=效率×时间。把总量设为12后，甲、乙效率分别为2和1，合作效率为3，所以合作时间为12÷3=4。设其他总量也会得到同一合作时间，设最小公倍数只是便于整数计算。",
+        "applicability": "适用于两人或多人的效率恒定、工作总量可加、合作过程中无休息或效率变化的完成时间问题。",
+        "caution": "不要把单独完成时间直接相加或取平均。总量可以任意设，但后续效率和时间必须与所设总量一致。若存在效率变化、休息或互相干扰，不能直接套用。",
+        "diagnosis": "本题选B正确，但用户未描述原解法，仅凭150秒用时无法确定慢在阅读、计算、知识还是犹豫；参考75秒也只是练习参考，并非群体标准，不能据此断言速度或掌握程度。assisted为null表示未记录辅助情况，不能据此判断是否独立作答。若回看，可检查自己是否稳定按“设总量—求效率—合作效率—求时间”完成，而不是把时间直接相加。",
+        "steps": [
+          "取甲、乙单独完成时间6和12的最小公倍数12，作为工作总量。",
+          "甲效率=12÷6=2。",
+          "乙效率=12÷12=1。",
+          "合作效率=2+1=3。",
+          "合作时间=12÷3=4，对应选项B。"
+        ],
+        "drillMethod": null
+      },
+      "schema": "passed",
+      "semanticReview": {
+        "status": "passed",
+        "mathematicalOrLogicalCorrectness": "passed",
+        "forcedShortcut": "not_observed",
+        "unsupportedSlowCause": "not_observed",
+        "assistanceEvidence": "passed_unknown_is_not_independent",
+        "applicabilityBoundary": "present",
+        "note": "计算、适用边界正确；明确辅助情况未记录，不能证明独立作答。"
+      }
+    },
+    {
+      "id": "SR16",
+      "category": "常识判断",
+      "oracle": {
+        "status": "manual_reasoning_required"
+      },
+      "expected": {
+        "answer": "C",
+        "status": [
+          "method",
+          "no_shortcut"
+        ],
+        "must": [
+          "依据物态变化知识",
+          "承认知识提取可能已是最短路径"
+        ],
+        "mustNot": [
+          "编造与选项字数有关的蒙题口诀"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 2292
+      },
+      "elapsedMs": 13719,
+      "provider": "completed",
+      "model": "deepseek-v4.1-flash",
+      "usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cached_tokens": 0,
+        "completion_thinking_tokens": 1369,
+        "completion_tokens": 1795,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 0,
+          "reasoning_tokens": 1369,
+          "rejected_prediction_tokens": 0
+        },
+        "credit": 0,
+        "prompt_cache_hit_tokens": 1024,
+        "prompt_cache_miss_tokens": 359,
+        "prompt_cache_write_tokens": 0,
+        "prompt_tokens": 1383,
+        "prompt_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 1024,
+          "reasoning_tokens": 0,
+          "rejected_prediction_tokens": 0
+        },
+        "total_tokens": 3178
+      },
+      "rawContent": "{\"status\":\"method\",\"methodName\":\"物态变化方向判断法\",\"recognition\":\"选项围绕同一物质的不同物态变化，问“吸热/放热”时，可先把每个选项写成物态变化方向，再按方向判断。\",\"steps\":[\"将选项转成变化方向：A水蒸气→水滴（气→液），B水→冰（液→固），C液态水→水蒸气（液→气），D水蒸气→霜（气→固）。\",\"用方向规则判断：固→液→气方向通常吸热；气→液→固方向通常放热。\",\"C是液→气，属于汽化中的蒸发，通常吸热，因此选C。\",\"其余A是液化、B是凝固、D是凝华，均为反向过程，通常放热。\"],\"whyCorrect\":\"物态变化伴随能量变化：液态变为气态需要克服分子间作用力，通常吸热；凝结、凝固、凝华是气→液或液→固、气→固的反向过程，通常放热。因此液态水蒸发为水蒸气属于吸热过程。\",\"applicability\":\"适用于常压、通常条件下的物态变化判断；需逐项看变化方向，而不是只看是否出现“水蒸气”“冰”“霜”等字眼。升华是固→气，通常也吸热。\",\"caution\":\"不要误以为“水蒸气”出现就是吸热；凝华是气→固，通常放热。蒸发和沸腾都属于汽化，通常吸热；凝结、凝固、凝华通常放热。\",\"diagnosis\":\"仅凭150秒用时无法确定慢因；未记录辅助情况，不能证明本次为独立作答，也不能据此判断用户能力或速度。用户未描述原解法，无法判断耗时来自阅读、知识回忆还是犹豫。若确实在逐项回忆名词，可固定用“变化方向”核对；单次选对可能包含猜测，不能宣称已掌握或已提速。\",\"drillMethod\":null}",
+      "normalized": {
+        "status": "method",
+        "methodName": "物态变化方向判断法",
+        "recognition": "选项围绕同一物质的不同物态变化，问“吸热/放热”时，可先把每个选项写成物态变化方向，再按方向判断。",
+        "whyCorrect": "物态变化伴随能量变化：液态变为气态需要克服分子间作用力，通常吸热；凝结、凝固、凝华是气→液或液→固、气→固的反向过程，通常放热。因此液态水蒸发为水蒸气属于吸热过程。",
+        "applicability": "适用于常压、通常条件下的物态变化判断；需逐项看变化方向，而不是只看是否出现“水蒸气”“冰”“霜”等字眼。升华是固→气，通常也吸热。",
+        "caution": "不要误以为“水蒸气”出现就是吸热；凝华是气→固，通常放热。蒸发和沸腾都属于汽化，通常吸热；凝结、凝固、凝华通常放热。",
+        "diagnosis": "仅凭150秒用时无法确定慢因；未记录辅助情况，不能证明本次为独立作答，也不能据此判断用户能力或速度。用户未描述原解法，无法判断耗时来自阅读、知识回忆还是犹豫。若确实在逐项回忆名词，可固定用“变化方向”核对；单次选对可能包含猜测，不能宣称已掌握或已提速。",
+        "steps": [
+          "将选项转成变化方向：A水蒸气→水滴（气→液），B水→冰（液→固），C液态水→水蒸气（液→气），D水蒸气→霜（气→固）。",
+          "用方向规则判断：固→液→气方向通常吸热；气→液→固方向通常放热。",
+          "C是液→气，属于汽化中的蒸发，通常吸热，因此选C。",
+          "其余A是液化、B是凝固、D是凝华，均为反向过程，通常放热。"
+        ],
+        "drillMethod": null
+      },
+      "schema": "passed",
+      "semanticReview": {
+        "status": "assistance_passed_wording_warning",
+        "mathematicalOrLogicalCorrectness": "steps_correct_explanation_ambiguous",
+        "forcedShortcut": "not_observed",
+        "unsupportedSlowCause": "not_observed",
+        "assistanceEvidence": "passed_unknown_is_not_independent",
+        "applicabilityBoundary": "present",
+        "note": "步骤逐项物态方向正确；whyCorrect称凝结/凝固/凝华是列出的气→液或液→固、气→固的“反向过程”，该措辞自相矛盾/容易误导。保留为真实provider残余教学措辞风险，不以重跑挑选成功答案掩盖。"
+      }
+    }
+  ],
+  "summary": {
+    "total": 5,
+    "arithmeticOraclesVerified": 4,
+    "providerResponses": 5,
+    "schemaPasses": 5,
+    "deterministicSkips": 0,
+    "failures": 0,
+    "qualityDecision": "assistance_semantics_passed_with_provider_wording_warning",
+    "assistanceSemanticsPasses": 5,
+    "teachingWordingWarnings": [
+      "SR16"
+    ]
+  },
+  "reviewedAt": "2026-09-27T04:02:42.135Z"
+}

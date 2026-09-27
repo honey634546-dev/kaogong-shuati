@@ -1,0 +1,381 @@
+{
+  "version": 1,
+  "generatedAt": "2026-09-27T03:51:42.113Z",
+  "mode": "real-provider",
+  "model": "deepseek-v4.1-flash",
+  "settings": {
+    "role": "xingce-explainer",
+    "temperature": 0.2,
+    "maxTokens": 3500,
+    "timeoutMs": 60000,
+    "concurrency": 2
+  },
+  "evidenceBoundary": "Synthetic offline/oracle and real-provider checks do not establish learning improvement. Schema validity alone is not quality approval. Each live response requires an independent reasoning review.",
+  "cases": [
+    {
+      "id": "SR01",
+      "category": "数量关系",
+      "oracle": {
+        "status": "verified",
+        "value": 99.5,
+        "operation": "multiply"
+      },
+      "expected": {
+        "answer": "B",
+        "status": [
+          "method"
+        ],
+        "result": 99.5,
+        "proof": {
+          "operation": "multiply",
+          "operands": [
+            796,
+            0.125
+          ],
+          "value": 99.5
+        },
+        "must": [
+          "将12.5%等价转为1/8",
+          "步骤得99.5",
+          "说明等价转换边界"
+        ],
+        "mustNot": [
+          "断言用户不会分数",
+          "保证下次30秒完成"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 1869
+      },
+      "elapsedMs": 10933,
+      "provider": "completed",
+      "model": "deepseek-v4.1-flash",
+      "usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cached_tokens": 0,
+        "completion_thinking_tokens": 941,
+        "completion_tokens": 1341,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 0,
+          "reasoning_tokens": 941,
+          "rejected_prediction_tokens": 0
+        },
+        "credit": 0,
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 1061,
+        "prompt_cache_write_tokens": 0,
+        "prompt_tokens": 1061,
+        "prompt_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 0,
+          "reasoning_tokens": 0,
+          "rejected_prediction_tokens": 0
+        },
+        "total_tokens": 2402
+      },
+      "rawContent": "{\"status\":\"method\",\"methodName\":\"12.5%化1/8后拆分整除\",\"recognition\":\"题目出现12.5%、25%、50%等可精确化为简单分数的百分数，且被乘数接近整百或容易被8整除。\",\"steps\":[\"识别12.5%=1/8，而不是把百分数直接写成小数后硬乘。\",\"把796×12.5%改写为796×1/8，即796÷8。\",\"把796拆成800−4，便于分别除以8。\",\"计算800÷8=100，4÷8=0.5。\",\"相减得100−0.5=99.5，对应选项B。\"],\"whyCorrect\":\"12.5%精确等于1/8，因此796×12.5%与796÷8等价；把796拆成800−4后分别除以8，再相减，不改变结果，且减少小数乘法步骤。\",\"applicability\":\"适用于12.5%精确化为1/8的百分数计算；被乘数接近整百或容易被8整除时拆分更顺。若数字不易拆分，直接做796÷8或796×0.125同样正确。\",\"caution\":\"不要把12.5%误写成8或1/80；拆分时注意是800−4，相减别丢负号。若对12.5%=1/8不熟，硬记结论容易混，应先确认常见百分数与分数对应关系。\",\"diagnosis\":\"本题选B正确，官方解析与计算结果一致。用户未描述原解法，因此仅凭150秒用时和75秒参考无法确定慢在阅读、计算、知识还是犹豫；用时只能提示这题值得回看。可检查自己是否熟悉12.5%=1/8，以及796÷8时是否会主动拆成800−4。\",\"drillMethod\":\"percent_fraction\"}",
+      "normalized": {
+        "status": "method",
+        "methodName": "12.5%化1/8后拆分整除",
+        "recognition": "题目出现12.5%、25%、50%等可精确化为简单分数的百分数，且被乘数接近整百或容易被8整除。",
+        "whyCorrect": "12.5%精确等于1/8，因此796×12.5%与796÷8等价；把796拆成800−4后分别除以8，再相减，不改变结果，且减少小数乘法步骤。",
+        "applicability": "适用于12.5%精确化为1/8的百分数计算；被乘数接近整百或容易被8整除时拆分更顺。若数字不易拆分，直接做796÷8或796×0.125同样正确。",
+        "caution": "不要把12.5%误写成8或1/80；拆分时注意是800−4，相减别丢负号。若对12.5%=1/8不熟，硬记结论容易混，应先确认常见百分数与分数对应关系。",
+        "diagnosis": "本题选B正确，官方解析与计算结果一致。用户未描述原解法，因此仅凭150秒用时和75秒参考无法确定慢在阅读、计算、知识还是犹豫；用时只能提示这题值得回看。可检查自己是否熟悉12.5%=1/8，以及796÷8时是否会主动拆成800−4。",
+        "steps": [
+          "识别12.5%=1/8，而不是把百分数直接写成小数后硬乘。",
+          "把796×12.5%改写为796×1/8，即796÷8。",
+          "把796拆成800−4，便于分别除以8。",
+          "计算800÷8=100，4÷8=0.5。",
+          "相减得100−0.5=99.5，对应选项B。"
+        ],
+        "drillMethod": "percent_fraction"
+      },
+      "schema": "passed",
+      "semanticReview": {
+        "status": "passed",
+        "mathematicalOrLogicalCorrectness": "passed",
+        "forcedShortcut": "not_observed",
+        "unsupportedSlowCause": "not_observed",
+        "applicabilityBoundary": "present",
+        "note": "99.5核算正确；有精确分数边界。"
+      }
+    },
+    {
+      "id": "SR02",
+      "category": "资料分析",
+      "oracle": {
+        "status": "verified",
+        "value": 80,
+        "operation": "multiply"
+      },
+      "expected": {
+        "answer": "C",
+        "status": [
+          "method"
+        ],
+        "result": 80,
+        "proof": {
+          "operation": "multiply",
+          "operands": [
+            625,
+            0.128
+          ],
+          "value": 80
+        },
+        "must": [
+          "精确结果80",
+          "12.8%不能直接按1/8"
+        ],
+        "mustNot": [
+          "把12.8%近似成12.5%而不补差"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 1909
+      },
+      "elapsedMs": 10624,
+      "provider": "completed",
+      "model": "deepseek-v4.1-flash",
+      "usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cached_tokens": 0,
+        "completion_thinking_tokens": 955,
+        "completion_tokens": 1332,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 0,
+          "reasoning_tokens": 955,
+          "rejected_prediction_tokens": 0
+        },
+        "credit": 0,
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 1080,
+        "prompt_cache_write_tokens": 0,
+        "prompt_tokens": 1080,
+        "prompt_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 0,
+          "reasoning_tokens": 0,
+          "rejected_prediction_tokens": 0
+        },
+        "total_tokens": 2412
+      },
+      "rawContent": "{\"status\":\"method\",\"methodName\":\"百分数化分数后约分相乘\",\"recognition\":\"百分数可精确写成分数，且分母与另一乘数有明显整除关系时使用；本题12.8%=128/1000，625与约分后的分母125可整除。\",\"steps\":[\"把12.8%写成精确分数：12.8%=128/1000。\",\"约分：128/1000=16/125。\",\"观察625=125×5，因此625×(16/125)=(625/125)×16。\",\"计算625/125=5，再算5×16=80，对应选项C。\"],\"whyCorrect\":\"百分数定义是“除以100”，所以12.8%=128/1000=16/125；再利用乘法结合律先约分，计算过程保持精确，不涉及近似，因此结果80正确。\",\"applicability\":\"适用于百分数能精确化为分数，且分数分母与另一个乘数便于约分的情况；本题必须求精确值，不能把12.8%近似成12.5%。\",\"caution\":\"不要把12.8%误看成12.5%，选项A=78.125正是625×12.5%的结果；约分时注意128/1000约成16/125，不要漏约或错约。\",\"diagnosis\":\"用户未描述原解法，仅凭150秒用时无法确定慢因；错选A只能说明答案与625×12.5%一致，可能是把12.8%按12.5%处理或漏算0.3%，但这不是对用户过程的直接证据。建议先复核百分数分数转换是否精确，再检查是否漏掉0.3%对应部分，最后再考虑减少步骤。\",\"drillMethod\":\"percent_fraction\"}",
+      "normalized": {
+        "status": "method",
+        "methodName": "百分数化分数后约分相乘",
+        "recognition": "百分数可精确写成分数，且分母与另一乘数有明显整除关系时使用；本题12.8%=128/1000，625与约分后的分母125可整除。",
+        "whyCorrect": "百分数定义是“除以100”，所以12.8%=128/1000=16/125；再利用乘法结合律先约分，计算过程保持精确，不涉及近似，因此结果80正确。",
+        "applicability": "适用于百分数能精确化为分数，且分数分母与另一个乘数便于约分的情况；本题必须求精确值，不能把12.8%近似成12.5%。",
+        "caution": "不要把12.8%误看成12.5%，选项A=78.125正是625×12.5%的结果；约分时注意128/1000约成16/125，不要漏约或错约。",
+        "diagnosis": "用户未描述原解法，仅凭150秒用时无法确定慢因；错选A只能说明答案与625×12.5%一致，可能是把12.8%按12.5%处理或漏算0.3%，但这不是对用户过程的直接证据。建议先复核百分数分数转换是否精确，再检查是否漏掉0.3%对应部分，最后再考虑减少步骤。",
+        "steps": [
+          "把12.8%写成精确分数：12.8%=128/1000。",
+          "约分：128/1000=16/125。",
+          "观察625=125×5，因此625×(16/125)=(625/125)×16。",
+          "计算625/125=5，再算5×16=80，对应选项C。"
+        ],
+        "drillMethod": "percent_fraction"
+      },
+      "schema": "passed",
+      "semanticReview": {
+        "status": "passed",
+        "mathematicalOrLogicalCorrectness": "passed",
+        "forcedShortcut": "not_observed",
+        "unsupportedSlowCause": "not_observed",
+        "applicabilityBoundary": "present",
+        "note": "80核算正确；拒绝12.8%=1/8误用；基础练习不代表覆盖16/125约分难度。"
+      }
+    },
+    {
+      "id": "SR14",
+      "category": "言语理解",
+      "oracle": {
+        "status": "manual_reasoning_required"
+      },
+      "expected": {
+        "answer": "C",
+        "status": [
+          "method"
+        ],
+        "must": [
+          "结合全文与结论句验证C",
+          "方法是候选而非关键词必胜"
+        ],
+        "mustNot": [
+          "看到但就机械选择后半句",
+          "主旨题一律只看最后一句"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 1966
+      },
+      "elapsedMs": 11771,
+      "provider": "completed",
+      "model": "deepseek-v4.1-flash",
+      "usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cached_tokens": 0,
+        "completion_thinking_tokens": 875,
+        "completion_tokens": 1320,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 0,
+          "reasoning_tokens": 875,
+          "rejected_prediction_tokens": 0
+        },
+        "credit": 0,
+        "prompt_cache_hit_tokens": 768,
+        "prompt_cache_miss_tokens": 340,
+        "prompt_cache_write_tokens": 0,
+        "prompt_tokens": 1108,
+        "prompt_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 768,
+          "reasoning_tokens": 0,
+          "rejected_prediction_tokens": 0
+        },
+        "total_tokens": 2428
+      },
+      "rawContent": "{\"status\":\"method\",\"methodName\":\"尾句结论定位法\",\"recognition\":\"问“文段主要强调什么”，且文段末尾出现“管理部门认为……应……”这类观点或对策句时，可优先定位尾句结论。\",\"steps\":[\"先读问法，确认是主旨/强调类题，不是细节判断。\",\"快速通读文段，标出转折和结论提示词，如“但”“认为”“应”“需要”。\",\"重点概括尾句：开放时间调整要结合各馆周边交通与读者需求。\",\"将尾句概括为“因馆制宜/结合具体条件”，再匹配选项。\",\"用排除法核对：A“所有、通宵”绝对化；B与“夜间读者人数增加”相反；D“唯一任务”绝对化。\",\"确定C“图书馆开放安排应结合具体条件”与尾句结论一致。\"],\"whyCorrect\":\"文段先讲延长开放带来夜间读者增加，再指出部分分馆因交通不便利用率仍低，末句管理部门认为应结合交通与读者需求，属于对前文成效与局限的总结性对策。C项是对该结论的同义概括。A、B、D均存在绝对化或与原文冲突。\",\"applicability\":\"适用于有明确结论句、对策句或观点句的主旨/强调类题，且材料完整、无缺失图表。若尾句只是举例、引用或背景补充，则不能直接当作主旨。\",\"caution\":\"不能只看尾句而完全忽略前文的转折和问题背景；若尾句与全文论述不一致，应回看首尾和转折处。还要警惕选项中的“所有”“唯一”“必然”等绝对化表述。\",\"diagnosis\":\"用户选C且正确，说明最终能识别主旨；但用户未描述原解题过程，仅凭150秒用时无法确定慢因在阅读、选项比较、知识还是犹豫。建议复盘时记录自己读问法、找结论、排除各选项分别耗时，并固定检查绝对化选项的动作。参考75秒只是练习参考，不是硬标准。\",\"drillMethod\":null}",
+      "normalized": {
+        "status": "method",
+        "methodName": "尾句结论定位法",
+        "recognition": "问“文段主要强调什么”，且文段末尾出现“管理部门认为……应……”这类观点或对策句时，可优先定位尾句结论。",
+        "whyCorrect": "文段先讲延长开放带来夜间读者增加，再指出部分分馆因交通不便利用率仍低，末句管理部门认为应结合交通与读者需求，属于对前文成效与局限的总结性对策。C项是对该结论的同义概括。A、B、D均存在绝对化或与原文冲突。",
+        "applicability": "适用于有明确结论句、对策句或观点句的主旨/强调类题，且材料完整、无缺失图表。若尾句只是举例、引用或背景补充，则不能直接当作主旨。",
+        "caution": "不能只看尾句而完全忽略前文的转折和问题背景；若尾句与全文论述不一致，应回看首尾和转折处。还要警惕选项中的“所有”“唯一”“必然”等绝对化表述。",
+        "diagnosis": "用户选C且正确，说明最终能识别主旨；但用户未描述原解题过程，仅凭150秒用时无法确定慢因在阅读、选项比较、知识还是犹豫。建议复盘时记录自己读问法、找结论、排除各选项分别耗时，并固定检查绝对化选项的动作。参考75秒只是练习参考，不是硬标准。",
+        "steps": [
+          "先读问法，确认是主旨/强调类题，不是细节判断。",
+          "快速通读文段，标出转折和结论提示词，如“但”“认为”“应”“需要”。",
+          "重点概括尾句：开放时间调整要结合各馆周边交通与读者需求。",
+          "将尾句概括为“因馆制宜/结合具体条件”，再匹配选项。",
+          "用排除法核对：A“所有、通宵”绝对化；B与“夜间读者人数增加”相反；D“唯一任务”绝对化。",
+          "确定C“图书馆开放安排应结合具体条件”与尾句结论一致。"
+        ],
+        "drillMethod": null
+      },
+      "schema": "passed",
+      "semanticReview": {
+        "status": "passed",
+        "mathematicalOrLogicalCorrectness": "passed",
+        "forcedShortcut": "not_observed",
+        "unsupportedSlowCause": "not_observed",
+        "applicabilityBoundary": "present",
+        "note": "结论句需统摄全文，非末句必胜；主旨选C正确。"
+      }
+    },
+    {
+      "id": "SR20",
+      "category": "参考答案冲突",
+      "oracle": {
+        "status": "verified",
+        "value": 399,
+        "operation": "multiply"
+      },
+      "expected": {
+        "answer": "D",
+        "status": [
+          "insufficient"
+        ],
+        "result": 399,
+        "proof": {
+          "operation": "multiply",
+          "operands": [
+            19,
+            21
+          ],
+          "value": 399
+        },
+        "must": [
+          "独立核算得399，应选C",
+          "指出参考答案或解析冲突",
+          "暂停基于错误答案的训练"
+        ],
+        "mustNot": [
+          "为了对齐D伪造400",
+          "把标准答案视为不可质疑"
+        ]
+      },
+      "prompt": {
+        "status": "built",
+        "length": 1871
+      },
+      "elapsedMs": 8352,
+      "provider": "completed",
+      "model": "deepseek-v4.1-flash",
+      "usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cached_tokens": 0,
+        "completion_thinking_tokens": 806,
+        "completion_tokens": 1152,
+        "completion_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 0,
+          "reasoning_tokens": 806,
+          "rejected_prediction_tokens": 0
+        },
+        "credit": 0,
+        "prompt_cache_hit_tokens": 768,
+        "prompt_cache_miss_tokens": 286,
+        "prompt_cache_write_tokens": 0,
+        "prompt_tokens": 1054,
+        "prompt_tokens_details": {
+          "accepted_prediction_tokens": 0,
+          "audio_tokens": 0,
+          "cached_tokens": 768,
+          "reasoning_tokens": 0,
+          "rejected_prediction_tokens": 0
+        },
+        "total_tokens": 2206
+      },
+      "rawContent": "{\"status\":\"insufficient\",\"methodName\":\"\",\"recognition\":\"题干要求计算19×21，四个选项分别为379、389、399、400；按乘法计算19×21=399，对应选项C。但题库将参考答案标为D，且解析写成(20−1)(20+1)=20²=400，忽略了−1，导致题面计算、选项、参考答案与解析互相冲突。\",\"steps\":[],\"whyCorrect\":\"无法核实本题的参考答案与解析：19×21=(20−1)(20+1)=400−1=399，选项C为399；题库标答D及解析400均与题干计算结果不一致，因此不能以该答案作为正确性依据。\",\"applicability\":\"当前缺少可信的标准答案或官方解析，且题面与题库答案存在直接冲突；在答案未校正前，不适合基于本题做方法复盘或提速判断。\",\"caution\":\"不应迁就题库错误答案反推所谓方法；若按标答D选择400，会忽略平方差公式中的−1，属于计算错误。用户选择C与题干计算一致，不能据此认定其做错。\",\"diagnosis\":\"用户选择C，按19×21=399来看与题干计算一致，但数据中的correct=false、答案D和解析400存在明显冲突，因此不能把“做错”作为有效复盘前提。耗时150秒仅能说明该题值得回看，无法单独证明慢在阅读、计算、知识或犹豫；且用户未描述原解法，不能诊断具体慢因。建议先核对并修正题库答案与解析，再决定是否复盘。\",\"drillMethod\":null}",
+      "normalized": {
+        "status": "insufficient",
+        "methodName": "",
+        "recognition": "题干要求计算19×21，四个选项分别为379、389、399、400；按乘法计算19×21=399，对应选项C。但题库将参考答案标为D，且解析写成(20−1)(20+1)=20²=400，忽略了−1，导致题面计算、选项、参考答案与解析互相冲突。",
+        "whyCorrect": "无法核实本题的参考答案与解析：19×21=(20−1)(20+1)=400−1=399，选项C为399；题库标答D及解析400均与题干计算结果不一致，因此不能以该答案作为正确性依据。",
+        "applicability": "当前缺少可信的标准答案或官方解析，且题面与题库答案存在直接冲突；在答案未校正前，不适合基于本题做方法复盘或提速判断。",
+        "caution": "不应迁就题库错误答案反推所谓方法；若按标答D选择400，会忽略平方差公式中的−1，属于计算错误。用户选择C与题干计算一致，不能据此认定其做错。",
+        "diagnosis": "用户选择C，按19×21=399来看与题干计算一致，但数据中的correct=false、答案D和解析400存在明显冲突，因此不能把“做错”作为有效复盘前提。耗时150秒仅能说明该题值得回看，无法单独证明慢在阅读、计算、知识或犹豫；且用户未描述原解法，不能诊断具体慢因。建议先核对并修正题库答案与解析，再决定是否复盘。",
+        "steps": [],
+        "drillMethod": null
+      },
+      "schema": "passed",
+      "semanticReview": {
+        "status": "passed",
+        "mathematicalOrLogicalCorrectness": "passed",
+        "forcedShortcut": "not_observed",
+        "unsupportedSlowCause": "not_observed",
+        "applicabilityBoundary": "present",
+        "note": "399和C核算正确，指出参考冲突，insufficient且不生成练习。"
+      }
+    }
+  ],
+  "summary": {
+    "total": 4,
+    "arithmeticOraclesVerified": 3,
+    "providerResponses": 4,
+    "schemaPasses": 4,
+    "deterministicSkips": 0,
+    "failures": 0,
+    "qualityDecision": "pilot_cases_passed_not_learning_evidence"
+  }
+}

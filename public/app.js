@@ -430,13 +430,13 @@ function startQuestionSolve(idx) {
   const s = store.state;
   const q = s.questions[idx];
   const a = ensureAnswer(idx);
-  if (!q || !s.timing?.running || a.solveStopped || q._solveStartedAt != null) return;
+  if (!q || document.hidden || !s.timing?.running || a.solveStopped || q._solveStartedAt != null) return;
   q._solveStartedAt = monotonicNow();
 }
 function startExplanationTimer(idx) {
   const s = store.state;
   const q = s.questions[idx];
-  if (!q || !s.timing?.running || !q._explanationOpen || q._explanationStartedAt != null) return;
+  if (!q || document.hidden || !s.timing?.running || !q._explanationOpen || q._explanationStartedAt != null) return;
   q._explanationStartedAt = monotonicNow();
 }
 function startTimer(limitSec) {
@@ -563,6 +563,18 @@ function closeQuestionTimers(idx) {
   const q = store.state.questions[idx];
   if (q) q._explanationOpen = false;
 }
+// 切到后台时逐题停留不继续累积；考试总倒计时仍按真实流逝运行。
+document.addEventListener('visibilitychange', () => {
+  const s = store.state;
+  if (!s.timing?.running || s.view !== 'practice') return;
+  if (document.hidden) {
+    stampCost(s.idx);
+    stampExplanation(s.idx);
+  } else {
+    startQuestionSolve(s.idx);
+    startExplanationTimer(s.idx);
+  }
+});
 /** 记录答案并（客观题）自动下一题；背题模式（backMode）判分展示反馈后不跳题 */
 function recordAnswer(q, sel) {
   const s = store.state;
@@ -3090,6 +3102,10 @@ function previewCardHtml(q, i) {
 
 /** 编辑弹窗字段（题干/材料/选项/答案/解析 分区，两个编辑弹窗共用） */
 function editQuestionFieldsHtml(q, ansDisplay) {
+  const categoryChoices = ['', '言语理解', '判断推理', '判断推理/逻辑判断', '判断推理/定义判断', '判断推理/类比推理',
+    '判断推理/图形推理', '数量关系', '资料分析', '常识判断', '政治理论', '申论', '综应'];
+  const currentCategory = String(q.category || '');
+  if (!categoryChoices.includes(currentCategory)) categoryChoices.push(currentCategory);
   return `
     <div class="eq-section">
       <div class="eq-section-title">题干</div>
@@ -3112,16 +3128,9 @@ function editQuestionFieldsHtml(q, ansDisplay) {
 	      <textarea id="eq-analysis" class="field-area" rows="2">${esc(q.analysis || '')}</textarea>
 	    </div>
 	    <div class="eq-section">
-	      <div class="eq-section-title">分类 <span class="muted">（行测子科目；AI 自动识别，也可手动修改）</span></div>
+	      <div class="eq-section-title">分类 <span class="muted">（保留原分类，也可手动修改）</span></div>
 	      <select id="eq-category" class="field-input" style="padding:9px 10px">
-	        <option value="">未分类</option>
-	        <option value="言语理解"${q.category === '言语理解' ? ' selected' : ''}>言语理解</option>
-	        <option value="判断推理"${q.category === '判断推理' ? ' selected' : ''}>判断推理</option>
-	        <option value="数量关系"${q.category === '数量关系' ? ' selected' : ''}>数量关系</option>
-	        <option value="资料分析"${q.category === '资料分析' ? ' selected' : ''}>资料分析</option>
-	        <option value="常识判断"${q.category === '常识判断' ? ' selected' : ''}>常识判断</option>
-	        <option value="申论"${q.category === '申论' ? ' selected' : ''}>申论</option>
-	        <option value="综应"${q.category === '综应' ? ' selected' : ''}>综应</option>
+	        ${categoryChoices.map((value) => `<option value="${esc(value)}"${value === currentCategory ? ' selected' : ''}>${esc(value || '未分类')}</option>`).join('')}
 	      </select>
 	    </div>
 	    <div class="eq-section">
@@ -4574,6 +4583,9 @@ function mountAiTutor(view, q, token) {
       await new Promise((r) => setTimeout(r, 280));
 
       if (!live()) return;
+      if (store.state.view === 'practice' && store.state.questions[store.state.idx] === q && !ensureAnswer(store.state.idx).solveStopped) {
+        ensureAnswer(store.state.idx).assisted = true;
+      }
       state.messages = Array.isArray(result.messages) ? result.messages : state.messages;
       pending.status = 'complete';
       setStatus(result.mock ? '本地 Mock' : '名师在线');
@@ -5343,6 +5355,7 @@ function renderQuestion() {
     const existing = $('#inline-explain');
     if (existing) { stampExplanation(s.idx); q._explanationOpen = false; existing.remove(); return; }
     stampCost(s.idx);
+    if (!ensureAnswer(s.idx).solveStopped) ensureAnswer(s.idx).assisted = true;
     ensureAnswer(s.idx).solveStopped = true;
     q._explanationOpen = true;
     const j = s.answers[s.idx] ? judge(q, s.answers[s.idx].selected) : null;
@@ -5501,6 +5514,7 @@ async function submitExam(force) {
       body: JSON.stringify({
         questionId: q.id, subject: q.subject || s.subject, chapter: q.chapter, type: q.type,
         selected: selSorted || [], correct: finalCorrect, costMs: a.costMs,
+        assisted: a.assisted === true,
         explanationMs: a.explanationMs || 0,
         attemptId: s.attemptId, attemptMode: s.mode, attemptQuestionCount: s.questions.length,
         startedAtMs: s.attemptStartedAt,
@@ -5606,7 +5620,9 @@ async function openAttemptReview(attemptId) {
     const snap = record.question || {};
     const options = Array.isArray(snap.options) ? snap.options : [];
     const qid = snap.questionId || record.questionId;
-    const images = Array.isArray(snap.images) ? snap.images : [];
+    let images = snap.images;
+    if (typeof images === 'string') { try { images = JSON.parse(images); } catch { images = []; } }
+    if (!Array.isArray(images)) images = [];
     const prompt = snap.prompt || snap.content || '';
     const materialText = snap.material || '';
     const contentHtml = snap.contentHtml || (snap.type === 'custom'
@@ -5623,7 +5639,14 @@ async function openAttemptReview(attemptId) {
       questionUid: record.questionUid || snap.questionUid || '',
       revision: record.revision || snap.revision || 1,
       subject: record.subject || attempt.subject || '',
-      chapter: record.chapter || snap.category || '',
+      chapter: snap.chapter || '',
+      category: snap.category || '',
+      subCategory: snap.subCategory || '',
+      categoryName: snap.categoryName || '',
+      module: snap.module || '',
+      image_missing: snap.image_missing ?? snap.imageMissing,
+      materialId: snap.materialId || snap.material_id || snap.groupId || '',
+      sharedMaterial: Boolean(snap.sharedMaterial || snap.groupId),
       type: snap.type ?? record.type ?? 0,
       content: prompt,
       contentHtml,
@@ -5632,14 +5655,17 @@ async function openAttemptReview(attemptId) {
       options,
       answer: snap.answer || '',
       answerIndex: snap.answerIndex ?? -1,
+      answerStatus: snap.answerStatus ?? snap.answer_status ?? '',
       analysis: snap.analysis || '',
-      images,
+      images: snap.images ?? images,
     });
     answers.push({
       selected: Array.isArray(selected) ? selected : (selected == null ? null : [selected]).map(Number),
       correct: record.correct,
       costMs: Number(record.solveMs) || 0,
       explanationMs: Number(record.explanationMs) || 0,
+      assisted: typeof record.assisted === 'boolean' ? record.assisted : null,
+      submissionKey: record.submissionKey || '',
       solveStopped: true,
     });
   }
@@ -5799,6 +5825,16 @@ function renderReview() {
     else goBack();
   };
   view.appendChild(back);
+  const reviewAttempt = s.attemptId;
+  import('./speed-review-ui.mjs?v=20260927-3').then(({ mountSpeedReview }) => {
+    if (!back.isConnected || store.state.attemptId !== reviewAttempt) return;
+    mountSpeedReview({ view, cards, questions: s.questions, answers: s.answers, attemptId: reviewAttempt, historical: s.historicalReview, api });
+  }).catch(() => {
+    if (back.isConnected) {
+      const notice = el('p', 'speed-error', '方法复盘组件未能加载，请刷新后重试。');
+      back.before(notice);
+    }
+  });
 }
 
 /** 结果页筛选：all=全部 / wrong=错题 / none=无标准答案 */

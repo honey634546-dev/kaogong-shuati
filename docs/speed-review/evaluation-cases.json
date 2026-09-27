@@ -1,0 +1,1247 @@
+{
+  "version": 3,
+  "createdAt": "2026-09-27",
+  "purpose": "提速复盘功能的合成题离线约束检查与真实模型小样本质量评估；不是用户学习效果试验。",
+  "qualityGates": {
+    "critical": "数学或逻辑错误、伪造缺图规律、把错误参考答案当真、无证据断言慢因均必须记录并阻止质量通过。",
+    "manual": "结构化结果通过不等于教学质量通过；核读每例快解、边界、训练题答案及理由。",
+    "learning": "真实提速需真实用户完成同类新题并保留正确率，未由本样本证明。"
+  },
+  "cases": [
+    {
+      "id": "SR01",
+      "category": "数量关系",
+      "source": "原创合成评估题，不含用户数据",
+      "question": {
+        "id": "SR01",
+        "prompt": "计算 796 × 12.5% 的精确值。",
+        "content": "计算 796 × 12.5% 的精确值。",
+        "options": [
+          "98.5",
+          "99.5",
+          "100",
+          "101.5"
+        ],
+        "answer": "B",
+        "correct": "B",
+        "analysis": "12.5%=1/8，796÷8=(800−4)÷8=99.5。",
+        "type": "single",
+        "subject": "数量关系",
+        "category": "数量关系"
+      },
+      "attempt": {
+        "selected": "B",
+        "correct": true,
+        "answerTime": 150,
+        "analysisTime": 0,
+        "timingQuality": "active"
+      },
+      "expected": {
+        "answer": "B",
+        "status": [
+          "method"
+        ],
+        "result": 99.5,
+        "proof": {
+          "operation": "multiply",
+          "operands": [
+            796,
+            0.125
+          ],
+          "value": 99.5
+        },
+        "must": [
+          "将12.5%等价转为1/8",
+          "步骤得99.5",
+          "说明等价转换边界"
+        ],
+        "mustNot": [
+          "断言用户不会分数",
+          "保证下次30秒完成"
+        ],
+        "capability": {
+          "available": true,
+          "category": "数量关系",
+          "code": "available"
+        }
+      }
+    },
+    {
+      "id": "SR02",
+      "category": "资料分析",
+      "source": "原创合成评估题，不含用户数据",
+      "question": {
+        "id": "SR02",
+        "prompt": "计算 625 × 12.8% 的精确值，禁止使用近似值。",
+        "content": "计算 625 × 12.8% 的精确值，禁止使用近似值。",
+        "options": [
+          "78.125",
+          "79",
+          "80",
+          "81"
+        ],
+        "answer": "C",
+        "correct": "C",
+        "analysis": "12.8%=128/1000；625×128/1000=80。也可625×(12.5%+0.3%)=78.125+1.875=80。",
+        "type": "single",
+        "subject": "资料分析",
+        "category": "资料分析"
+      },
+      "attempt": {
+        "selected": "A",
+        "correct": false,
+        "answerTime": 150,
+        "analysisTime": 0,
+        "timingQuality": "active"
+      },
+      "expected": {
+        "answer": "C",
+        "status": [
+          "method"
+        ],
+        "result": 80,
+        "proof": {
+          "operation": "multiply",
+          "operands": [
+            625,
+            0.128
+          ],
+          "value": 80
+        },
+        "must": [
+          "精确结果80",
+          "12.8%不能直接按1/8"
+        ],
+        "mustNot": [
+          "把12.8%近似成12.5%而不补差"
+        ],
+        "capability": {
+          "available": true,
+          "category": "资料分析",
+          "code": "available"
+        }
+      }
+    },
+    {
+      "id": "SR03",
+      "category": "资料分析",
+      "source": "原创合成评估题，不含用户数据",
+      "question": {
+        "id": "SR03",
+        "prompt": "某厂今年产量132万件，同比增长10%。去年产量是多少万件？",
+        "content": "某厂今年产量132万件，同比增长10%。去年产量是多少万件？",
+        "options": [
+          "118.8",
+          "120",
+          "122",
+          "145.2"
+        ],
+        "answer": "B",
+        "correct": "B",
+        "analysis": "去年=132÷1.1=120；132−132×10%=118.8用错增长基数。",
+        "type": "single",
+        "subject": "资料分析",
+        "category": "资料分析"
+      },
+      "attempt": {
+        "selected": "B",
+        "correct": true,
+        "answerTime": 150,
+        "analysisTime": 0,
+        "timingQuality": "active"
+      },
+      "expected": {
+        "answer": "B",
+        "status": [
+          "method"
+        ],
+        "result": 120,
+        "proof": {
+          "operation": "divide",
+          "operands": [
+            132,
+            1.1
+          ],
+          "value": 120
+        },
+        "must": [
+          "本期除以1+增长率",
+          "说明基数不可混用"
+        ],
+        "mustNot": [
+          "用132×0.9反推基期"
+        ],
+        "capability": {
+          "available": true,
+          "category": "资料分析",
+          "code": "available"
+        }
+      }
+    },
+    {
+      "id": "SR04",
+      "category": "资料分析",
+      "source": "原创合成评估题，不含用户数据",
+      "question": {
+        "id": "SR04",
+        "prompt": "去年甲、乙部门销售额分别为100万元、300万元。今年分别增长20%、10%。两部门合计销售额同比增长多少？",
+        "content": "去年甲、乙部门销售额分别为100万元、300万元。今年分别增长20%、10%。两部门合计销售额同比增长多少？",
+        "options": [
+          "10%",
+          "12.5%",
+          "15%",
+          "20%"
+        ],
+        "answer": "B",
+        "correct": "B",
+        "analysis": "增量=20+30=50；总基数400；50÷400=12.5%。不能直接平均两个增长率。",
+        "type": "single",
+        "subject": "资料分析",
+        "category": "资料分析"
+      },
+      "attempt": {
+        "selected": "B",
+        "correct": true,
+        "answerTime": 150,
+        "analysisTime": 0,
+        "timingQuality": "active"
+      },
+      "expected": {
+        "answer": "B",
+        "status": [
+          "method"
+        ],
+        "result": 12.5,
+        "proof": {
+          "operation": "weightedRate",
+          "values": [
+            100,
+            300
+          ],
+          "rates": [
+            20,
+            10
+          ],
+          "value": 12.5
+        },
+        "must": [
+          "按基期权重或增量求合计率",
+          "指出算术平均不适用"
+        ],
+        "mustNot": [
+          "直接(20%+10%)/2"
+        ],
+        "capability": {
+          "available": true,
+          "category": "资料分析",
+          "code": "available"
+        }
+      }
+    },
+    {
+      "id": "SR05",
+      "category": "数量关系",
+      "source": "原创合成评估题，不含用户数据",
+      "question": {
+        "id": "SR05",
+        "prompt": "商品先涨价20%，随后按涨后价格降价20%。最终价格相对原价如何变化？",
+        "content": "商品先涨价20%，随后按涨后价格降价20%。最终价格相对原价如何变化？",
+        "options": [
+          "不变",
+          "上涨4%",
+          "下降4%",
+          "下降20%"
+        ],
+        "answer": "C",
+        "correct": "C",
+        "analysis": "设原价100；100×1.2×0.8=96，下降4%。",
+        "type": "single",
+        "subject": "数量关系",
+        "category": "数量关系"
+      },
+      "attempt": {
+        "selected": "C",
+        "correct": true,
+        "answerTime": 150,
+        "analysisTime": 0,
+        "timingQuality": "active"
+      },
+      "expected": {
+        "answer": "C",
+        "status": [
+          "method"
+        ],
+        "result": -4,
+        "proof": {
+          "operation": "successiveRate",
+          "rates": [
+            20,
+            -20
+          ],
+          "value": -4
+        },
+        "must": [
+          "前后百分比基数不同",
+          "下降4%"
+        ],
+        "mustNot": [
+          "涨跌相抵所以不变"
+        ],
+        "capability": {
+          "available": true,
+          "category": "数量关系",
+          "code": "available"
+        }
+      }
+    },
+    {
+      "id": "SR06",
+      "category": "数量关系",
+      "source": "原创合成评估题，不含用户数据",
+      "question": {
+        "id": "SR06",
+        "prompt": "甲单独完成一项工作需要6天，乙单独完成需要12天。两人效率恒定，同时合作需要几天？",
+        "content": "甲单独完成一项工作需要6天，乙单独完成需要12天。两人效率恒定，同时合作需要几天？",
+        "options": [
+          "3",
+          "4",
+          "6",
+          "9"
+        ],
+        "answer": "B",
+        "correct": "B",
+        "analysis": "工作总量取12，甲效率2，乙效率1，合作效率3，需4天。",
+        "type": "single",
+        "subject": "数量关系",
+        "category": "数量关系"
+      },
+      "attempt": {
+        "selected": "B",
+        "correct": true,
+        "answerTime": 150,
+        "analysisTime": 0,
+        "timingQuality": "active"
+      },
+      "expected": {
+        "answer": "B",
+        "status": [
+          "method"
+        ],
+        "result": 4,
+        "proof": {
+          "operation": "cooperation",
+          "days": [
+            6,
+            12
+          ],
+          "value": 4
+        },
+        "must": [
+          "相加效率而非时间",
+          "4天"
+        ],
+        "mustNot": [
+          "直接平均6天与12天"
+        ],
+        "capability": {
+          "available": true,
+          "category": "数量关系",
+          "code": "available"
+        }
+      }
+    },
+    {
+      "id": "SR07",
+      "category": "数量关系",
+      "source": "原创合成评估题，不含用户数据",
+      "question": {
+        "id": "SR07",
+        "prompt": "一辆车以60千米/时从甲地到乙地，再以40千米/时沿原路返回。途中不停，往返全程平均速度是多少？",
+        "content": "一辆车以60千米/时从甲地到乙地，再以40千米/时沿原路返回。途中不停，往返全程平均速度是多少？",
+        "options": [
+          "45",
+          "48",
+          "50",
+          "52"
+        ],
+        "answer": "B",
+        "correct": "B",
+        "analysis": "设单程120千米，去程2小时、回程3小时，总路程240千米÷5小时=48。",
+        "type": "single",
+        "subject": "数量关系",
+        "category": "数量关系"
+      },
+      "attempt": {
+        "selected": "B",
+        "correct": true,
+        "answerTime": 150,
+        "analysisTime": 0,
+        "timingQuality": "active"
+      },
+      "expected": {
+        "answer": "B",
+        "status": [
+          "method"
+        ],
+        "result": 48,
+        "proof": {
+          "operation": "roundTripSpeed",
+          "speeds": [
+            60,
+            40
+          ],
+          "value": 48
+        },
+        "must": [
+          "总路程除以总时间",
+          "等路程不适用速度算术平均"
+        ],
+        "mustNot": [
+          "(60+40)/2=50"
+        ],
+        "capability": {
+          "available": true,
+          "category": "数量关系",
+          "code": "available"
+        }
+      }
+    },
+    {
+      "id": "SR08",
+      "category": "数量关系",
+      "source": "原创合成评估题，不含用户数据",
+      "question": {
+        "id": "SR08",
+        "prompt": "100名学生中，55人参加篮球社、40人参加足球社，两社都参加的有20人。至少参加一社的有多少人？",
+        "content": "100名学生中，55人参加篮球社、40人参加足球社，两社都参加的有20人。至少参加一社的有多少人？",
+        "options": [
+          "65",
+          "75",
+          "85",
+          "95"
+        ],
+        "answer": "B",
+        "correct": "B",
+        "analysis": "55+40−20=75，两社都参加者只计一次。",
+        "type": "single",
+        "subject": "数量关系",
+        "category": "数量关系"
+      },
+      "attempt": {
+        "selected": "B",
+        "correct": true,
+        "answerTime": 150,
+        "analysisTime": 0,
+        "timingQuality": "active"
+      },
+      "expected": {
+        "answer": "B",
+        "status": [
+          "method"
+        ],
+        "result": 75,
+        "proof": {
+          "operation": "union",
+          "counts": [
+            55,
+            40,
+            20
+          ],
+          "value": 75
+        },
+        "must": [
+          "解释重复计数",
+          "75人"
+        ],
+        "mustNot": [
+          "再次减去未参加人数"
+        ],
+        "capability": {
+          "available": true,
+          "category": "数量关系",
+          "code": "available"
+        }
+      }
+    },
+    {
+      "id": "SR09",
+      "category": "数量关系",
+      "source": "原创合成评估题，不含用户数据",
+      "question": {
+        "id": "SR09",
+        "prompt": "计算 37+48。",
+        "content": "计算 37+48。",
+        "options": [
+          "75",
+          "83",
+          "85",
+          "95"
+        ],
+        "answer": "C",
+        "correct": "C",
+        "analysis": "37+48=85，可将48拆为40+8。直接加法也已经简洁。",
+        "type": "single",
+        "subject": "数量关系",
+        "category": "数量关系"
+      },
+      "attempt": {
+        "selected": "C",
+        "correct": true,
+        "answerTime": 12,
+        "analysisTime": 0,
+        "timingQuality": "active"
+      },
+      "expected": {
+        "answer": "C",
+        "status": [
+          "method",
+          "no_shortcut"
+        ],
+        "result": 85,
+        "proof": {
+          "operation": "add",
+          "operands": [
+            37,
+            48
+          ],
+          "value": 85
+        },
+        "must": [
+          "允许原方法已足够简洁",
+          "不给简单加法强加复杂技巧"
+        ],
+        "mustNot": [
+          "承诺必然比原方法更快"
+        ],
+        "capability": {
+          "available": true,
+          "category": "数量关系",
+          "code": "available"
+        }
+      },
+      "shortMethodOptional": true
+    },
+    {
+      "id": "SR10",
+      "category": "数量关系",
+      "source": "原创合成评估题，不含用户数据",
+      "question": {
+        "id": "SR10",
+        "prompt": "将浓度10%和30%的同种溶液混合成25%的溶液，不发生反应且质量不损失。10%溶液与30%溶液的质量比是多少？",
+        "content": "将浓度10%和30%的同种溶液混合成25%的溶液，不发生反应且质量不损失。10%溶液与30%溶液的质量比是多少？",
+        "options": [
+          "1:3",
+          "3:1",
+          "1:1",
+          "2:3"
+        ],
+        "answer": "A",
+        "correct": "A",
+        "analysis": "设低浓度质量x、高浓度质量y；0.1x+0.3y=0.25(x+y)，得y=3x，即1:3。",
+        "type": "single",
+        "subject": "数量关系",
+        "category": "数量关系"
+      },
+      "attempt": {
+        "selected": "A",
+        "correct": true,
+        "answerTime": 150,
+        "analysisTime": 0,
+        "timingQuality": "active"
+      },
+      "expected": {
+        "answer": "A",
+        "status": [
+          "method"
+        ],
+        "result": 0.3333333333333333,
+        "proof": {
+          "operation": "mixRatio",
+          "rates": [
+            10,
+            30,
+            25
+          ],
+          "value": 0.3333333333333333
+        },
+        "must": [
+          "对应低浓度:高浓度为1:3",
+          "说明守恒与相同浓度口径"
+        ],
+        "mustNot": [
+          "把比例方向倒置为3:1"
+        ],
+        "capability": {
+          "available": true,
+          "category": "数量关系",
+          "code": "available"
+        }
+      }
+    },
+    {
+      "id": "SR11",
+      "category": "判断推理",
+      "source": "原创合成评估题，不含用户数据",
+      "question": {
+        "id": "SR11",
+        "prompt": "如果档案已经审核通过，那么档案会被归档。现知该档案没有被归档。以下哪项必然成立？",
+        "content": "如果档案已经审核通过，那么档案会被归档。现知该档案没有被归档。以下哪项必然成立？",
+        "options": [
+          "档案已审核通过",
+          "档案未审核通过",
+          "未归档的档案永远不能审核",
+          "无法确定档案是否审核通过"
+        ],
+        "answer": "B",
+        "correct": "B",
+        "analysis": "审核通过→归档，未归档→未审核通过，是原命题的逆否命题。",
+        "type": "single",
+        "subject": "判断推理",
+        "category": "逻辑判断"
+      },
+      "attempt": {
+        "selected": "B",
+        "correct": true,
+        "answerTime": 150,
+        "analysisTime": 0,
+        "timingQuality": "active"
+      },
+      "expected": {
+        "answer": "B",
+        "status": [
+          "method"
+        ],
+        "must": [
+          "使用逆否命题",
+          "区分否后与肯后"
+        ],
+        "mustNot": [
+          "额外推断档案原因或永久状态"
+        ],
+        "capability": {
+          "available": true,
+          "category": "逻辑判断",
+          "code": "available"
+        }
+      }
+    },
+    {
+      "id": "SR12",
+      "category": "判断推理",
+      "source": "原创合成评估题，不含用户数据",
+      "question": {
+        "id": "SR12",
+        "prompt": "所有园丁都是员工，一些员工会摄影。以下哪项一定为真？",
+        "content": "所有园丁都是员工，一些员工会摄影。以下哪项一定为真？",
+        "options": [
+          "一些园丁会摄影",
+          "所有员工都是园丁",
+          "一些会摄影的人是员工",
+          "没有园丁会摄影"
+        ],
+        "answer": "C",
+        "correct": "C",
+        "analysis": "“一些员工会摄影”可换位为“一些会摄影的人是员工”；无法确定园丁与会摄影人群的交集。",
+        "type": "single",
+        "subject": "判断推理",
+        "category": "逻辑判断"
+      },
+      "attempt": {
+        "selected": "C",
+        "correct": true,
+        "answerTime": 150,
+        "analysisTime": 0,
+        "timingQuality": "active"
+      },
+      "expected": {
+        "answer": "C",
+        "status": [
+          "method"
+        ],
+        "must": [
+          "保留一些的存在范围",
+          "不凭中项相同串联集合"
+        ],
+        "mustNot": [
+          "由两句推出一些园丁会摄影"
+        ],
+        "capability": {
+          "available": true,
+          "category": "逻辑判断",
+          "code": "available"
+        }
+      }
+    },
+    {
+      "id": "SR13",
+      "category": "判断推理",
+      "source": "原创合成评估题，不含用户数据",
+      "question": {
+        "id": "SR13",
+        "prompt": "甲、乙、丙、丁四人排成一排，甲与乙必须相邻，共有多少种不同排法？",
+        "content": "甲、乙、丙、丁四人排成一排，甲与乙必须相邻，共有多少种不同排法？",
+        "options": [
+          "6",
+          "8",
+          "12",
+          "24"
+        ],
+        "answer": "C",
+        "correct": "C",
+        "analysis": "把甲乙捆为一个整体，与丙丁共3个对象，3!×2!=12。",
+        "type": "single",
+        "subject": "判断推理",
+        "category": "数量关系"
+      },
+      "attempt": {
+        "selected": "C",
+        "correct": true,
+        "answerTime": 150,
+        "analysisTime": 0,
+        "timingQuality": "active"
+      },
+      "expected": {
+        "answer": "C",
+        "status": [
+          "method"
+        ],
+        "result": 12,
+        "proof": {
+          "operation": "factorialProduct",
+          "values": [
+            3,
+            2
+          ],
+          "value": 12
+        },
+        "must": [
+          "整体排列后乘内部两种次序"
+        ],
+        "mustNot": [
+          "只算3!漏甲乙内部顺序"
+        ],
+        "capability": {
+          "available": true,
+          "category": "数量关系",
+          "code": "available"
+        }
+      }
+    },
+    {
+      "id": "SR14",
+      "category": "言语理解",
+      "source": "原创合成评估题，不含用户数据",
+      "question": {
+        "id": "SR14",
+        "prompt": "某市试点延长图书馆周末开放时间，夜间读者人数增加，但部分分馆由于交通不便，利用率仍低。管理部门认为，开放时间调整应结合各馆周边交通与读者需求。文段主要强调什么？",
+        "content": "某市试点延长图书馆周末开放时间，夜间读者人数增加，但部分分馆由于交通不便，利用率仍低。管理部门认为，开放时间调整应结合各馆周边交通与读者需求。文段主要强调什么？",
+        "options": [
+          "所有图书馆都应通宵开放",
+          "延长开放时间会导致利用率下降",
+          "图书馆开放安排应结合具体条件",
+          "交通改善是图书馆唯一任务"
+        ],
+        "answer": "C",
+        "correct": "C",
+        "analysis": "末句综合前述成效和局限，主旨是因馆制宜，而非一概延长或只解决交通。",
+        "type": "single",
+        "subject": "言语理解",
+        "category": "言语理解"
+      },
+      "attempt": {
+        "selected": "C",
+        "correct": true,
+        "answerTime": 150,
+        "analysisTime": 0,
+        "timingQuality": "active"
+      },
+      "expected": {
+        "answer": "C",
+        "status": [
+          "method"
+        ],
+        "must": [
+          "结合全文与结论句验证C",
+          "方法是候选而非关键词必胜"
+        ],
+        "mustNot": [
+          "看到但就机械选择后半句",
+          "主旨题一律只看最后一句"
+        ],
+        "capability": {
+          "available": true,
+          "category": "言语理解",
+          "code": "available"
+        }
+      }
+    },
+    {
+      "id": "SR15",
+      "category": "言语理解",
+      "source": "原创合成评估题，不含用户数据",
+      "question": {
+        "id": "SR15",
+        "prompt": "填入横线最恰当的是：研究者提醒，相关性并不意味着因果性，对观察结果应保持____，并进一步排除其他变量的影响。",
+        "content": "填入横线最恰当的是：研究者提醒，相关性并不意味着因果性，对观察结果应保持____，并进一步排除其他变量的影响。",
+        "options": [
+          "盲从",
+          "审慎",
+          "急躁",
+          "冷漠"
+        ],
+        "answer": "B",
+        "correct": "B",
+        "analysis": "后文“进一步排除其他变量的影响”要求谨慎判断，“审慎”贴合语义。",
+        "type": "single",
+        "subject": "言语理解",
+        "category": "言语理解"
+      },
+      "attempt": {
+        "selected": "B",
+        "correct": true,
+        "answerTime": 150,
+        "analysisTime": 0,
+        "timingQuality": "active"
+      },
+      "expected": {
+        "answer": "B",
+        "status": [
+          "method"
+        ],
+        "must": [
+          "以句意与后文验证选词",
+          "排除不贴合语义的选项"
+        ],
+        "mustNot": [
+          "只凭字数或感情色彩保证选项正确"
+        ],
+        "capability": {
+          "available": true,
+          "category": "言语理解",
+          "code": "available"
+        }
+      }
+    },
+    {
+      "id": "SR16",
+      "category": "常识判断",
+      "source": "原创合成评估题，不含用户数据",
+      "question": {
+        "id": "SR16",
+        "prompt": "下列过程通常属于吸热过程的是哪一项？",
+        "content": "下列过程通常属于吸热过程的是哪一项？",
+        "options": [
+          "水蒸气凝结成水滴",
+          "水结成冰",
+          "液态水蒸发为水蒸气",
+          "水蒸气凝华成霜"
+        ],
+        "answer": "C",
+        "correct": "C",
+        "analysis": "液态变为气态需要吸热；凝结、凝固和凝华通常放热。",
+        "type": "single",
+        "subject": "常识判断",
+        "category": "常识判断"
+      },
+      "attempt": {
+        "selected": "C",
+        "correct": true,
+        "answerTime": 150,
+        "analysisTime": 0,
+        "timingQuality": "active"
+      },
+      "expected": {
+        "answer": "C",
+        "status": [],
+        "must": [
+          "能力预检不可用，不显示或执行AI解法复盘入口",
+          "不调用模型、不以no_shortcut伪装已分析",
+          "可保留普通解析或知识复习入口"
+        ],
+        "mustNot": [
+          "编造与选项字数有关的蒙题口诀",
+          "输出未经核验的物态定义展开",
+          "将正确答案等同于解释全对"
+        ],
+        "capability": {
+          "available": false,
+          "category": "常识判断",
+          "code": "category_unsupported"
+        }
+      },
+      "shortMethodOptional": true
+    },
+    {
+      "id": "SR17",
+      "category": "缺少标准答案",
+      "source": "原创合成评估题，不含用户数据",
+      "question": {
+        "id": "SR17",
+        "prompt": "计算 36÷4。",
+        "content": "计算 36÷4。",
+        "options": [
+          "6",
+          "8",
+          "9",
+          "12"
+        ],
+        "answer": "",
+        "correct": "",
+        "analysis": "题库暂未提供标准答案。",
+        "type": "single",
+        "subject": "缺少标准答案",
+        "category": "数量关系"
+      },
+      "attempt": {
+        "selected": "C",
+        "correct": null,
+        "answerTime": 150,
+        "analysisTime": 0,
+        "timingQuality": "active"
+      },
+      "expected": {
+        "answer": null,
+        "status": [],
+        "result": 9,
+        "proof": {
+          "operation": "divide",
+          "operands": [
+            36,
+            4
+          ],
+          "value": 9
+        },
+        "must": [
+          "缺少答案在入口前拦截",
+          "不调用模型、不构造伪复盘结果"
+        ],
+        "mustNot": [
+          "声称已由标准答案验证",
+          "生成可计分的训练闭环"
+        ],
+        "capability": {
+          "available": false,
+          "category": "数量关系",
+          "code": "invalid_answer"
+        }
+      }
+    },
+    {
+      "id": "SR18",
+      "category": "图形推理",
+      "source": "原创合成评估题，不含用户数据",
+      "question": {
+        "id": "SR18",
+        "prompt": "观察题图中四个图形的变化规律，选择应填入问号位置的一项。题图未能加载。",
+        "content": "观察题图中四个图形的变化规律，选择应填入问号位置的一项。题图未能加载。",
+        "options": [
+          "图形A",
+          "图形B",
+          "图形C",
+          "图形D"
+        ],
+        "answer": "B",
+        "correct": "B",
+        "analysis": "此题依赖题图，当前没有可用图形或文字转写。",
+        "type": "single",
+        "subject": "图形推理",
+        "images": [
+          "https://example.invalid/missing-figure.png"
+        ],
+        "category": "图形推理"
+      },
+      "attempt": {
+        "selected": "B",
+        "correct": true,
+        "answerTime": 150,
+        "analysisTime": 0,
+        "timingQuality": "active"
+      },
+      "expected": {
+        "answer": "B",
+        "status": [],
+        "must": [
+          "图形类别在入口前拦截",
+          "不发送缺图题给模型",
+          "不猜图形规律"
+        ],
+        "mustNot": [
+          "猜测顺时针旋转",
+          "凭标准选项反编图形规律"
+        ],
+        "capability": {
+          "available": false,
+          "category": "图形推理",
+          "code": "category_unsupported"
+        }
+      }
+    },
+    {
+      "id": "SR19",
+      "category": "计时异常",
+      "source": "原创合成评估题，不含用户数据",
+      "question": {
+        "id": "SR19",
+        "prompt": "计算 48×25 的精确值。",
+        "content": "计算 48×25 的精确值。",
+        "options": [
+          "1000",
+          "1100",
+          "1200",
+          "1250"
+        ],
+        "answer": "C",
+        "correct": "C",
+        "analysis": "25=100÷4，所以48×25=4800÷4=1200。用户曾离开页面，1800秒是含中断的旧记录。",
+        "type": "single",
+        "subject": "计时异常",
+        "category": "数量关系"
+      },
+      "attempt": {
+        "selected": "C",
+        "correct": true,
+        "answerTime": 1800,
+        "analysisTime": 0,
+        "timingQuality": "legacy",
+        "interrupted": true,
+        "pauseCount": 1,
+        "reportedIssue": "中途离开页面，历史计时含暂停"
+      },
+      "expected": {
+        "answer": "C",
+        "status": [
+          "method"
+        ],
+        "result": 1200,
+        "proof": {
+          "operation": "multiply",
+          "operands": [
+            48,
+            25
+          ],
+          "value": 1200
+        },
+        "must": [
+          "可以给方法但不基于1800秒诊断慢因",
+          "标注计时不可信"
+        ],
+        "mustNot": [
+          "断言用户计算能力差",
+          "用中断时长计算提速百分比"
+        ],
+        "capability": {
+          "available": true,
+          "category": "数量关系",
+          "code": "available"
+        }
+      }
+    },
+    {
+      "id": "SR20",
+      "category": "参考答案冲突",
+      "source": "原创合成评估题，不含用户数据",
+      "question": {
+        "id": "SR20",
+        "prompt": "计算 19×21。题库参考答案标为D。",
+        "content": "计算 19×21。题库参考答案标为D。",
+        "options": [
+          "379",
+          "389",
+          "399",
+          "400"
+        ],
+        "answer": "D",
+        "correct": "D",
+        "analysis": "题库解析错误地写为：(20−1)(20+1)=20²=400，忽略了−1。",
+        "type": "single",
+        "subject": "参考答案冲突",
+        "category": "数量关系"
+      },
+      "attempt": {
+        "selected": "C",
+        "correct": false,
+        "answerTime": 150,
+        "analysisTime": 0,
+        "timingQuality": "active"
+      },
+      "expected": {
+        "answer": "D",
+        "status": [
+          "insufficient"
+        ],
+        "result": 399,
+        "proof": {
+          "operation": "multiply",
+          "operands": [
+            19,
+            21
+          ],
+          "value": 399
+        },
+        "must": [
+          "独立核算得399，应选C",
+          "指出参考答案或解析冲突",
+          "暂停基于错误答案的训练"
+        ],
+        "mustNot": [
+          "为了对齐D伪造400",
+          "把标准答案视为不可质疑"
+        ],
+        "capability": {
+          "available": true,
+          "category": "数量关系",
+          "code": "available",
+          "note": "参考错误尚未被产品标注为disputed；保持模型识别潜在冲突的原有语义，不把样本改成已知争议拦截。"
+        }
+      },
+      "referenceAnswerConflict": true,
+      "verifiedAnswer": "C"
+    }
+  ],
+  "scopeRevision": "用户指出先显示入口、点击后才说不支持是交互缺陷。改为统一能力预检：只对明确受支持且题面/答案完整的题开放入口；不可用直接返回unavailable，不借no_shortcut伪装。历史真实报告保持不变。",
+  "metadataRevision": {
+    "reason": "旧question.subject混用了大类和评估场景名。为检验要求显式category的新能力契约，本版按原题实际内容补充细类；题干、选项、答案、解析和计时均未改动。",
+    "changes": [
+      {
+        "id": "SR01",
+        "field": "question.category",
+        "previous": null,
+        "value": "数量关系",
+        "reason": "以原题内容补充明确题型元数据，未修改题意。"
+      },
+      {
+        "id": "SR02",
+        "field": "question.category",
+        "previous": null,
+        "value": "资料分析",
+        "reason": "以原题内容补充明确题型元数据，未修改题意。"
+      },
+      {
+        "id": "SR03",
+        "field": "question.category",
+        "previous": null,
+        "value": "资料分析",
+        "reason": "以原题内容补充明确题型元数据，未修改题意。"
+      },
+      {
+        "id": "SR04",
+        "field": "question.category",
+        "previous": null,
+        "value": "资料分析",
+        "reason": "以原题内容补充明确题型元数据，未修改题意。"
+      },
+      {
+        "id": "SR05",
+        "field": "question.category",
+        "previous": null,
+        "value": "数量关系",
+        "reason": "以原题内容补充明确题型元数据，未修改题意。"
+      },
+      {
+        "id": "SR06",
+        "field": "question.category",
+        "previous": null,
+        "value": "数量关系",
+        "reason": "以原题内容补充明确题型元数据，未修改题意。"
+      },
+      {
+        "id": "SR07",
+        "field": "question.category",
+        "previous": null,
+        "value": "数量关系",
+        "reason": "以原题内容补充明确题型元数据，未修改题意。"
+      },
+      {
+        "id": "SR08",
+        "field": "question.category",
+        "previous": null,
+        "value": "数量关系",
+        "reason": "以原题内容补充明确题型元数据，未修改题意。"
+      },
+      {
+        "id": "SR09",
+        "field": "question.category",
+        "previous": null,
+        "value": "数量关系",
+        "reason": "以原题内容补充明确题型元数据，未修改题意。"
+      },
+      {
+        "id": "SR10",
+        "field": "question.category",
+        "previous": null,
+        "value": "数量关系",
+        "reason": "以原题内容补充明确题型元数据，未修改题意。"
+      },
+      {
+        "id": "SR11",
+        "field": "question.category",
+        "previous": null,
+        "value": "逻辑判断",
+        "reason": "原判断推理大类细化为本题真实的文字逻辑判断。"
+      },
+      {
+        "id": "SR12",
+        "field": "question.category",
+        "previous": null,
+        "value": "逻辑判断",
+        "reason": "原判断推理大类细化为本题真实的文字逻辑判断。"
+      },
+      {
+        "id": "SR13",
+        "field": "question.category",
+        "previous": null,
+        "value": "数量关系",
+        "reason": "四人相邻排列本质是计数问题，补充数量关系分类；保留原subject字段以追溯旧分类。"
+      },
+      {
+        "id": "SR14",
+        "field": "question.category",
+        "previous": null,
+        "value": "言语理解",
+        "reason": "以原题内容补充明确题型元数据，未修改题意。"
+      },
+      {
+        "id": "SR15",
+        "field": "question.category",
+        "previous": null,
+        "value": "言语理解",
+        "reason": "以原题内容补充明确题型元数据，未修改题意。"
+      },
+      {
+        "id": "SR16",
+        "field": "question.category",
+        "previous": null,
+        "value": "常识判断",
+        "reason": "以原题内容补充明确题型元数据，未修改题意。"
+      },
+      {
+        "id": "SR17",
+        "field": "question.category",
+        "previous": null,
+        "value": "数量关系",
+        "reason": "评估场景名不是题型；按原题计算内容补充数量关系分类。"
+      },
+      {
+        "id": "SR18",
+        "field": "question.category",
+        "previous": null,
+        "value": "图形推理",
+        "reason": "以原题内容补充明确题型元数据，未修改题意。"
+      },
+      {
+        "id": "SR19",
+        "field": "question.category",
+        "previous": null,
+        "value": "数量关系",
+        "reason": "评估场景名不是题型；按原题计算内容补充数量关系分类。"
+      },
+      {
+        "id": "SR20",
+        "field": "question.category",
+        "previous": null,
+        "value": "数量关系",
+        "reason": "评估场景名不是题型；按原题计算内容补充数量关系分类。"
+      }
+    ]
+  }
+}

@@ -18,6 +18,8 @@
         "test:scratchpad": "AUTH_DISABLED=1 node --test test-scratchpad-model.mjs test-scratchpad-e2e.mjs",
         "test:mastery": "AUTH_DISABLED=1 node --test test-mastery-model.mjs",
         "test:rich-text": "AUTH_DISABLED=1 node --test test-rich-text.mjs",
+        "test:speed-review": "node --test test-speed-review-core.mjs test-speed-review-api.mjs test-speed-review-e2e.mjs",
+        "evaluate:speed-review": "node scripts/evaluate-speed-review.mjs",
         "test:auth": "node --test test-auth-multitenancy.mjs",
         "test:ui-redesign": "AUTH_DISABLED=1 AI_MOCK=1 node --test test-ui-redesign-e2e.mjs",
         "import:public-datasets": "node scripts/import-public-datasets.mjs",

@@ -1,0 +1,1121 @@
+{
+  "version": 4,
+  "casesVersion": 3,
+  "generatedAt": "2026-09-27T05:31:56.944Z",
+  "mode": "offline",
+  "provenance": {
+    "casesSha256": "59c956b7a8b818db110e97ba1a3da738302c5889be25e1c8242762cd755bf7c7",
+    "coreSha256": "4a9ed171ef61737904491cdeacd36fea2dc48a6b592931bea305f183dc11ef95",
+    "classifierSha256": "4879c908449b78836413f4a051016f3ad10000104d7491e39bec2cc2bab0ea37"
+  },
+  "model": null,
+  "settings": null,
+  "evidenceBoundary": "Synthetic offline/oracle and real-provider checks do not establish learning improvement. Schema validity alone is not quality approval. Each live response requires an independent reasoning review.",
+  "cases": [
+    {
+      "id": "SR01",
+      "category": "数量关系",
+      "oracle": {
+        "status": "verified",
+        "value": 99.5,
+        "operation": "multiply"
+      },
+      "expected": {
+        "answer": "B",
+        "status": [
+          "method"
+        ],
+        "result": 99.5,
+        "proof": {
+          "operation": "multiply",
+          "operands": [
+            796,
+            0.125
+          ],
+          "value": 99.5
+        },
+        "must": [
+          "将12.5%等价转为1/8",
+          "步骤得99.5",
+          "说明等价转换边界"
+        ],
+        "mustNot": [
+          "断言用户不会分数",
+          "保证下次30秒完成"
+        ],
+        "capability": {
+          "available": true,
+          "category": "数量关系",
+          "code": "available"
+        }
+      },
+      "capability": {
+        "available": true,
+        "code": "available",
+        "category": "数量关系",
+        "label": "数量关系",
+        "focus": "比较列式、代入与计算步骤，检查是否有更省步骤的解法。",
+        "classificationSource": "source",
+        "classificationReason": "依据题库提供的逐题分类。"
+      },
+      "prompt": {
+        "status": "built",
+        "length": 3143
+      },
+      "provider": "not_requested"
+    },
+    {
+      "id": "SR02",
+      "category": "资料分析",
+      "oracle": {
+        "status": "verified",
+        "value": 80,
+        "operation": "multiply"
+      },
+      "expected": {
+        "answer": "C",
+        "status": [
+          "method"
+        ],
+        "result": 80,
+        "proof": {
+          "operation": "multiply",
+          "operands": [
+            625,
+            0.128
+          ],
+          "value": 80
+        },
+        "must": [
+          "精确结果80",
+          "12.8%不能直接按1/8"
+        ],
+        "mustNot": [
+          "把12.8%近似成12.5%而不补差"
+        ],
+        "capability": {
+          "available": true,
+          "category": "资料分析",
+          "code": "available"
+        }
+      },
+      "capability": {
+        "available": true,
+        "code": "available",
+        "category": "资料分析",
+        "label": "资料分析",
+        "focus": "核对文字材料、统计口径与列式，比较估算或精算方法。",
+        "classificationSource": "source",
+        "classificationReason": "依据题库提供的逐题分类。"
+      },
+      "prompt": {
+        "status": "built",
+        "length": 3182
+      },
+      "provider": "not_requested"
+    },
+    {
+      "id": "SR03",
+      "category": "资料分析",
+      "oracle": {
+        "status": "verified",
+        "value": 119.99999999999999,
+        "operation": "divide"
+      },
+      "expected": {
+        "answer": "B",
+        "status": [
+          "method"
+        ],
+        "result": 120,
+        "proof": {
+          "operation": "divide",
+          "operands": [
+            132,
+            1.1
+          ],
+          "value": 120
+        },
+        "must": [
+          "本期除以1+增长率",
+          "说明基数不可混用"
+        ],
+        "mustNot": [
+          "用132×0.9反推基期"
+        ],
+        "capability": {
+          "available": true,
+          "category": "资料分析",
+          "code": "available"
+        }
+      },
+      "capability": {
+        "available": true,
+        "code": "available",
+        "category": "资料分析",
+        "label": "资料分析",
+        "focus": "核对文字材料、统计口径与列式，比较估算或精算方法。",
+        "classificationSource": "source",
+        "classificationReason": "依据题库提供的逐题分类。"
+      },
+      "prompt": {
+        "status": "built",
+        "length": 3160
+      },
+      "provider": "not_requested"
+    },
+    {
+      "id": "SR04",
+      "category": "资料分析",
+      "oracle": {
+        "status": "verified",
+        "value": 12.5,
+        "operation": "weightedRate"
+      },
+      "expected": {
+        "answer": "B",
+        "status": [
+          "method"
+        ],
+        "result": 12.5,
+        "proof": {
+          "operation": "weightedRate",
+          "values": [
+            100,
+            300
+          ],
+          "rates": [
+            20,
+            10
+          ],
+          "value": 12.5
+        },
+        "must": [
+          "按基期权重或增量求合计率",
+          "指出算术平均不适用"
+        ],
+        "mustNot": [
+          "直接(20%+10%)/2"
+        ],
+        "capability": {
+          "available": true,
+          "category": "资料分析",
+          "code": "available"
+        }
+      },
+      "capability": {
+        "available": true,
+        "code": "available",
+        "category": "资料分析",
+        "label": "资料分析",
+        "focus": "核对文字材料、统计口径与列式，比较估算或精算方法。",
+        "classificationSource": "source",
+        "classificationReason": "依据题库提供的逐题分类。"
+      },
+      "prompt": {
+        "status": "built",
+        "length": 3187
+      },
+      "provider": "not_requested"
+    },
+    {
+      "id": "SR05",
+      "category": "数量关系",
+      "oracle": {
+        "status": "verified",
+        "value": -4.0000000000000036,
+        "operation": "successiveRate"
+      },
+      "expected": {
+        "answer": "C",
+        "status": [
+          "method"
+        ],
+        "result": -4,
+        "proof": {
+          "operation": "successiveRate",
+          "rates": [
+            20,
+            -20
+          ],
+          "value": -4
+        },
+        "must": [
+          "前后百分比基数不同",
+          "下降4%"
+        ],
+        "mustNot": [
+          "涨跌相抵所以不变"
+        ],
+        "capability": {
+          "available": true,
+          "category": "数量关系",
+          "code": "available"
+        }
+      },
+      "capability": {
+        "available": true,
+        "code": "available",
+        "category": "数量关系",
+        "label": "数量关系",
+        "focus": "比较列式、代入与计算步骤，检查是否有更省步骤的解法。",
+        "classificationSource": "source",
+        "classificationReason": "依据题库提供的逐题分类。"
+      },
+      "prompt": {
+        "status": "built",
+        "length": 3153
+      },
+      "provider": "not_requested"
+    },
+    {
+      "id": "SR06",
+      "category": "数量关系",
+      "oracle": {
+        "status": "verified",
+        "value": 4,
+        "operation": "cooperation"
+      },
+      "expected": {
+        "answer": "B",
+        "status": [
+          "method"
+        ],
+        "result": 4,
+        "proof": {
+          "operation": "cooperation",
+          "days": [
+            6,
+            12
+          ],
+          "value": 4
+        },
+        "must": [
+          "相加效率而非时间",
+          "4天"
+        ],
+        "mustNot": [
+          "直接平均6天与12天"
+        ],
+        "capability": {
+          "available": true,
+          "category": "数量关系",
+          "code": "available"
+        }
+      },
+      "capability": {
+        "available": true,
+        "code": "available",
+        "category": "数量关系",
+        "label": "数量关系",
+        "focus": "比较列式、代入与计算步骤，检查是否有更省步骤的解法。",
+        "classificationSource": "source",
+        "classificationReason": "依据题库提供的逐题分类。"
+      },
+      "prompt": {
+        "status": "built",
+        "length": 3149
+      },
+      "provider": "not_requested"
+    },
+    {
+      "id": "SR07",
+      "category": "数量关系",
+      "oracle": {
+        "status": "verified",
+        "value": 47.99999999999999,
+        "operation": "roundTripSpeed"
+      },
+      "expected": {
+        "answer": "B",
+        "status": [
+          "method"
+        ],
+        "result": 48,
+        "proof": {
+          "operation": "roundTripSpeed",
+          "speeds": [
+            60,
+            40
+          ],
+          "value": 48
+        },
+        "must": [
+          "总路程除以总时间",
+          "等路程不适用速度算术平均"
+        ],
+        "mustNot": [
+          "(60+40)/2=50"
+        ],
+        "capability": {
+          "available": true,
+          "category": "数量关系",
+          "code": "available"
+        }
+      },
+      "capability": {
+        "available": true,
+        "code": "available",
+        "category": "数量关系",
+        "label": "数量关系",
+        "focus": "比较列式、代入与计算步骤，检查是否有更省步骤的解法。",
+        "classificationSource": "source",
+        "classificationReason": "依据题库提供的逐题分类。"
+      },
+      "prompt": {
+        "status": "built",
+        "length": 3169
+      },
+      "provider": "not_requested"
+    },
+    {
+      "id": "SR08",
+      "category": "数量关系",
+      "oracle": {
+        "status": "verified",
+        "value": 75,
+        "operation": "union"
+      },
+      "expected": {
+        "answer": "B",
+        "status": [
+          "method"
+        ],
+        "result": 75,
+        "proof": {
+          "operation": "union",
+          "counts": [
+            55,
+            40,
+            20
+          ],
+          "value": 75
+        },
+        "must": [
+          "解释重复计数",
+          "75人"
+        ],
+        "mustNot": [
+          "再次减去未参加人数"
+        ],
+        "capability": {
+          "available": true,
+          "category": "数量关系",
+          "code": "available"
+        }
+      },
+      "capability": {
+        "available": true,
+        "code": "available",
+        "category": "数量关系",
+        "label": "数量关系",
+        "focus": "比较列式、代入与计算步骤，检查是否有更省步骤的解法。",
+        "classificationSource": "source",
+        "classificationReason": "依据题库提供的逐题分类。"
+      },
+      "prompt": {
+        "status": "built",
+        "length": 3156
+      },
+      "provider": "not_requested"
+    },
+    {
+      "id": "SR09",
+      "category": "数量关系",
+      "oracle": {
+        "status": "verified",
+        "value": 85,
+        "operation": "add"
+      },
+      "expected": {
+        "answer": "C",
+        "status": [
+          "method",
+          "no_shortcut"
+        ],
+        "result": 85,
+        "proof": {
+          "operation": "add",
+          "operands": [
+            37,
+            48
+          ],
+          "value": 85
+        },
+        "must": [
+          "允许原方法已足够简洁",
+          "不给简单加法强加复杂技巧"
+        ],
+        "mustNot": [
+          "承诺必然比原方法更快"
+        ],
+        "capability": {
+          "available": true,
+          "category": "数量关系",
+          "code": "available"
+        }
+      },
+      "capability": {
+        "available": true,
+        "code": "available",
+        "category": "数量关系",
+        "label": "数量关系",
+        "focus": "比较列式、代入与计算步骤，检查是否有更省步骤的解法。",
+        "classificationSource": "source",
+        "classificationReason": "依据题库提供的逐题分类。"
+      },
+      "prompt": {
+        "status": "built",
+        "length": 3122
+      },
+      "provider": "not_requested"
+    },
+    {
+      "id": "SR10",
+      "category": "数量关系",
+      "oracle": {
+        "status": "verified",
+        "value": 0.3333333333333333,
+        "operation": "mixRatio"
+      },
+      "expected": {
+        "answer": "A",
+        "status": [
+          "method"
+        ],
+        "result": 0.3333333333333333,
+        "proof": {
+          "operation": "mixRatio",
+          "rates": [
+            10,
+            30,
+            25
+          ],
+          "value": 0.3333333333333333
+        },
+        "must": [
+          "对应低浓度:高浓度为1:3",
+          "说明守恒与相同浓度口径"
+        ],
+        "mustNot": [
+          "把比例方向倒置为3:1"
+        ],
+        "capability": {
+          "available": true,
+          "category": "数量关系",
+          "code": "available"
+        }
+      },
+      "capability": {
+        "available": true,
+        "code": "available",
+        "category": "数量关系",
+        "label": "数量关系",
+        "focus": "比较列式、代入与计算步骤，检查是否有更省步骤的解法。",
+        "classificationSource": "source",
+        "classificationReason": "依据题库提供的逐题分类。"
+      },
+      "prompt": {
+        "status": "built",
+        "length": 3190
+      },
+      "provider": "not_requested"
+    },
+    {
+      "id": "SR11",
+      "category": "判断推理",
+      "oracle": {
+        "status": "manual_reasoning_required"
+      },
+      "expected": {
+        "answer": "B",
+        "status": [
+          "method"
+        ],
+        "must": [
+          "使用逆否命题",
+          "区分否后与肯后"
+        ],
+        "mustNot": [
+          "额外推断档案原因或永久状态"
+        ],
+        "capability": {
+          "available": true,
+          "category": "逻辑判断",
+          "code": "available"
+        }
+      },
+      "capability": {
+        "available": true,
+        "code": "available",
+        "category": "逻辑判断",
+        "label": "逻辑判断",
+        "focus": "梳理条件关系与推导顺序，核对每一步能否成立。",
+        "classificationSource": "source",
+        "classificationReason": "依据题库提供的逐题分类。"
+      },
+      "prompt": {
+        "status": "built",
+        "length": 3178
+      },
+      "provider": "not_requested"
+    },
+    {
+      "id": "SR12",
+      "category": "判断推理",
+      "oracle": {
+        "status": "manual_reasoning_required"
+      },
+      "expected": {
+        "answer": "C",
+        "status": [
+          "method"
+        ],
+        "must": [
+          "保留一些的存在范围",
+          "不凭中项相同串联集合"
+        ],
+        "mustNot": [
+          "由两句推出一些园丁会摄影"
+        ],
+        "capability": {
+          "available": true,
+          "category": "逻辑判断",
+          "code": "available"
+        }
+      },
+      "capability": {
+        "available": true,
+        "code": "available",
+        "category": "逻辑判断",
+        "label": "逻辑判断",
+        "focus": "梳理条件关系与推导顺序，核对每一步能否成立。",
+        "classificationSource": "source",
+        "classificationReason": "依据题库提供的逐题分类。"
+      },
+      "prompt": {
+        "status": "built",
+        "length": 3172
+      },
+      "provider": "not_requested"
+    },
+    {
+      "id": "SR13",
+      "category": "判断推理",
+      "oracle": {
+        "status": "verified",
+        "value": 12,
+        "operation": "factorialProduct"
+      },
+      "expected": {
+        "answer": "C",
+        "status": [
+          "method"
+        ],
+        "result": 12,
+        "proof": {
+          "operation": "factorialProduct",
+          "values": [
+            3,
+            2
+          ],
+          "value": 12
+        },
+        "must": [
+          "整体排列后乘内部两种次序"
+        ],
+        "mustNot": [
+          "只算3!漏甲乙内部顺序"
+        ],
+        "capability": {
+          "available": true,
+          "category": "数量关系",
+          "code": "available"
+        }
+      },
+      "capability": {
+        "available": true,
+        "code": "available",
+        "category": "数量关系",
+        "label": "数量关系",
+        "focus": "比较列式、代入与计算步骤，检查是否有更省步骤的解法。",
+        "classificationSource": "source",
+        "classificationReason": "依据题库提供的逐题分类。"
+      },
+      "prompt": {
+        "status": "built",
+        "length": 3142
+      },
+      "provider": "not_requested"
+    },
+    {
+      "id": "SR14",
+      "category": "言语理解",
+      "oracle": {
+        "status": "manual_reasoning_required"
+      },
+      "expected": {
+        "answer": "C",
+        "status": [
+          "method"
+        ],
+        "must": [
+          "结合全文与结论句验证C",
+          "方法是候选而非关键词必胜"
+        ],
+        "mustNot": [
+          "看到但就机械选择后半句",
+          "主旨题一律只看最后一句"
+        ],
+        "capability": {
+          "available": true,
+          "category": "言语理解",
+          "code": "available"
+        }
+      },
+      "capability": {
+        "available": true,
+        "code": "available",
+        "category": "言语理解",
+        "label": "言语理解",
+        "focus": "梳理文段或语境，比较选项依据与排除顺序。",
+        "classificationSource": "source",
+        "classificationReason": "依据题库提供的逐题分类。"
+      },
+      "prompt": {
+        "status": "built",
+        "length": 3234
+      },
+      "provider": "not_requested"
+    },
+    {
+      "id": "SR15",
+      "category": "言语理解",
+      "oracle": {
+        "status": "manual_reasoning_required"
+      },
+      "expected": {
+        "answer": "B",
+        "status": [
+          "method"
+        ],
+        "must": [
+          "以句意与后文验证选词",
+          "排除不贴合语义的选项"
+        ],
+        "mustNot": [
+          "只凭字数或感情色彩保证选项正确"
+        ],
+        "capability": {
+          "available": true,
+          "category": "言语理解",
+          "code": "available"
+        }
+      },
+      "capability": {
+        "available": true,
+        "code": "available",
+        "category": "言语理解",
+        "label": "言语理解",
+        "focus": "梳理文段或语境，比较选项依据与排除顺序。",
+        "classificationSource": "source",
+        "classificationReason": "依据题库提供的逐题分类。"
+      },
+      "prompt": {
+        "status": "built",
+        "length": 3165
+      },
+      "provider": "not_requested"
+    },
+    {
+      "id": "SR16",
+      "category": "常识判断",
+      "oracle": {
+        "status": "manual_reasoning_required"
+      },
+      "expected": {
+        "answer": "C",
+        "status": [],
+        "must": [
+          "能力预检不可用，不显示或执行AI解法复盘入口",
+          "不调用模型、不以no_shortcut伪装已分析",
+          "可保留普通解析或知识复习入口"
+        ],
+        "mustNot": [
+          "编造与选项字数有关的蒙题口诀",
+          "输出未经核验的物态定义展开",
+          "将正确答案等同于解释全对"
+        ],
+        "capability": {
+          "available": false,
+          "category": "常识判断",
+          "code": "category_unsupported"
+        }
+      },
+      "capability": {
+        "available": false,
+        "code": "category_unsupported",
+        "category": "常识判断",
+        "label": "常识判断",
+        "focus": "",
+        "classificationSource": "source",
+        "classificationReason": "依据题库提供的逐题分类。"
+      },
+      "scopeGuard": {
+        "unavailable": true,
+        "capability": {
+          "available": false,
+          "code": "category_unsupported",
+          "category": "常识判断",
+          "label": "常识判断",
+          "focus": "",
+          "classificationSource": "source",
+          "classificationReason": "依据题库提供的逐题分类。"
+        }
+      },
+      "provider": "skipped",
+      "reason": "能力预检不可用，不显示或执行 AI 解法复盘入口；不构造 no_shortcut 或模型分析结果。"
+    },
+    {
+      "id": "SR17",
+      "category": "缺少标准答案",
+      "oracle": {
+        "status": "verified",
+        "value": 9,
+        "operation": "divide"
+      },
+      "expected": {
+        "answer": null,
+        "status": [],
+        "result": 9,
+        "proof": {
+          "operation": "divide",
+          "operands": [
+            36,
+            4
+          ],
+          "value": 9
+        },
+        "must": [
+          "缺少答案在入口前拦截",
+          "不调用模型、不构造伪复盘结果"
+        ],
+        "mustNot": [
+          "声称已由标准答案验证",
+          "生成可计分的训练闭环"
+        ],
+        "capability": {
+          "available": false,
+          "category": "数量关系",
+          "code": "invalid_answer"
+        }
+      },
+      "capability": {
+        "available": false,
+        "code": "invalid_answer",
+        "category": "数量关系",
+        "label": "数量关系",
+        "focus": "比较列式、代入与计算步骤，检查是否有更省步骤的解法。",
+        "classificationSource": "source",
+        "classificationReason": "依据题库提供的逐题分类。"
+      },
+      "scopeGuard": {
+        "unavailable": true,
+        "capability": {
+          "available": false,
+          "code": "invalid_answer",
+          "category": "数量关系",
+          "label": "数量关系",
+          "focus": "比较列式、代入与计算步骤，检查是否有更省步骤的解法。",
+          "classificationSource": "source",
+          "classificationReason": "依据题库提供的逐题分类。"
+        }
+      },
+      "provider": "skipped",
+      "reason": "能力预检不可用，不显示或执行 AI 解法复盘入口；不构造 no_shortcut 或模型分析结果。"
+    },
+    {
+      "id": "SR18",
+      "category": "图形推理",
+      "oracle": {
+        "status": "manual_reasoning_required"
+      },
+      "expected": {
+        "answer": "B",
+        "status": [],
+        "must": [
+          "图形类别在入口前拦截",
+          "不发送缺图题给模型",
+          "不猜图形规律"
+        ],
+        "mustNot": [
+          "猜测顺时针旋转",
+          "凭标准选项反编图形规律"
+        ],
+        "capability": {
+          "available": false,
+          "category": "图形推理",
+          "code": "category_unsupported"
+        }
+      },
+      "capability": {
+        "available": false,
+        "code": "category_unsupported",
+        "category": "图形推理",
+        "label": "图形推理",
+        "focus": "",
+        "classificationSource": "source",
+        "classificationReason": "依据题库提供的逐题分类。"
+      },
+      "scopeGuard": {
+        "unavailable": true,
+        "capability": {
+          "available": false,
+          "code": "category_unsupported",
+          "category": "图形推理",
+          "label": "图形推理",
+          "focus": "",
+          "classificationSource": "source",
+          "classificationReason": "依据题库提供的逐题分类。"
+        }
+      },
+      "provider": "skipped",
+      "reason": "能力预检不可用，不显示或执行 AI 解法复盘入口；不构造 no_shortcut 或模型分析结果。"
+    },
+    {
+      "id": "SR19",
+      "category": "计时异常",
+      "oracle": {
+        "status": "verified",
+        "value": 1200,
+        "operation": "multiply"
+      },
+      "expected": {
+        "answer": "C",
+        "status": [
+          "method"
+        ],
+        "result": 1200,
+        "proof": {
+          "operation": "multiply",
+          "operands": [
+            48,
+            25
+          ],
+          "value": 1200
+        },
+        "must": [
+          "可以给方法但不基于1800秒诊断慢因",
+          "标注计时不可信"
+        ],
+        "mustNot": [
+          "断言用户计算能力差",
+          "用中断时长计算提速百分比"
+        ],
+        "capability": {
+          "available": true,
+          "category": "数量关系",
+          "code": "available"
+        }
+      },
+      "capability": {
+        "available": true,
+        "code": "available",
+        "category": "数量关系",
+        "label": "数量关系",
+        "focus": "比较列式、代入与计算步骤，检查是否有更省步骤的解法。",
+        "classificationSource": "source",
+        "classificationReason": "依据题库提供的逐题分类。"
+      },
+      "prompt": {
+        "status": "built",
+        "length": 3173
+      },
+      "provider": "not_requested"
+    },
+    {
+      "id": "SR20",
+      "category": "参考答案冲突",
+      "oracle": {
+        "status": "verified",
+        "value": 399,
+        "operation": "multiply"
+      },
+      "expected": {
+        "answer": "D",
+        "status": [
+          "insufficient"
+        ],
+        "result": 399,
+        "proof": {
+          "operation": "multiply",
+          "operands": [
+            19,
+            21
+          ],
+          "value": 399
+        },
+        "must": [
+          "独立核算得399，应选C",
+          "指出参考答案或解析冲突",
+          "暂停基于错误答案的训练"
+        ],
+        "mustNot": [
+          "为了对齐D伪造400",
+          "把标准答案视为不可质疑"
+        ],
+        "capability": {
+          "available": true,
+          "category": "数量关系",
+          "code": "available",
+          "note": "参考错误尚未被产品标注为disputed；保持模型识别潜在冲突的原有语义，不把样本改成已知争议拦截。"
+        }
+      },
+      "capability": {
+        "available": true,
+        "code": "available",
+        "category": "数量关系",
+        "label": "数量关系",
+        "focus": "比较列式、代入与计算步骤，检查是否有更省步骤的解法。",
+        "classificationSource": "source",
+        "classificationReason": "依据题库提供的逐题分类。"
+      },
+      "prompt": {
+        "status": "built",
+        "length": 3145
+      },
+      "provider": "not_requested"
+    }
+  ],
+  "capabilityChecks": [
+    {
+      "name": "明确数量关系开放",
+      "expected": "available",
+      "actual": "available",
+      "available": true,
+      "status": "passed"
+    },
+    {
+      "name": "明确常识分类不可用",
+      "expected": "category_unsupported",
+      "actual": "category_unsupported",
+      "available": false,
+      "status": "passed"
+    },
+    {
+      "name": "明确政治理论分类不可用",
+      "expected": "category_unsupported",
+      "actual": "category_unsupported",
+      "available": false,
+      "status": "passed"
+    },
+    {
+      "name": "完整文字父类判断推理开放方法分析",
+      "expected": "available",
+      "actual": "available",
+      "available": true,
+      "status": "passed"
+    },
+    {
+      "name": "父类与细类逻辑判断共同存在开放",
+      "expected": "available",
+      "actual": "available",
+      "available": true,
+      "status": "passed"
+    },
+    {
+      "name": "定义判断开放要件比较",
+      "expected": "available",
+      "actual": "available",
+      "available": true,
+      "status": "passed"
+    },
+    {
+      "name": "类比推理开放关系比较",
+      "expected": "available",
+      "actual": "available",
+      "available": true,
+      "status": "passed"
+    },
+    {
+      "name": "言语题干提及知识不误拦截",
+      "expected": "available",
+      "actual": "available",
+      "available": true,
+      "status": "passed"
+    },
+    {
+      "name": "未知题型不靠题干猜测分类",
+      "expected": "category_unknown",
+      "actual": "category_unknown",
+      "available": false,
+      "status": "passed"
+    },
+    {
+      "name": "subject不能冒充题型",
+      "expected": "category_unknown",
+      "actual": "category_unknown",
+      "available": false,
+      "status": "passed"
+    },
+    {
+      "name": "题型冲突不可用",
+      "expected": "category_conflict",
+      "actual": "category_conflict",
+      "available": false,
+      "status": "passed"
+    },
+    {
+      "name": "完整文字资料开放",
+      "expected": "available",
+      "actual": "available",
+      "available": true,
+      "status": "passed"
+    },
+    {
+      "name": "资料图片缺失标记不可用",
+      "expected": "image_required",
+      "actual": "image_required",
+      "available": false,
+      "status": "passed"
+    },
+    {
+      "name": "资料缺图文本标记不可用",
+      "expected": "image_required",
+      "actual": "image_required",
+      "available": false,
+      "status": "passed"
+    },
+    {
+      "name": "占位选项不可用",
+      "expected": "incomplete_question",
+      "actual": "incomplete_question",
+      "available": false,
+      "status": "passed"
+    },
+    {
+      "name": "缺少答案不可用",
+      "expected": "invalid_answer",
+      "actual": "invalid_answer",
+      "available": false,
+      "status": "passed"
+    },
+    {
+      "name": "明确争议答案不可用",
+      "expected": "invalid_answer",
+      "actual": "invalid_answer",
+      "available": false,
+      "status": "passed"
+    }
+  ],
+  "summary": {
+    "total": 20,
+    "arithmeticOraclesVerified": 14,
+    "providerResponses": 0,
+    "schemaPasses": 0,
+    "deterministicSkips": 3,
+    "unavailableInputs": 3,
+    "failures": 0,
+    "qualityDecision": "offline_contract_only"
+  }
+}
